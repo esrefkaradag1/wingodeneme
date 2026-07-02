@@ -1,0 +1,6 @@
+node_modules
+.next
+deploy_package
+*.zip
+.env.local
+Arşiv.zip

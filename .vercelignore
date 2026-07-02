@@ -1,0 +1,31 @@
+# Kökten `vercel` çalışınca 100 MB limitini aşmamak için.
+# Öneri: `cd frontend && npx vercel --prod` veya `npm run vercel:prod`
+
+backend
+ai-service
+release
+scratch
+node_modules
+**/node_modules
+**/.next
+.git
+.vscode
+.idea
+.env
+.env.*
+!.env.example
+
+*.zip
+*.tar.gz
+*.tgz
+*.sql
+*.pdf
+
+Arşiv.zip
+backend/Arşiv.zip
+wingosinav_guncel.zip
+
+# Büyük döküman / geçici
+deploy_package
+*.log
+.DS_Store

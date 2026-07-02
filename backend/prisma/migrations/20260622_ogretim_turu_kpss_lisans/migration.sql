@@ -1,0 +1,2 @@
+-- KPSS Lisans kademesi
+ALTER TYPE "OgretimTuru" ADD VALUE IF NOT EXISTS 'KPSS_LISANS';

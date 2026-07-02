@@ -1,0 +1,2 @@
+-- KPSS sınav türü
+ALTER TYPE "SinavTuru" ADD VALUE IF NOT EXISTS 'KPSS';

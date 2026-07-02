@@ -1,0 +1,3 @@
+-- KPSS eğitim materyali kademeleri
+ALTER TYPE "OgretimTuru" ADD VALUE IF NOT EXISTS 'KPSS_ORTAOGRETIM';
+ALTER TYPE "OgretimTuru" ADD VALUE IF NOT EXISTS 'KPSS_ONLISANS';

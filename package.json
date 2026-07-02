@@ -1,0 +1,39 @@
+{
+  "name": "wingodeneme",
+  "private": true,
+  "scripts": {
+    "clean": "rm -rf frontend/.next frontend/node_modules/.cache",
+    "kill:ports": "sh -c 'for p in 3001 4000; do for pid in $(lsof -t -iTCP:$p -sTCP:LISTEN 2>/dev/null); do kill -9 \"$pid\" 2>/dev/null; done; done; exit 0'",
+    "build": "npm run build:backend && npm run build:frontend",
+    "build:backend": "cd backend && npm run build",
+    "build:frontend": "cd frontend && npm run build",
+    "start": "NEXT_PUBLIC_API_URL=http://localhost:4000/api/v1 NEXT_PUBLIC_SOCKET_URL=http://localhost:4000 npm run build && npm run start:built",
+    "start:built": "concurrently -n api,web -c blue,magenta \"npm run start:backend\" \"npm run start:frontend\"",
+    "start:backend": "cd backend && npm run start",
+    "start:frontend": "cd frontend && npm run start",
+    "db:push": "cd backend && npx prisma generate && npx prisma db push",
+    "db:seed": "cd backend && npx prisma db seed",
+    "dev": "concurrently -n api,web -c blue,magenta \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:restart": "npm run kill:ports && npm run dev",
+    "dev:fresh": "npm run clean && npm run dev",
+    "dev:backend": "cd backend && npm run dev",
+    "dev:backend:local": "cd backend && npm run dev:local",
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev:ai": "cd ai-service && npm run dev",
+    "dev:alt": "concurrently -n api,web -c blue,magenta \"npm run dev:backend:alt\" \"npm run dev:frontend:alt\"",
+    "dev:backend:alt": "cd backend && API_PORT=4001 AI_SERVICE_URL=http://localhost:5006 npm run dev",
+    "dev:frontend:alt": "cd frontend && NEXT_PUBLIC_API_URL=http://localhost:4001/api/v1 NEXT_PUBLIC_SOCKET_URL=http://localhost:4001 npx next dev -p 3002",
+    "dev:ai:alt": "cd ai-service && AI_PORT=5006 npm run dev",
+    "vercel:prod": "cd frontend && npx vercel --prod",
+    "vercel:preview": "cd frontend && npx vercel",
+    "vercel:backend:prod": "cd backend && npx vercel --prod",
+    "db:migrate:prod": "cd backend && npx prisma migrate deploy"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  },
+  "dependencies": {
+    "framer-motion": "^12.40.0",
+    "pg": "^8.20.0"
+  }
+}

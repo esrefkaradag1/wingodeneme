@@ -1,0 +1,1159 @@
+// WingoSınav — Prisma Veritabanı Şeması
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ============================================
+// KULLANICI YÖNETİMİ
+// ============================================
+
+enum Rol {
+  OGRENCI
+  VELI
+  TEACHER
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum OgretimTuru {
+  YKS
+  LGS
+  /// Üst KPSS grubu (alt gruplar Lisans / Önlisans / Ortaöğretim)
+  KPSS
+  KPSS_LISANS
+  KPSS_ORTAOGRETIM
+  KPSS_ONLISANS
+  SINIF_6
+  SINIF_7
+  SINIF_10
+  SINIF_11
+}
+
+enum SinavTuru {
+  TYT
+  AYT
+  /// AYT denemesi; TYT konu/soru havuzu da kullanılır (ÖSYM TD+SB-1 vb.)
+  AYT_TYT
+  LGS
+  KPSS
+}
+
+// YKS: TYT ortak veya AYT alan spesifik üniteler
+enum YksKonuSegmenti {
+  TYT
+  AYT_MATEMATIK
+  AYT_FEN_BILIMLERI
+  AYT_EDEBIYAT
+  /// Sosyal Bilimler-1 (Tarih-1 Testi — ÖSYM AYT)
+  AYT_TARIH1
+  /// Sosyal Bilimler-1 (Coğrafya-1 Testi — ÖSYM AYT)
+  AYT_COG1
+  AYT_TARIH2
+  AYT_COG2
+  /// Felsefe, Psikoloji, Sosyoloji, Mantık — Sosyal Bilimler-2
+  AYT_FELSEFE_GRUBU
+  /// Din Kültürü veya ilave Felsefe — Sosyal Bilimler-2 (6 soru)
+  AYT_DIN
+}
+
+model Kullanici {
+  id               String   @id @default(cuid())
+  email            String   @unique
+  telefon          String?  @unique
+  sifre            String
+  rol              Rol      @default(OGRENCI)
+  aktif            Boolean  @default(true)
+  emailDogrulandi  Boolean  @default(false)
+  dogrulamaKodu    String?
+  refreshToken     String?
+  fcmToken         String?
+  olusturuldu      DateTime @default(now())
+  guncellendi      DateTime @updatedAt
+
+  ogrenciProfil    OgrenciProfil?
+  veliProfil       VeliProfil?
+  adminProfil      AdminProfil?
+
+  bildirimler      Bildirim[]
+  gonderilenDavetler SosyalDavet[] @relation("GonderenKullanici")
+  alinanDavetler   SosyalDavet[] @relation("AlinanKullanici")
+  odemeler         SatinAlim[]
+  soruAnnotationlar SoruAnnotation[] @relation("SoruAnnotationDuzenleyen")
+  sorularOlusturan    Soru[]             @relation("SoruOlusturan")
+  sorularDuzenleyen   Soru[]             @relation("SoruDuzenleyen")
+  destekMesajlari   DestekMesaji[]
+  iletisimFormlari  IletisimFormu[]
+  ogretmenOnerileri OgretmenOnerisi[]
+  duyurularOlusturan Duyuru[]
+  duyuruAlicilari   DuyuruAlici[]
+  oturumlar         KullaniciOturum[]
+  aktiviteler       KullaniciAktivite[]
+
+  @@map("kullanicilar")
+}
+
+model OgrenciProfil {
+  id               String      @id @default(cuid())
+  kullaniciId      String      @unique
+  ad               String
+  soyad            String
+  okul             String?
+  sehir            String?
+  ilce             String?
+  sinif            String?
+  ogretimTuru      OgretimTuru @default(YKS)
+  avatarUrl        String?
+  hedefUniversite  String?
+  hedefBolum       String?
+  puan             Int         @default(0)
+  olusturuldu      DateTime    @default(now())
+  guncellendi      DateTime    @updatedAt
+
+  kullanici        Kullanici   @relation(fields: [kullaniciId], references: [id], onDelete: Cascade)
+  veliId           String?
+  veli             VeliProfil? @relation(fields: [veliId], references: [id])
+  gruplar          GrupUyelik[]
+  sinavAtamalari   OgrenciSinavAtama[]
+  sinavKatilimlari SinavKatilim[]
+  performanslar    KonuPerformansi[]
+  arkadasliklar    Arkadaslik[]
+  duellolar        Duello[]
+  studyPlanlar     StudyPlan[]
+  hedefler         UniversiteHedef[]
+  destekTalepleri  DestekTalebi[]
+
+  @@index([ad, soyad])
+  @@index([olusturuldu(sort: Desc)])
+  @@map("ogrenci_profiller")
+}
+
+model VeliProfil {
+  id          String    @id @default(cuid())
+  kullaniciId String    @unique
+  ad          String
+  soyad       String
+  telefon     String?
+  olusturuldu DateTime  @default(now())
+
+  kullanici   Kullanici @relation(fields: [kullaniciId], references: [id], onDelete: Cascade)
+  ogrenciler  OgrenciProfil[]
+
+  @@index([ad, soyad])
+  @@map("veli_profiller")
+}
+
+model AdminProfil {
+  id          String       @id @default(cuid())
+  kullaniciId String       @unique
+  ad          String
+  soyad       String
+  yetkiSeviye Int          @default(1)
+  /// Yalnızca TEACHER rolü için doldurulur — branş (Matematik, Fizik, …)
+  brans       String?
+  /// Yalnızca TEACHER rolü için doldurulur — kademe (YKS / LGS / Sınıf …)
+  ogretimTuru OgretimTuru?
+  /// TEACHER: birden fazla kademe yetkisi (YKS + LGS + KPSS...)
+  ogretimTurleri OgretimTuru[] @default([])
+  /// TEACHER: kademeye göre branş seçimi (örn. { "YKS": ["Kimya"], "LGS": ["Fen Bilimleri"] })
+  ogretmenBranslar Json?
+
+  kullanici   Kullanici    @relation(fields: [kullaniciId], references: [id], onDelete: Cascade)
+
+  ogretmenGruplari OgretmenGrup[]
+
+  @@index([ad, soyad])
+  @@map("admin_profiller")
+}
+
+enum KullaniciAktiviteTuru {
+  GIRIS
+  CIKIS
+  SORU_OLUSTUR
+  SORU_GUNCELLE
+  SORU_SIL
+  AI_SORU_URET
+  PANEL_ERISIM
+}
+
+model KullaniciOturum {
+  id           String    @id @default(cuid())
+  kullaniciId  String
+  baslangic    DateTime  @default(now())
+  bitis        DateTime?
+  sonAktivite  DateTime  @default(now())
+  sureSaniye   Int?
+  ipAdresi     String?
+  userAgent    String?
+  olusturuldu  DateTime  @default(now())
+
+  kullanici    Kullanici @relation(fields: [kullaniciId], references: [id], onDelete: Cascade)
+  aktiviteler  KullaniciAktivite[]
+
+  @@index([kullaniciId, baslangic(sort: Desc)])
+  @@index([bitis])
+  @@map("kullanici_oturumlari")
+}
+
+model KullaniciAktivite {
+  id          String                @id @default(cuid())
+  kullaniciId String
+  oturumId    String?
+  tur         KullaniciAktiviteTuru
+  aciklama    String?
+  meta        Json?
+  olusturuldu DateTime              @default(now())
+
+  kullanici   Kullanici             @relation(fields: [kullaniciId], references: [id], onDelete: Cascade)
+  oturum      KullaniciOturum?      @relation(fields: [oturumId], references: [id], onDelete: SetNull)
+
+  @@index([kullaniciId, olusturuldu(sort: Desc)])
+  @@index([tur, olusturuldu(sort: Desc)])
+  @@index([oturumId])
+  @@map("kullanici_aktiviteleri")
+}
+
+// ============================================
+// GRUP YÖNETİMİ
+// ============================================
+
+model Grup {
+  id          String      @id @default(cuid())
+  ad          String
+  tur         OgretimTuru
+  aciklama    String?
+  aktif       Boolean     @default(true)
+  olusturuldu DateTime    @default(now())
+
+  parentId    String?
+  parent      Grup?       @relation("GrupToGrup", fields: [parentId], references: [id], onDelete: Cascade)
+  children    Grup[]      @relation("GrupToGrup")
+
+  uyeler      GrupUyelik[]
+  sinavlar    Sinav[]
+  takvimler   TakvimEtkinlik[]
+  soruUygunluklari SoruUygunGrup[]
+  ogretmenler   OgretmenGrup[]
+
+  @@map("gruplar")
+}
+
+model GrupUyelik {
+  id          String    @id @default(cuid())
+  grupId      String
+  ogrenciId   String
+  katilimTarih DateTime @default(now())
+
+  grup        Grup         @relation(fields: [grupId], references: [id])
+  ogrenci     OgrenciProfil @relation(fields: [ogrenciId], references: [id])
+
+  @@unique([grupId, ogrenciId])
+  @@map("grup_uyelikler")
+}
+
+model OgretmenGrup {
+  id            String      @id @default(cuid())
+  adminProfilId String
+  grupId        String
+  adminProfil   AdminProfil @relation(fields: [adminProfilId], references: [id], onDelete: Cascade)
+  grup          Grup        @relation(fields: [grupId], references: [id], onDelete: Cascade)
+
+  @@unique([adminProfilId, grupId])
+  @@map("ogretmen_gruplar")
+}
+
+// ============================================
+// SINAV SİSTEMİ
+// ============================================
+
+model Sinav {
+  id           String    @id @default(cuid())
+  baslik       String
+  aciklama     String?
+  tur          SinavTuru
+  grupId       String
+  baslangicZamani DateTime
+  bitisZamani  DateTime
+  sureDakika   Int       @default(120)
+  aktif        Boolean   @default(true)
+  yayinlandi   Boolean   @default(false)
+  kitapcikUrl  String?
+  kitapcikBolumAdi   String?
+  kitapcikTarihMetni String?
+  konuDagilimi Json?
+  cevapAnahtari Json?
+  /// LGS gibi çok oturumlu sınavlar: [{ kod, ad, baslangicZamani, bitisZamani, sureDakika, soruSayisi? }]
+  oturumlar Json?
+  /// Takvimde satışa sunulan sınav ücreti (₺)
+  ucret           Float?
+  indirimliUcret  Float?
+  takvimdeGoster  Boolean   @default(false)
+  satinAlinabilir Boolean   @default(false)
+  olusturuldu  DateTime  @default(now())
+  guncellendi  DateTime  @updatedAt
+
+  grup         Grup        @relation(fields: [grupId], references: [id])
+  sorular      Soru[]
+  katilimlar   SinavKatilim[]
+  ogrenciAtamalari OgrenciSinavAtama[]
+  satinAlimlar SatinAlim[]
+
+  @@index([grupId, yayinlandi, baslangicZamani(sort: Desc)])
+  @@map("sinavlar")
+}
+
+// Grup üyeliği dışında tek tek sınav erişimi (admin veya paket satışı)
+enum SinavAtamaKaynak {
+  MANUEL
+  PAKET
+  TEK_SINAV
+}
+
+model OgrenciSinavAtama {
+  id          String           @id @default(cuid())
+  ogrenciId   String
+  sinavId     String
+  kaynak      SinavAtamaKaynak @default(MANUEL)
+  satinAlimId String?
+  olusturuldu DateTime         @default(now())
+
+  ogrenci   OgrenciProfil @relation(fields: [ogrenciId], references: [id], onDelete: Cascade)
+  sinav     Sinav         @relation(fields: [sinavId], references: [id], onDelete: Cascade)
+  satinAlim SatinAlim?    @relation(fields: [satinAlimId], references: [id], onDelete: SetNull)
+
+  @@unique([ogrenciId, sinavId])
+  @@map("ogrenci_sinav_atamalari")
+}
+
+enum SoruZorlugu {
+  KOLAY
+  ORTA
+  ZOR
+}
+
+// AI veya editör onayı; öğrenci sınavında yalnızca ONAYLANDI sorular kullanılır
+enum SoruOnayDurumu {
+  ONAY_BEKLIYOR
+  ONAYLANDI
+  REDDEDILDI
+}
+
+model Konu {
+  id          String    @id @default(cuid())
+  ad          String
+  ders        String
+  sinifSeviyesi String?
+  ogretimTuru OgretimTuru
+  uniteAdi    String?
+  yksSegment  YksKonuSegmenti?
+  kazanimlar  String[]
+  olusturuldu DateTime  @default(now())
+
+  sorular         Soru[]
+  soruEtiketleri  SoruKonuEtiket[]
+  performanslar   KonuPerformansi[]
+
+  @@index([ogretimTuru, yksSegment])
+  @@index([ders, uniteAdi])
+  @@map("konular")
+}
+
+model Soru {
+  id           String            @id @default(cuid())
+  sinavId      String?
+  konuId       String
+  siraNo       Int
+  metinHtml    String
+  gorselUrl    String?
+  secenekler   Json
+  dogruCevap   String
+  zorluk       SoruZorlugu       @default(ORTA)
+  kazanim      String?
+  aiUretildi   Boolean           @default(false)
+  aiModeli     String?
+  onayDurumu   SoruOnayDurumu    @default(ONAYLANDI)
+  aiMeta       Json?
+  ogretmenGuncelledi Boolean           @default(false)
+  olusturanId    String?
+  duzenleyenId   String?
+  olusturuldu  DateTime          @default(now())
+  guncellendi  DateTime?         @updatedAt
+
+
+  sinav        Sinav?        @relation(fields: [sinavId], references: [id])
+  konu         Konu          @relation(fields: [konuId], references: [id])
+  olusturan    Kullanici?    @relation("SoruOlusturan", fields: [olusturanId], references: [id], onDelete: SetNull)
+  duzenleyen   Kullanici?    @relation("SoruDuzenleyen", fields: [duzenleyenId], references: [id], onDelete: SetNull)
+  cevaplar     OgrenciCevap[]
+  annotation   SoruAnnotation?
+  ekKonular    SoruKonuEtiket[]
+  uygunGruplar SoruUygunGrup[]
+
+  @@index([duzenleyenId])
+  @@index([olusturanId])
+
+  @@index([sinavId, onayDurumu])
+  @@index([sinavId, onayDurumu, siraNo])
+  @@index([onayDurumu, olusturuldu(sort: Desc)])
+  @@index([sinavId, olusturuldu(sort: Desc)])
+  @@index([konuId, olusturuldu(sort: Desc)])
+  @@index([onayDurumu])
+  @@index([konuId])
+  @@index([zorluk])
+  @@index([olusturuldu(sort: Desc)])
+  @@map("sorular")
+}
+
+/// Sorunun ek kategori/konu etiketleri (birincil konu: Soru.konuId)
+model SoruKonuEtiket {
+  soruId String
+  konuId String
+  soru   Soru @relation(fields: [soruId], references: [id], onDelete: Cascade)
+  konu   Konu @relation(fields: [konuId], references: [id], onDelete: Cascade)
+
+  @@id([soruId, konuId])
+  @@index([konuId])
+  @@map("soru_konu_etiketleri")
+}
+
+/// Sorunun hangi öğrenci grupları / sınav türleri için uygun olduğu (çoklu seçim)
+model SoruUygunGrup {
+  soruId String
+  grupId String
+  soru   Soru @relation(fields: [soruId], references: [id], onDelete: Cascade)
+  grup   Grup @relation(fields: [grupId], references: [id], onDelete: Cascade)
+
+  @@id([soruId, grupId])
+  @@index([grupId])
+  @@map("soru_uygun_gruplar")
+}
+
+model SoruAnnotation {
+  id           String    @id @default(cuid())
+  soruId       String    @unique
+  duzenleyenId String?
+  /// Çizim bitmap (data URL) veya küçük görsel — UI hızlılığı için
+  pngDataUrl   String?
+  /// Öğretmenin metinsel düzeltme notu
+  notMetni     String?
+  /// İleride stroke/shape gibi vektörel veri tutmak için
+  veriJson     Json?
+  olusturuldu  DateTime  @default(now())
+  guncellendi  DateTime  @updatedAt
+
+  soru         Soru      @relation(fields: [soruId], references: [id], onDelete: Cascade)
+  duzenleyen   Kullanici? @relation("SoruAnnotationDuzenleyen", fields: [duzenleyenId], references: [id], onDelete: SetNull)
+
+  @@map("soru_annotationlar")
+}
+
+// ============================================
+// SINAV KATILIM & CEVAPLAR
+// ============================================
+
+enum KatilimDurumu {
+  BEKLIYOR
+  DEVAM_EDIYOR
+  TAMAMLANDI
+  IPTAL
+}
+
+enum CevapYontemi {
+  DIJITAL
+  OPTIK_FORM
+}
+
+model SinavKatilim {
+  id             String        @id @default(cuid())
+  sinavId        String
+  ogrenciId      String
+  durum          KatilimDurumu @default(BEKLIYOR)
+  cevapYontemi   CevapYontemi  @default(DIJITAL)
+  baslangicZamani DateTime?
+  bitisZamani    DateTime?
+  dogruSayisi    Int           @default(0)
+  yanlisSayisi   Int           @default(0)
+  bosSayisi      Int           @default(0)
+  netPuan        Float         @default(0)
+  hamPuan        Float         @default(0)
+  ulusalSiralama Int?
+  yuzdelik       Float?
+  optikFormUrl   String?
+  optikOkundu    Boolean       @default(false)
+  olusturuldu    DateTime      @default(now())
+  guncellendi    DateTime      @updatedAt
+
+  sinav          Sinav          @relation(fields: [sinavId], references: [id])
+  ogrenci        OgrenciProfil  @relation(fields: [ogrenciId], references: [id])
+  cevaplar       OgrenciCevap[]
+
+  @@index([olusturuldu(sort: Desc)])
+  @@index([durum])
+  @@index([ogrenciId, durum, olusturuldu(sort: Desc)])
+  @@index([sinavId, durum, netPuan(sort: Desc)])
+  @@unique([sinavId, ogrenciId])
+  @@map("sinav_katilimlar")
+}
+
+model OgrenciCevap {
+  id          String    @id @default(cuid())
+  katilimId   String
+  soruId      String
+  secilen     String?
+  dogru       Boolean?
+  sureMs      Int?
+  olusturuldu DateTime  @default(now())
+
+  katilim     SinavKatilim @relation(fields: [katilimId], references: [id])
+  soru        Soru         @relation(fields: [soruId], references: [id])
+
+  @@index([soruId])
+  @@unique([katilimId, soruId])
+  @@map("ogrenci_cevaplar")
+}
+
+// ============================================
+// ANALİTİK & PERFORMANS
+// ============================================
+
+model KonuPerformansi {
+  id          String    @id @default(cuid())
+  ogrenciId   String
+  konuId      String
+  toplamSoru  Int       @default(0)
+  dogruSayisi Int       @default(0)
+  yanlisSayisi Int      @default(0)
+  basariYuzdesi Float   @default(0)
+  sonGuncelleme DateTime @updatedAt
+
+  ogrenci     OgrenciProfil @relation(fields: [ogrenciId], references: [id])
+  konu        Konu           @relation(fields: [konuId], references: [id])
+
+  @@unique([ogrenciId, konuId])
+  @@map("konu_performanslari")
+}
+
+model AIAnaliz {
+  id             String   @id @default(cuid())
+  ogrenciId      String
+  sinavId        String?
+  analizTipi     String
+  icerik         Json
+  oneriler       Json?
+  olusturuldu    DateTime @default(now())
+
+  @@map("ai_analizler")
+}
+
+// ============================================
+// ÇALIŞMA PLANI
+// ============================================
+
+model StudyPlan {
+  id          String    @id @default(cuid())
+  ogrenciId   String
+  baslik      String
+  baslangic   DateTime
+  bitis       DateTime
+  hedefler    Json
+  aktif       Boolean   @default(true)
+  aiUretildi  Boolean   @default(true)
+  olusturuldu DateTime  @default(now())
+
+  ogrenci     OgrenciProfil @relation(fields: [ogrenciId], references: [id])
+  gorevler    StudyGorev[]
+
+  @@map("study_planlar")
+}
+
+model StudyGorev {
+  id        String    @id @default(cuid())
+  planId    String
+  baslik    String
+  ders      String
+  konu      String
+  sureDakika Int
+  tamamlandi Boolean  @default(false)
+  gun       Int
+  olusturuldu DateTime @default(now())
+
+  plan      StudyPlan @relation(fields: [planId], references: [id])
+
+  @@map("study_gorevler")
+}
+
+// ============================================
+// SOSYAL ÖZELLİKLER
+// ============================================
+
+enum ArkadaslikDurumu {
+  BEKLIYOR
+  KABUL_EDILDI
+  REDDEDILDI
+  ENGELLENDI
+}
+
+model Arkadaslik {
+  id          String          @id @default(cuid())
+  ogrenciId   String
+  arkadasId   String
+  durum       ArkadaslikDurumu @default(BEKLIYOR)
+  olusturuldu DateTime        @default(now())
+
+  ogrenci     OgrenciProfil @relation(fields: [ogrenciId], references: [id])
+
+  @@unique([ogrenciId, arkadasId])
+  @@map("arkadasliklar")
+}
+
+enum DuelloDurumu {
+  DAVET_GONDERILDI
+  KABUL_EDILDI
+  DEVAM_EDIYOR
+  TAMAMLANDI
+  IPTAL
+}
+
+model Duello {
+  id             String       @id @default(cuid())
+  davetedenId    String
+  davetEdilenId  String
+  konuId         String?
+  soruSayisi     Int          @default(10)
+  sureDakika     Int          @default(15)
+  durum          DuelloDurumu @default(DAVET_GONDERILDI)
+  davetciPuan    Float?
+  davetEdilenPuan Float?
+  kazanan        String?
+  olusturuldu    DateTime     @default(now())
+  tamamlandi     DateTime?
+
+  daveteden      OgrenciProfil @relation(fields: [davetedenId], references: [id])
+
+  @@map("duellolar")
+}
+
+model SosyalDavet {
+  id              String   @id @default(cuid())
+  gondericId      String
+  aliciId         String?
+  aliciEmail      String?
+  davetKodu       String   @unique @default(cuid())
+  kabul           Boolean  @default(false)
+  olusturuldu     DateTime @default(now())
+
+  gonderici       Kullanici @relation("GonderenKullanici", fields: [gondericId], references: [id])
+  alici           Kullanici? @relation("AlinanKullanici", fields: [aliciId], references: [id])
+
+  @@map("sosyal_davetler")
+}
+
+// ============================================
+// ÜNİVERSİTE TAHMİN
+// ============================================
+
+model Universite {
+  id          String    @id @default(cuid())
+  ad          String
+  kisaAd      String?
+  sehir       String
+  tur         String
+  logo        String?
+
+  bolumler    UniversiteBolum[]
+
+  @@map("universiteler")
+}
+
+model UniversiteBolum {
+  id              String   @id @default(cuid())
+  universiteId    String
+  bolumAdi        String
+  sinavTuru       SinavTuru
+  yil             Int
+  minPuan         Float?
+  maxPuan         Float?
+  minSiralama     Int?
+  maxSiralama     Int?
+  kontenjan       Int?
+  dolulukOrani    Float?
+
+  universite      Universite @relation(fields: [universiteId], references: [id])
+  hedefler        UniversiteHedef[]
+
+  @@map("universite_bolumler")
+}
+
+model UniversiteHedef {
+  id          String   @id @default(cuid())
+  ogrenciId   String
+  bolumId     String
+  oncelik     Int      @default(1)
+  tahminPuan  Float?
+  tahminSiralama Int?
+  olusturuldu DateTime @default(now())
+
+  ogrenci     OgrenciProfil  @relation(fields: [ogrenciId], references: [id])
+  bolum       UniversiteBolum @relation(fields: [bolumId], references: [id])
+
+  @@map("universite_hedefler")
+}
+
+// ============================================
+// TAKVİM & BİLDİRİMLER
+// ============================================
+
+model TakvimEtkinlik {
+  id          String   @id @default(cuid())
+  grupId      String
+  baslik      String
+  aciklama    String?
+  tarih       DateTime
+  renk        String   @default("#4F46E5")
+  olusturuldu DateTime @default(now())
+
+  grup        Grup @relation(fields: [grupId], references: [id])
+
+  @@map("takvim_etkinlikler")
+}
+
+model Bildirim {
+  id          String   @id @default(cuid())
+  kullaniciId String
+  baslik      String
+  mesaj       String
+  tur         String
+  okundu      Boolean  @default(false)
+  veriJson    Json?
+  olusturuldu DateTime @default(now())
+
+  kullanici   Kullanici @relation(fields: [kullaniciId], references: [id])
+
+  @@map("bildirimler")
+}
+
+// ============================================
+// DESTEK & DUYURU
+// ============================================
+
+enum DestekTalebiDurum {
+  ACIK
+  BEKLEMEDE
+  COZULDU
+  KAPANDI
+}
+
+enum DuyuruHedefTuru {
+  TUMU
+  ROL
+  KULLANICI
+}
+
+model DestekTalebi {
+  id           String            @id @default(cuid())
+  ogrenciId    String
+  baslik       String
+  durum        DestekTalebiDurum @default(ACIK)
+  oncelik      Int               @default(1)
+  sonMesajAt   DateTime          @default(now())
+  olusturuldu  DateTime          @default(now())
+  guncellendi  DateTime          @updatedAt
+
+  ogrenci      OgrenciProfil     @relation(fields: [ogrenciId], references: [id], onDelete: Cascade)
+  mesajlar     DestekMesaji[]
+
+  @@index([ogrenciId, durum])
+  @@index([sonMesajAt])
+  @@map("destek_talepleri")
+}
+
+model DestekMesaji {
+  id           String        @id @default(cuid())
+  talepId      String
+  gonderenId   String
+  gonderenRol  Rol
+  mesaj        String
+  olusturuldu  DateTime      @default(now())
+
+  talep        DestekTalebi  @relation(fields: [talepId], references: [id], onDelete: Cascade)
+  gonderen     Kullanici     @relation(fields: [gonderenId], references: [id], onDelete: Cascade)
+
+  @@index([talepId, olusturuldu])
+  @@map("destek_mesajlari")
+}
+
+enum IletisimFormuDurum {
+  YENI
+  OKUNDU
+  YANITLANDI
+  KAPANDI
+}
+
+model IletisimFormu {
+  id           String              @id @default(cuid())
+  adSoyad      String
+  eposta       String
+  konu         String
+  mesaj        String
+  durum        IletisimFormuDurum  @default(YENI)
+  adminNotu    String?
+  kullaniciId  String?
+  ipAdresi     String?
+  olusturuldu  DateTime            @default(now())
+  guncellendi  DateTime            @updatedAt
+
+  kullanici    Kullanici?          @relation(fields: [kullaniciId], references: [id], onDelete: SetNull)
+
+  @@index([durum, olusturuldu])
+  @@index([eposta])
+  @@map("iletisim_formlari")
+}
+
+enum OgretmenOnerisiDurum {
+  YENI
+  OKUNDU
+  INCELENIYOR
+  TAMAMLANDI
+  KAPANDI
+}
+
+model OgretmenOnerisi {
+  id           String                @id @default(cuid())
+  kullaniciId  String
+  baslik       String?
+  mesaj        String
+  sayfaYolu    String?
+  gorseller    Json                  @default("[]")
+  durum        OgretmenOnerisiDurum   @default(YENI)
+  adminNotu    String?
+  olusturuldu  DateTime              @default(now())
+  guncellendi  DateTime              @updatedAt
+
+  kullanici    Kullanici             @relation(fields: [kullaniciId], references: [id], onDelete: Cascade)
+
+  @@index([durum, olusturuldu(sort: Desc)])
+  @@index([kullaniciId, olusturuldu(sort: Desc)])
+  @@map("ogretmen_onerileri")
+}
+
+model Duyuru {
+  id           String        @id @default(cuid())
+  baslik       String
+  mesaj        String
+  hedefTuru    DuyuruHedefTuru @default(TUMU)
+  hedefRoller  Rol[]         @default([])
+  olusturanId  String?
+  olusturuldu  DateTime      @default(now())
+
+  olusturan    Kullanici?    @relation(fields: [olusturanId], references: [id], onDelete: SetNull)
+  alicilar     DuyuruAlici[]
+
+  @@index([hedefTuru, olusturuldu])
+  @@map("duyurular")
+}
+
+model DuyuruAlici {
+  id           String     @id @default(cuid())
+  duyuruId     String
+  kullaniciId  String
+  okundu       Boolean    @default(false)
+  okunduAt     DateTime?
+  olusturuldu  DateTime   @default(now())
+
+  duyuru       Duyuru     @relation(fields: [duyuruId], references: [id], onDelete: Cascade)
+  kullanici    Kullanici  @relation(fields: [kullaniciId], references: [id], onDelete: Cascade)
+
+  @@unique([duyuruId, kullaniciId])
+  @@index([kullaniciId, okundu])
+  @@map("duyuru_alicilari")
+}
+
+/// ÖSYM resmi sayfalarından çekilen anlık görüntü (değişiklik tespiti)
+model OsymKaynakSnapshot {
+  id            String   @id @default(cuid())
+  kod           String   @unique
+  url           String
+  sonHash       String
+  sonBaslik     String?
+  sonHttpDurum  Int?
+  sonKontrol    DateTime @default(now())
+  degisti       Boolean  @default(false)
+  ekVeriJson    String?  @db.Text
+  hata          String?
+
+  @@map("osym_kaynak_snapshots")
+}
+
+// ============================================
+// ÖNERI SİSTEMİ (MONETİZASYON)
+// ============================================
+
+model Ogretmen {
+  id          String   @id @default(cuid())
+  ad          String
+  soyad       String
+  ders        String
+  konular     String[]
+  biyografi   String?
+  fotoUrl     String?
+  fiyatSaat   Float?
+  puan        Float    @default(0)
+  olusturuldu DateTime @default(now())
+
+  oneriler    Oneri[]
+
+  @@map("ogretmenler")
+}
+
+model Kurs {
+  id          String   @id @default(cuid())
+  baslik      String
+  aciklama    String?
+  ders        String
+  konular     String[]
+  etiketler   String[] @default([])
+  fiyat       Float?
+  url         String?
+  platform    String?
+  puan        Float    @default(0)
+  olusturuldu DateTime @default(now())
+
+  oneriler    Oneri[]
+
+  @@map("kurslar")
+}
+
+model Oneri {
+  id          String   @id @default(cuid())
+  ogrenciId   String
+  ogretmenId  String?
+  kursId      String?
+  paketId     String?
+  neden       String
+  oncelik     Int      @default(1)
+  tiklandimi  Boolean  @default(false)
+  olusturuldu DateTime @default(now())
+
+  ogretmen    Ogretmen? @relation(fields: [ogretmenId], references: [id])
+  kurs        Kurs?     @relation(fields: [kursId], references: [id])
+  paket       Paket?    @relation(fields: [paketId], references: [id])
+
+  @@map("oneriler")
+}
+
+// ============================================
+// PAKET VE ÖDEME SİSTEMİ
+// ============================================
+
+model PaketKategoriKayit {
+  id          String   @id @default(cuid())
+  ad          String
+  slug        String   @unique
+  sira        Int      @default(0)
+  aktif       Boolean  @default(true)
+  renk        String?
+  olusturuldu DateTime @default(now())
+
+  @@map("paket_kategorileri")
+}
+
+model Paket {
+  id            String   @id @default(cuid())
+  ad            String
+  aciklama      String?
+  kategori      String   @default("GENEL")
+  fiyat         Float
+  indirimliFiyat Float?
+  sinavSayisi   Int         @default(0)
+  ozellikler    Json?
+  sinavIds      String[]    @default([])
+  grupIds       String[]    @default([])
+  kocId         String?     // Paket bir koça bağlı olabilir
+  koc           Koc?        @relation(fields: [kocId], references: [id])
+  aktif         Boolean     @default(true)
+  populer       Boolean     @default(false)
+  etiketler     String[]    @default([]) // Örn: ["matematik", "türev"]
+  disUrl        String?     // wingolink.com.tr adresi
+  oneCikan      Boolean     @default(false)
+  olusturuldu   DateTime    @default(now())
+  guncellendi   DateTime    @updatedAt
+  satinAlimlar  SatinAlim[]
+  oneriler      Oneri[]
+
+  @@index([aktif, fiyat])
+  @@index([aktif, kategori])
+  @@map("paketler")
+}
+
+model Koc {
+  id           String   @id @default(cuid())
+  ad           String
+  soyad        String
+  uzmanlik     String?
+  biyografi    String?
+  fotoUrl      String?
+  aktif        Boolean  @default(true)
+  olusturuldu  DateTime @default(now())
+  paketler     Paket[]
+
+  @@map("koclar")
+}
+
+model Yayin {
+  id           String   @id @default(cuid())
+  ad           String
+  aciklama     String?
+  logoUrl      String?
+  gorselUrl    String? 
+  sira         Int      @default(0)
+  aktif        Boolean  @default(true)
+  olusturuldu  DateTime @default(now())
+
+  @@map("yayinlar")
+}
+
+enum OdemeDurumu {
+  BEKLEMEDE
+  TAMAMLANDI
+  IPTAL_EDILDI
+  IADE_EDILDI
+  HATA
+}
+
+model SatinAlim {
+  id            String      @id @default(cuid())
+  kullaniciId   String
+  paketId       String?
+  sinavId       String?
+  miktar        Float
+  indirimMiktari Float      @default(0)
+  toplamTutar   Float       @default(0) // miktar + vergi vb.
+  durum         OdemeDurumu @default(BEKLEMEDE)
+  referansNo    String?     @unique // Ödeme sağlayıcısı (örn: iyzico) ID
+  odemeMetodu   String?     @default("KREDİ KARTI") // KREDİ KARTI, HAVALE, MANUEL
+  notlar        String?
+  ipAdresi      String?
+  faturaBilgileri Json?     // { "ad": "...", "vergiDairesi": "...", ... }
+  
+  olusturuldu  DateTime    @default(now())
+  odemeZamani  DateTime?
+  guncellendi  DateTime    @updatedAt
+
+  kullanici   Kullanici   @relation(fields: [kullaniciId], references: [id])
+  paket       Paket?      @relation(fields: [paketId], references: [id])
+  sinav       Sinav?      @relation(fields: [sinavId], references: [id])
+  sinavAtamalari OgrenciSinavAtama[]
+
+  @@index([sinavId, durum])
+  @@map("satin_alimlar")
+}
+
+// ============================================
+// SİTE (LANDİNG) İÇERİĞİ — TEK SATIR
+// ============================================
+
+model SiteGenelIcerik {
+  id          String   @id
+  icerik      Json     @default("{}")
+  olusturuldu DateTime @default(now())
+  guncellendi DateTime @updatedAt
+
+  @@map("site_genel_icerik")
+}
+
+model SistemAyarlari {
+  anahtar     String   @id
+  deger       String
+  aciklama    String?
+  olusturuldu DateTime @default(now())
+  guncellendi DateTime @updatedAt
+
+  @@map("sistem_ayarlari")
+}
+
+// ============================================
+// EĞİTİM MATERYALİ / RAG (Retrieval Augmented Generation)
+// ============================================
+
+enum EgitimDokumanDurum {
+  BEKLIYOR
+  ISLENIYOR
+  HAZIR
+  HATA
+}
+
+/// RAG dokümanının amacı (prompt'a nasıl ekleneceğini etkiler)
+enum EgitimDokumanTuru {
+  KONU_ANLATIMI
+  DENEME_SINAVI
+  SORU_ORNEKLERI
+  COZUM
+  DIGER
+}
+
+model EgitimDokuman {
+  id           String              @id @default(cuid())
+  baslik       String
+  /// İlişkili ders adı (Konu.ders ile eşleşir, opsiyonel)
+  ders         String?
+  /// Belirli bir Konu ile eşlenmiş olabilir
+  konuId       String?
+  ogretimTuru  OgretimTuru?
+  tur          EgitimDokumanTuru   @default(DIGER)
+  dosyaAd      String
+  dosyaTipi    String              // application/pdf, text/plain, ...
+  dosyaBoyut   Int                 // bayt
+  /// Supabase Storage public/private URL
+  dosyaUrl     String?
+  /// Harici kaynak URL (kazıma/besleme için)
+  kaynakUrl    String?
+  /// PDF: okunacak ilk sayfa (1 tabanlı, dahil). Boş = 1.
+  sayfaBaslangic Int?
+  /// PDF: okunacak son sayfa (dahil). Boş = son sayfa.
+  sayfaBitis     Int?
+  /// Ham metin (chunk'lara bölünmeden önce). Çok uzun olabilir; null da olabilir.
+  hamMetin     String?
+  /// LLM analiz: konular, soru özetleri, üretim yönergesi (JSON string)
+  egitimOzeti  String?
+  durum        EgitimDokumanDurum  @default(BEKLIYOR)
+  hataMetni    String?
+  chunkSayisi  Int                 @default(0)
+  yukleyenId   String?
+  olusturuldu  DateTime            @default(now())
+  guncellendi  DateTime            @updatedAt
+
+  chunklar     EgitimChunk[]
+
+  @@index([ders])
+  @@index([konuId])
+  @@index([tur])
+  @@index([durum])
+  @@map("egitim_dokumanlar")
+}
+
+/// Embedding kolonu (vector(1536)) Supabase'de raw SQL ile eklenir.
+/// Prisma client embedding alanını okumaz/yazmaz; similarity search raw query ile yapılır.
+model EgitimChunk {
+  id           String         @id @default(cuid())
+  dokumanId    String
+  sira         Int
+  metin        String
+  /// Karakter ofseti (debug için)
+  baslangic    Int?
+  bitis        Int?
+  /// Token tahmini sayısı (chunk boyutu için)
+  tokenSayisi  Int?
+  /// pgvector embedding alanı (raw SQL ile yönetilir)
+  embedding    Unsupported("vector(1536)")?
+  olusturuldu  DateTime       @default(now())
+
+  dokuman      EgitimDokuman  @relation(fields: [dokumanId], references: [id], onDelete: Cascade)
+
+  @@index([dokumanId, sira])
+  @@map("egitim_chunklar")
+}
