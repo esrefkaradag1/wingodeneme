@@ -6,7 +6,7 @@ import { useParams, usePathname } from 'next/navigation';
 import { useMemo, useState, useEffect, useRef } from 'react';
 import { format, addMonths, subMonths, startOfMonth, endOfMonth, isWithinInterval, isSameDay, isSameMonth } from 'date-fns';
 import { tr } from 'date-fns/locale';
-import { paketApi } from '@/lib/api';
+import { paketApi, sinavApi } from '@/lib/api';
 import { useAuthStore } from '@/store/auth.store';
 import { kademeliSepetToplamHesapla, kademeEtiketi, type SinavSepetFiyatAyarlari } from '@/lib/sinavFiyatKademe';
 import {
@@ -97,6 +97,18 @@ export default function PaketDetaySayfasi() {
   const paket: PaketDetay | null = data?.data?.veri || null;
   const sinavlar = paket?.sinavlar || [];
   const ucretsizSinavlar = paket?.ucretsizSinavlar || [];
+
+  // Öğrencinin zaten erişimi olan sınavlar; satın alma seçiminden hariç tutulur.
+  const { data: sahipSinavData } = useQuery({
+    queryKey: ['sinavlar'],
+    queryFn: () => sinavApi.liste(),
+    enabled: !!token,
+    staleTime: 60_000,
+  });
+  const sahipSet = useMemo(() => {
+    const list = (sahipSinavData?.data?.veri || []) as Array<{ id: string }>;
+    return new Set(list.map((s) => s.id));
+  }, [sahipSinavData]);
   const paketUcretsiz = paket
     ? (paket.indirimliFiyat != null && paket.indirimliFiyat > 0 ? paket.indirimliFiyat : paket.fiyat) <= 0
     : false;
@@ -287,8 +299,8 @@ export default function PaketDetaySayfasi() {
   });
 
   const seciliSinavlar = useMemo(
-    () => sinavlar.filter((s) => seciliIds.includes(s.id) && s.gosterilenFiyat != null),
-    [sinavlar, seciliIds]
+    () => sinavlar.filter((s) => satinAlIds.includes(s.id) && s.gosterilenFiyat != null),
+    [sinavlar, satinAlIds]
   );
 
   const listeToplam = useMemo(
@@ -307,6 +319,7 @@ export default function PaketDetaySayfasi() {
 
   const toggleSecim = (s: PaketSinav) => {
     if (s.gosterilenFiyat == null || s.satinAlinabilir === false) return;
+    if (sahipSet.has(s.id)) return; // zaten erişim var
     const mevcut = sepetPaketId === id ? sepetIds : [];
     const yeni = mevcut.includes(s.id) ? mevcut.filter((x) => x !== s.id) : [...mevcut, s.id];
     secimGuncelle(yeni);
@@ -314,22 +327,27 @@ export default function PaketDetaySayfasi() {
 
   const tumunuSec = () => {
     const ids = aylikSinavlar
-      .filter((s) => s.gosterilenFiyat != null && s.satinAlinabilir !== false)
+      .filter((s) => s.gosterilenFiyat != null && s.satinAlinabilir !== false && !sahipSet.has(s.id))
       .map((s) => s.id);
     secimGuncelle(ids);
   };
 
-  const satinAlIds = seciliIds;
+  // Sahip olunan sınavlar seçimden düşürülür; yalnızca alınabilir olanlar satın alınır.
+  const satinAlIds = useMemo(
+    () => seciliIds.filter((sid) => !sahipSet.has(sid)),
+    [seciliIds, sahipSet]
+  );
 
   const sepetiTemizle = () => {
     sepetTemizle();
   };
 
   const sinavSatiri = (s: PaketSinav) => {
-    const secili = seciliIds.includes(s.id);
+    const sahip = sahipSet.has(s.id);
+    const secili = seciliIds.includes(s.id) && !sahip;
     const fiyatYok = s.gosterilenFiyat == null;
     const satinAlinamaz = s.satinAlinabilir === false;
-    const devreDisi = fiyatYok || satinAlinamaz;
+    const devreDisi = fiyatYok || satinAlinamaz || sahip;
 
     return (
       <div
@@ -359,6 +377,11 @@ export default function PaketDetaySayfasi() {
                   Yakında
                 </span>
               )}
+              {sahip && (
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-200">
+                  Sahipsiniz
+                </span>
+              )}
             </div>
             <p className="text-white font-bold mt-0.5">{s.baslik}</p>
             <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-400 mt-1.5">
@@ -374,7 +397,9 @@ export default function PaketDetaySayfasi() {
             </div>
           </div>
           <div className="text-right shrink-0">
-            {fiyatYok ? (
+            {sahip ? (
+              <span className="text-xs font-bold text-indigo-300">Erişiminiz var</span>
+            ) : fiyatYok ? (
               <span className="text-xs text-slate-500">Fiyat yok</span>
             ) : satinAlinamaz ? (
               <span className="text-xs text-slate-500">Satış kapalı</span>
