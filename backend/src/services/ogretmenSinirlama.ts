@@ -1,6 +1,7 @@
 import { prisma } from '../config/database';
 import { OgretimTuru } from '@prisma/client';
 import { AuthRequest } from '../middlewares/auth.middleware';
+import { ogretimTuruIzinUyumlu, ogretimTurleriniGenislet } from '../utils/grupOgretimTuru';
 
 /**
  * Branş -> izinli ders adları eşlemesi.
@@ -18,6 +19,7 @@ export const BRANS_DERS_HARITASI: Record<string, string[]> = {
   Edebiyat: ['Edebiyat', 'Türk Dili ve Edebiyatı', 'Türkçe'],
   Tarih: ['Tarih', 'İnkılap Tarihi ve Atatürkçülük', 'T.C. İnkılap Tarihi ve Atatürkçülük'],
   'İnkılap Tarihi ve Atatürkçülük': ['İnkılap Tarihi ve Atatürkçülük', 'T.C. İnkılap Tarihi ve Atatürkçülük', 'Tarih'],
+  'Sosyal Bilgiler': ['Sosyal Bilgiler', 'Tarih', 'Coğrafya', 'İnkılap Tarihi ve Atatürkçülük', 'T.C. İnkılap Tarihi ve Atatürkçülük'],
   Coğrafya: ['Coğrafya'],
   /** ÖSYM AYT SB-2: aynı testte dört ders (branş “Felsefe” olsa da hepsi listelenmeli) */
   Felsefe: ['Felsefe', 'Psikoloji', 'Sosyoloji', 'Mantık'],
@@ -34,6 +36,7 @@ export const LGS_BRANSLARI = [
   'Matematik',
   'Fen Bilimleri',
   'Türkçe',
+  'Sosyal Bilgiler',
   'İnkılap Tarihi ve Atatürkçülük',
   'Din Kültürü ve Ahlak Bilgisi',
   'İngilizce',
@@ -287,7 +290,9 @@ export async function ogretmenKisitGetir(userId: string, rol: string): Promise<O
  */
 export function ogretmenIcinGrupTurlari(kisit: OgretmenKisit | null): OgretimTuru[] | undefined {
   if (!kisit) return undefined;
-  const turler = kisit.ogretimTurleri?.length ? kisit.ogretimTurleri : [kisit.ogretimTuru];
+  const turler = ogretimTurleriniGenislet(
+    kisit.ogretimTurleri?.length ? kisit.ogretimTurleri : [kisit.ogretimTuru]
+  );
   // YKS/LGS beraber çalışması için (eski davranış)
   if (turler.includes('YKS') && !turler.includes('LGS')) return [...turler, 'LGS'];
   if (turler.includes('LGS') && !turler.includes('YKS')) return [...turler, 'YKS'];
@@ -310,7 +315,9 @@ export async function reqOgretmenKisit(req: AuthRequest): Promise<OgretmenKisit 
 /** Konu modeli üzerine uygulanacak Prisma where parçası. */
 export function konuWhereKisiti(kisit: OgretmenKisit | null) {
   if (!kisit) return {};
-  const turler = kisit.ogretimTurleri?.length ? kisit.ogretimTurleri : [kisit.ogretimTuru];
+  const turler = ogretimTurleriniGenislet(
+    kisit.ogretimTurleri?.length ? kisit.ogretimTurleri : [kisit.ogretimTuru]
+  );
   return {
     ogretimTuru: { in: turler },
     ders: { in: kisit.dersler },
@@ -320,7 +327,9 @@ export function konuWhereKisiti(kisit: OgretmenKisit | null) {
 /** Soru modeli üzerine uygulanacak Prisma where parçası ( konu üzerinden ). */
 export function soruWhereKisiti(kisit: OgretmenKisit | null) {
   if (!kisit) return {};
-  const turler = kisit.ogretimTurleri?.length ? kisit.ogretimTurleri : [kisit.ogretimTuru];
+  const turler = ogretimTurleriniGenislet(
+    kisit.ogretimTurleri?.length ? kisit.ogretimTurleri : [kisit.ogretimTuru]
+  );
   return {
     konu: {
       ogretimTuru: { in: turler },
@@ -355,8 +364,9 @@ export async function ogretmenSoruIslemIzni(
   if (!ogrKisit) return { ok: true };
 
   if (soru.konu) {
+    const izinliTurler = ogrKisit.ogretimTurleri?.length ? ogrKisit.ogretimTurleri : [ogrKisit.ogretimTuru];
     if (
-      !(ogrKisit.ogretimTurleri?.length ? ogrKisit.ogretimTurleri : [ogrKisit.ogretimTuru]).includes(soru.konu.ogretimTuru as OgretimTuru) ||
+      !ogretimTuruIzinUyumlu(soru.konu.ogretimTuru as OgretimTuru, izinliTurler) ||
       !ogretmenDersiUretebilirMiKademe(ogrKisit, soru.konu.ders || '', soru.konu.ogretimTuru)
     ) {
       return { ok: false, status: 403, mesaj: 'Bu soru sizin branşınıza ait değil.' };
@@ -408,9 +418,10 @@ export async function ogretmenSoruIdsIslemIzni(
   }
 
   for (const s of sorular) {
+    const izinliTurler = ogrKisit.ogretimTurleri?.length ? ogrKisit.ogretimTurleri : [ogrKisit.ogretimTuru];
     if (
       s.konu &&
-      (!(ogrKisit.ogretimTurleri?.length ? ogrKisit.ogretimTurleri : [ogrKisit.ogretimTuru]).includes(s.konu.ogretimTuru as OgretimTuru) ||
+      (!ogretimTuruIzinUyumlu(s.konu.ogretimTuru as OgretimTuru, izinliTurler) ||
         !ogretmenDersiUretebilirMiKademe(ogrKisit, s.konu.ders || '', s.konu.ogretimTuru))
     ) {
       return { ok: false, status: 403, mesaj: 'Seçilen sorulardan bazıları sizin branşınıza ait değil.' };

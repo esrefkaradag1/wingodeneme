@@ -8,6 +8,8 @@ import { bildirimGonder, epostaGonder } from './bildirim.service';
 import { Rol } from '@prisma/client';
 import { ogretimTuruBelirle } from '../utils/ogretimTuru';
 import { bransIcinDersler, branslarParse } from './ogretmenSinirlama';
+import { platformOgretimTuruUyumlu, platformOgretimTurleriUyumlu } from '../utils/paketPlatformFiltre';
+import { OgretimTuru } from '@prisma/client';
 
 interface KayitGirdisi {
   email: string;
@@ -104,7 +106,7 @@ async function veliHesapEpostasiGonder(
   ).catch(() => undefined);
 }
 
-export async function ogrenciKayit(girdi: KayitGirdisi) {
+export async function ogrenciKayit(girdi: KayitGirdisi, platformTurleri?: OgretimTuru[]) {
   const emailNorm = girdi.email.trim().toLowerCase();
   const mevcutKullanici = await prisma.kullanici.findUnique({ where: { email: emailNorm } });
   if (mevcutKullanici) {
@@ -135,35 +137,63 @@ export async function ogrenciKayit(girdi: KayitGirdisi) {
         if (!veliTelefon) {
           throw new AppHatasi('Yeni veli hesabı için geçerli telefon numarası gerekli', 400);
         }
-        const veliSifreDuz = veliSifreBelirle(girdi.veliSifre, veliTelefon);
-        const veliSifreHata = veliSifreGecerliMi(veliSifreDuz);
-        if (veliSifreHata) {
-          throw new AppHatasi(`Yeni veli hesabı için ${veliSifreHata.toLowerCase()}`, 400);
-        }
-        const veliSifre = await bcrypt.hash(veliSifreDuz, 12);
-        const veliKullanici = await tx.kullanici.create({
-          data: {
-            email: veliEmailNorm,
-            sifre: veliSifre,
-            telefon: veliTelefon,
-            rol: Rol.VELI,
-            veliProfil: {
-              create: {
-                ad: girdi.veliAd || 'Veli',
-                soyad: girdi.veliSoyad || '',
-                telefon: veliTelefon,
-              },
-            },
-          },
+        // Telefon numarası hesaplarda benzersiz; aynı numara zaten varsa
+        // ham Prisma hatası yerine anlaşılır uyarı ver, mevcut veliyse bağla.
+        const telefonSahibi = await tx.kullanici.findUnique({
+          where: { telefon: veliTelefon },
           include: { veliProfil: true },
         });
-        veliProfil = veliKullanici.veliProfil;
-        yeniVeliOlusturuldu = true;
-        veliGirisSifresi = veliSifreDuz;
+        if (telefonSahibi) {
+          if (telefonSahibi.rol === Rol.VELI && telefonSahibi.veliProfil) {
+            veliProfil = telefonSahibi.veliProfil;
+          } else {
+            throw new AppHatasi(
+              'Bu veli telefon numarası başka bir hesapta kayıtlı. Farklı bir numara girin ya da veli e-postasıyla mevcut hesaba bağlanın.',
+              409,
+            );
+          }
+        }
+        if (!veliProfil) {
+          const veliSifreDuz = veliSifreBelirle(girdi.veliSifre, veliTelefon);
+          const veliSifreHata = veliSifreGecerliMi(veliSifreDuz);
+          if (veliSifreHata) {
+            throw new AppHatasi(`Yeni veli hesabı için ${veliSifreHata.toLowerCase()}`, 400);
+          }
+          const veliSifre = await bcrypt.hash(veliSifreDuz, 12);
+          const veliKullanici = await tx.kullanici.create({
+            data: {
+              email: veliEmailNorm,
+              sifre: veliSifre,
+              telefon: veliTelefon,
+              rol: Rol.VELI,
+              veliProfil: {
+                create: {
+                  ad: girdi.veliAd || 'Veli',
+                  soyad: girdi.veliSoyad || '',
+                  telefon: veliTelefon,
+                },
+              },
+            },
+            include: { veliProfil: true },
+          });
+          veliProfil = veliKullanici.veliProfil;
+          yeniVeliOlusturuldu = true;
+          veliGirisSifresi = veliSifreDuz;
+        }
       }
     }
 
     const ogretimTuruKayit = ogretimTuruBelirle(girdi.sinif, girdi.ogretimTuru);
+    if (!platformOgretimTuruUyumlu(ogretimTuruKayit, platformTurleri)) {
+      throw new AppHatasi('Seçilen kademe bu platformda kayıt için uygun değil', 400);
+    }
+
+    if (girdi.telefon && girdi.telefon.trim()) {
+      const ogrenciTelefonSahibi = await tx.kullanici.findUnique({ where: { telefon: girdi.telefon } });
+      if (ogrenciTelefonSahibi) {
+        throw new AppHatasi('Bu telefon numarası zaten başka bir hesapta kayıtlı. Farklı bir numara girin.', 409);
+      }
+    }
 
     const yeniKullanici = await tx.kullanici.create({
       data: {
@@ -240,6 +270,7 @@ export async function ogrenciKayit(girdi: KayitGirdisi) {
 // ── ÖĞRETMEN KAYDI ─────────────────────────────────────────────
 const LGS_BRANSLARI = [
   'Matematik', 'Fen Bilimleri', 'Türkçe',
+  'Sosyal Bilgiler',
   'İnkılap Tarihi ve Atatürkçülük', 'Din Kültürü ve Ahlak Bilgisi', 'İngilizce',
 ];
 const YKS_BRANSLARI = [
@@ -271,16 +302,19 @@ export async function ogretmenKayit(girdi: {
   telefon?: string;
   brans?: string;
   branslar?: string[];
-  ogretimTuru?: 'YKS' | 'LGS' | 'KPSS_ONLISANS' | 'KPSS_ORTAOGRETIM';
-  ogretimTurleri?: Array<'YKS' | 'LGS' | 'KPSS_ONLISANS' | 'KPSS_ORTAOGRETIM'>;
+  ogretimTuru?: 'YKS' | 'LGS' | 'KPSS_LISANS' | 'KPSS_ONLISANS' | 'KPSS_ORTAOGRETIM';
+  ogretimTurleri?: Array<'YKS' | 'LGS' | 'KPSS_LISANS' | 'KPSS_ONLISANS' | 'KPSS_ORTAOGRETIM'>;
   branslarByTur?: Record<string, string[]>;
-}) {
+}, platformTurleri?: OgretimTuru[]) {
   const mevcut = await prisma.kullanici.findUnique({ where: { email: girdi.email } });
   if (mevcut) throw new AppHatasi('Bu e-posta adresi zaten kayıtlı', 409);
 
   const turlerRaw = (girdi.ogretimTurleri?.length ? girdi.ogretimTurleri : girdi.ogretimTuru ? [girdi.ogretimTuru] : []) as string[];
   const ogretimTurleri = [...new Set(turlerRaw.map((t) => String(t).trim()).filter(Boolean))];
   if (ogretimTurleri.length === 0) throw new AppHatasi('En az bir kademe seçiniz', 400);
+  if (!platformOgretimTurleriUyumlu(ogretimTurleri, platformTurleri)) {
+    throw new AppHatasi('Seçilen kademe(ler) bu platformda kayıt için uygun değil', 400);
+  }
 
   const harita: Record<string, string[]> = {};
   if (girdi.branslarByTur && typeof girdi.branslarByTur === 'object') {
@@ -371,6 +405,11 @@ export async function veliKayit(girdi: { email: string; sifre?: string; ad: stri
   const veliTelefon = veliTelefonNorm(girdi.telefon);
   if (!veliTelefon) {
     throw new AppHatasi('Geçerli telefon numarası gerekli', 400);
+  }
+
+  const telefonSahibi = await prisma.kullanici.findUnique({ where: { telefon: veliTelefon } });
+  if (telefonSahibi) {
+    throw new AppHatasi('Bu telefon numarası zaten başka bir hesapta kayıtlı. Farklı bir numara girin.', 409);
   }
 
   const veliSifreDuz = veliSifreBelirle(girdi.sifre, veliTelefon);

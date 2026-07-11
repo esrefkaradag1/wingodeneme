@@ -3,6 +3,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { adminApi } from '@/lib/api';
+import { isKpssMode } from '@/lib/platform';
 import { 
   CreditCard, Plus, Loader2, Edit2, Trash2, 
   Check, X, Star, ShoppingBag, ClipboardList, Users, Tag, Layers, Calendar,
@@ -23,6 +24,7 @@ import {
   VARSAYILAN_KATEGORI_RENKLERI,
   type PaketKategoriKayit,
 } from '@/lib/paketKategori';
+import { fiyatGoster, fiyatInputDeger, fiyatParse } from '@/lib/para';
 import {
   altGrupListesi,
   grupIddenSecim,
@@ -38,6 +40,9 @@ interface Paket {
   kategori?: string;
   fiyat: number;
   indirimliFiyat: number | null;
+  kademeliFiyatAktif?: boolean;
+  tekilSinavFiyati?: number | null;
+  fiyatKademeleriJson?: { minAdet: number; indirimYuzde: number }[] | null;
   sinavSayisi: number;
   ozellikler: string[] | null;
   aktif: boolean;
@@ -46,6 +51,7 @@ interface Paket {
   etiketler: string[] | null;
   disUrl: string | null;
   sinavIds?: string[];
+  ucretsizSinavIds?: string[];
   grupIds?: string[];
 }
 
@@ -69,6 +75,32 @@ function sinavGosterilenFiyat(s: SinavOzet): number | null {
 
 interface GrupOzet extends GrupSecim {
   tur?: string;
+}
+
+function bosPaketForm(kategori: string) {
+  return {
+    ad: '',
+    aciklama: '',
+    kategori,
+    fiyat: '',
+    indirimliFiyat: '',
+    ucretsiz: false,
+    kademeliFiyatAktif: false,
+    tekilSinavFiyati: '',
+    fiyatKademeleri: [] as { minAdet: number; indirimYuzde: number }[],
+    sinavSayisi: 0,
+    aktif: true,
+    populer: false,
+    ozellik: '',
+    ozellikler: [] as string[],
+    etiketler: [] as string[],
+    etiket: '',
+    disUrl: '',
+    oneCikan: false,
+    sinavIds: [] as string[],
+    ucretsizSinavIds: [] as string[],
+    grupIds: [] as string[],
+  };
 }
 
 function grupIdleriniGenisletClient(grupIds: string[], gruplar: GrupOzet[]): Set<string> {
@@ -101,22 +133,7 @@ export default function PaketYonetimiSayfasi() {
     renk: VARSAYILAN_KATEGORI_RENKLERI[0].renk,
   });
   const [form, setForm] = useState({
-    ad: '',
-    aciklama: '',
-    kategori: 'GENEL',
-    fiyat: 0,
-    indirimliFiyat: '',
-    sinavSayisi: 0,
-    aktif: true,
-    populer: false,
-    ozellik: '',
-    ozellikler: [] as string[],
-    etiketler: [] as string[],
-    etiket: '',
-    disUrl: '',
-    oneCikan: false,
-    sinavIds: [] as string[],
-    grupIds: [] as string[],
+    ...bosPaketForm('GENEL'),
   });
 
   const { data, isLoading, refetch } = useQuery({
@@ -156,7 +173,16 @@ export default function PaketYonetimiSayfasi() {
     }
   }, [fiyatKademeData?.data?.veri]);
 
-  const kategoriler: PaketKategoriKayit[] = kategorilerData?.data?.veri || [];
+  const hamKategoriler: PaketKategoriKayit[] = kategorilerData?.data?.veri || [];
+  const kategoriler = useMemo(() => {
+    const isKpss = isKpssMode();
+    return hamKategoriler.filter((k) => {
+      if (k.slug === 'GENEL') return true;
+      const kKpss = k.slug.toUpperCase().includes('KPSS') || k.ad.toUpperCase().includes('KPSS');
+      return isKpss ? kKpss : !kKpss;
+    });
+  }, [hamKategoriler]);
+
   const kategoriHarita = useMemo(() => kategoriHaritasi(kategoriler), [kategoriler]);
   const varsayilanKategoriSlug = kategoriler.find((k) => k.slug === 'GENEL')?.slug
     || kategoriler.find((k) => k.aktif !== false)?.slug
@@ -174,7 +200,14 @@ export default function PaketYonetimiSayfasi() {
     enabled: modalAcik,
   });
 
-  const paketler: Paket[] = data?.data?.veri || [];
+  const hamPaketler: Paket[] = data?.data?.veri || [];
+  const paketler = useMemo(() => {
+    const isKpss = isKpssMode();
+    return hamPaketler.filter((p) => {
+      const pKpss = (p.kategori && p.kategori.toUpperCase().includes('KPSS')) || p.ad.toUpperCase().includes('KPSS');
+      return isKpss ? pKpss : !pKpss;
+    });
+  }, [hamPaketler]);
   const filtreliPaketler = useMemo(() => {
     if (kategoriFiltre === 'TUMU') return paketler;
     return paketler.filter((p) => (p.kategori || 'GENEL') === kategoriFiltre);
@@ -302,14 +335,23 @@ export default function PaketYonetimiSayfasi() {
     [seciliSinavlar]
   );
 
+  const paketKademeAyarlari = useMemo<SinavSepetFiyatAyarlari>(
+    () => ({
+      aktif: form.kademeliFiyatAktif,
+      tekDenemeFiyati: Number(form.tekilSinavFiyati) || 0,
+      kademeler: form.fiyatKademeleri,
+    }),
+    [form.kademeliFiyatAktif, form.tekilSinavFiyati, form.fiyatKademeleri]
+  );
+
   const seciliKademeFiyat = useMemo(
     () =>
       kademeliSepetToplamHesapla(
         seciliSinavlar.length,
         seciliListeToplam,
-        kademeForm.aktif ? kademeForm : null
+        paketKademeAyarlari.aktif ? paketKademeAyarlari : null
       ),
-    [seciliSinavlar.length, seciliListeToplam, kademeForm]
+    [seciliSinavlar.length, seciliListeToplam, paketKademeAyarlari]
   );
 
   const kaydetMutation = useMutation({
@@ -341,8 +383,17 @@ export default function PaketYonetimiSayfasi() {
         ad: paket.ad,
         aciklama: paket.aciklama || '',
         kategori: (paket.kategori || varsayilanKategoriSlug) as string,
-        fiyat: paket.fiyat,
-        indirimliFiyat: paket.indirimliFiyat?.toString() || '',
+        fiyat: fiyatInputDeger(paket.fiyat),
+        indirimliFiyat: paket.indirimliFiyat != null ? fiyatInputDeger(paket.indirimliFiyat) : '',
+        ucretsiz: paket.fiyat === 0 || paket.indirimliFiyat === 0,
+        kademeliFiyatAktif: paket.kademeliFiyatAktif === true,
+        tekilSinavFiyati: paket.tekilSinavFiyati?.toString() || '',
+        fiyatKademeleri: Array.isArray(paket.fiyatKademeleriJson)
+          ? paket.fiyatKademeleriJson.map((k) => ({
+              minAdet: Number(k.minAdet) || 1,
+              indirimYuzde: Number(k.indirimYuzde) || 0,
+            }))
+          : [],
         sinavSayisi: paket.sinavSayisi,
         aktif: paket.aktif,
         populer: paket.populer,
@@ -353,28 +404,12 @@ export default function PaketYonetimiSayfasi() {
         disUrl: paket.disUrl || '',
         oneCikan: paket.oneCikan || false,
         sinavIds: Array.isArray(paket.sinavIds) ? [...paket.sinavIds] : [],
+        ucretsizSinavIds: Array.isArray(paket.ucretsizSinavIds) ? [...paket.ucretsizSinavIds] : [],
         grupIds: Array.isArray(paket.grupIds) ? [...paket.grupIds] : [],
       });
     } else {
       setDuzenlenenPaket(null);
-      setForm({
-        ad: '',
-        aciklama: '',
-        kategori: varsayilanKategoriSlug,
-        fiyat: 0,
-        indirimliFiyat: '',
-        sinavSayisi: 0,
-        aktif: true,
-        populer: false,
-        ozellik: '',
-        ozellikler: [],
-        etiketler: [],
-        etiket: '',
-        disUrl: '',
-        oneCikan: false,
-        sinavIds: [],
-        grupIds: [],
-      });
+      setForm(bosPaketForm(varsayilanKategoriSlug));
     }
     setModalAcik(true);
   };
@@ -418,12 +453,63 @@ export default function PaketYonetimiSayfasi() {
       const sinavIds = f.sinavIds.includes(id)
         ? f.sinavIds.filter((x) => x !== id)
         : [...f.sinavIds, id];
+      const ucretsizSinavIds = f.ucretsizSinavIds.includes(id) && !sinavIds.includes(id)
+        ? f.ucretsizSinavIds.filter((x) => x !== id)
+        : f.ucretsizSinavIds;
       return {
         ...f,
         sinavIds,
+        ucretsizSinavIds,
         sinavSayisi: sinavIds.length > 0 ? sinavIds.length : f.sinavSayisi,
       };
     });
+  };
+
+  const ucretsizSinavSecimiToggle = (id: string) => {
+    setForm((f) => {
+      const ucretsizSinavIds = f.ucretsizSinavIds.includes(id)
+        ? f.ucretsizSinavIds.filter((x) => x !== id)
+        : [...f.ucretsizSinavIds, id];
+      return {
+        ...f,
+        ucretsizSinavIds,
+      };
+    });
+  };
+
+  const paketKademesiEkle = () => {
+    setForm((f) => ({
+      ...f,
+      fiyatKademeleri: [
+        ...f.fiyatKademeleri,
+        {
+          minAdet: f.fiyatKademeleri.length ? f.fiyatKademeleri[f.fiyatKademeleri.length - 1].minAdet + 1 : 3,
+          indirimYuzde: f.fiyatKademeleri.length
+            ? Math.min(100, (f.fiyatKademeleri[f.fiyatKademeleri.length - 1].indirimYuzde || 0) + 5)
+            : 10,
+        },
+      ],
+    }));
+  };
+
+  const paketKademesiGuncelle = (
+    index: number,
+    alan: 'minAdet' | 'indirimYuzde',
+    deger: number
+  ) => {
+    setForm((f) => ({
+      ...f,
+      fiyatKademeleri: f.fiyatKademeleri.map((row, i) =>
+        i === index ? { ...row, [alan]: alan === 'minAdet' ? Math.max(1, deger) : Math.min(100, Math.max(0, deger)) } : row
+      ),
+    }));
+  };
+
+  const paketKademesiSil = (index: number) => {
+    setForm((f) => ({
+      ...f,
+      fiyatKademeleri: f.fiyatKademeleri.filter((_, i) => i !== index),
+    }));
   };
 
   const fiyatlariTakvimdenDoldur = (kademeli = false) => {
@@ -435,18 +521,18 @@ export default function PaketYonetimiSayfasi() {
       toast.uyari('Seçili denemelerde fiyat tanımlı değil. Sınav takviminden ücret girin.');
       return;
     }
-    if (kademeli && kademeForm.aktif && seciliKademeFiyat.indirim > 0) {
+    if (kademeli && paketKademeAyarlari.aktif && seciliKademeFiyat.indirim > 0) {
       setForm((f) => ({
         ...f,
-        fiyat: seciliListeToplam,
-        indirimliFiyat: String(seciliKademeFiyat.toplam),
+        fiyat: fiyatInputDeger(seciliListeToplam),
+        indirimliFiyat: fiyatInputDeger(seciliKademeFiyat.toplam),
         sinavSayisi: seciliSinavlar.length,
       }));
-      toast.basarili('Kademeli paket fiyatı uygulandı');
+      toast.basarili('Pakete özel kademeli fiyat uygulandı');
     } else {
       setForm((f) => ({
         ...f,
-        fiyat: seciliListeToplam,
+        fiyat: fiyatInputDeger(seciliListeToplam),
         indirimliFiyat: '',
         sinavSayisi: seciliSinavlar.length,
       }));
@@ -482,8 +568,11 @@ export default function PaketYonetimiSayfasi() {
     ad: form.ad,
     aciklama: form.aciklama,
     kategori: form.kategori,
-    fiyat: form.fiyat,
-    indirimliFiyat: form.indirimliFiyat === '' ? null : form.indirimliFiyat,
+    fiyat: form.ucretsiz ? 0 : fiyatParse(form.fiyat),
+    indirimliFiyat: form.ucretsiz ? null : form.indirimliFiyat === '' ? null : fiyatParse(form.indirimliFiyat),
+    kademeliFiyatAktif: form.ucretsiz ? false : form.kademeliFiyatAktif,
+    tekilSinavFiyati: form.tekilSinavFiyati === '' ? null : Number(form.tekilSinavFiyati),
+    fiyatKademeleri: form.fiyatKademeleri,
     sinavSayisi: form.sinavSayisi,
     ozellikler: form.ozellikler,
     etiketler: form.etiketler,
@@ -492,6 +581,7 @@ export default function PaketYonetimiSayfasi() {
     aktif: form.aktif,
     populer: form.populer,
     sinavIds: form.sinavIds,
+    ucretsizSinavIds: form.ucretsizSinavIds,
     grupIds: form.grupIds,
   });
 
@@ -721,9 +811,9 @@ export default function PaketYonetimiSayfasi() {
           <div className="flex items-center gap-2">
             <Layers className="w-5 h-5 text-emerald-600" />
             <div>
-              <h2 className="font-bold text-gray-900">Deneme Kademeli Fiyatlandırma</h2>
+              <h2 className="font-bold text-gray-900">Genel Sınav Marketi Kademeli Fiyatlandırma</h2>
               <p className="text-xs text-gray-500">
-                Takvim sepetinde birden fazla deneme alındığında liste fiyatına yüzde indirim uygulanır
+                Sadece genel `/takvim` sepetinde birden fazla deneme alındığında liste fiyatına yüzde indirim uygulanır
               </p>
             </div>
           </div>
@@ -932,14 +1022,23 @@ export default function PaketYonetimiSayfasi() {
               </div>
 
               <div className="mb-6">
-                <div className="flex items-baseline gap-2">
-                  <span className="text-3xl font-extrabold text-gray-900">
-                    {paket.indirimliFiyat || paket.fiyat} ₺
-                  </span>
-                  {paket.indirimliFiyat && (
-                    <span className="text-sm text-gray-400 line-through">{paket.fiyat} ₺</span>
-                  )}
-                </div>
+                {(() => {
+                  const efektifFiyat =
+                    paket.indirimliFiyat != null && paket.indirimliFiyat > 0 ? paket.indirimliFiyat : paket.fiyat;
+                  if (efektifFiyat <= 0) {
+                    return <span className="text-3xl font-extrabold text-emerald-600">Ücretsiz</span>;
+                  }
+                  return (
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-3xl font-extrabold text-gray-900">
+                        {fiyatGoster(paket.indirimliFiyat || paket.fiyat)} ₺
+                      </span>
+                      {paket.indirimliFiyat && (
+                        <span className="text-sm text-gray-400 line-through">{fiyatGoster(paket.fiyat)} ₺</span>
+                      )}
+                    </div>
+                  );
+                })()}
                 <p className="text-xs text-gray-400 mt-1">
                   {paket.sinavSayisi === 0 ? 'Sınırsız Sınav' : `${paket.sinavSayisi} Adet Sınav`}
                 </p>
@@ -1067,9 +1166,115 @@ export default function PaketYonetimiSayfasi() {
                 </p>
                 <ul className="text-xs space-y-1.5 text-indigo-900/90 list-disc pl-4">
                   <li><strong>Tek tek:</strong> Öğrenci <em>/takvim</em> sayfasından sepete ekler (sınav takvimindeki fiyat + kademeli indirim).</li>
-                  <li><strong>Paket:</strong> Burada seçtiğiniz denemeleri markette toplu satarsınız; ödeme sonrası tüm denemelere erişim açılır.</li>
+                  <li><strong>Paket:</strong> Burada seçtiğiniz denemeleri markette toplu satarsınız; ödeme sonrası tüm denemelere veya seçili paket içi satın alımlara erişim açılır.</li>
+                  <li>Bu pakete özel kademe kuralları sadece paket detay sayfasındaki seçili deneme akışında çalışır.</li>
                   <li>Fiyatları sınav takviminden otomatik çekmek için denemeleri seçip aşağıdaki butonları kullanın.</li>
                 </ul>
+              </div>
+
+              <div className="rounded-xl border border-violet-100 bg-violet-50/60 p-4 space-y-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="font-bold text-violet-950 flex items-center gap-2">
+                      <Layers className="w-4 h-4" /> Pakete özel kademelendirme
+                    </p>
+                    <p className="text-xs text-violet-900/80 mt-1">
+                      Sadece bu paketin detay sayfasında seçilen ücretli denemelerde uygulanır. Genel market kademesinden bağımsızdır.
+                    </p>
+                  </div>
+                  <label className="flex items-center gap-2 text-xs font-bold text-violet-950 cursor-pointer shrink-0">
+                    <input
+                      type="checkbox"
+                      checked={form.kademeliFiyatAktif}
+                      onChange={(e) => setForm((f) => ({ ...f, kademeliFiyatAktif: e.target.checked }))}
+                      className="rounded border-violet-300 text-violet-600 focus:ring-violet-500"
+                    />
+                    Aktif
+                  </label>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-violet-800 uppercase mb-1">Tekil sınav fiyatı (₺)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    step={0.01}
+                    value={form.tekilSinavFiyati}
+                    onChange={(e) => setForm((f) => ({ ...f, tekilSinavFiyati: e.target.value }))}
+                    className="input-field"
+                    placeholder="Boşsa sınavların kendi fiyatı kullanılır"
+                  />
+                  <p className="text-xs text-violet-900/75 mt-1">
+                    Kademe eşleşmezse seçili adet bu fiyatla çarpılır. Boş bırakırsanız denemelerin kendi liste fiyatı kullanılır.
+                  </p>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-xs font-bold text-violet-800 uppercase">Kademe kuralları</label>
+                    <button
+                      type="button"
+                      onClick={paketKademesiEkle}
+                      className="text-xs font-bold text-violet-700 hover:text-violet-900 flex items-center gap-1"
+                    >
+                      <Plus className="w-3.5 h-3.5" /> Kademe ekle
+                    </button>
+                  </div>
+                  {form.fiyatKademeleri.length === 0 ? (
+                    <p className="text-xs text-violet-900/70 italic py-3 px-3 bg-white/70 rounded-xl border border-violet-100">
+                      Örn: 10 sınavlık pakette 3+ için %10, 6+ için %20; 20 sınavlık pakette 6+ için %10 gibi ayrı kurallar tanımlayabilirsiniz.
+                    </p>
+                  ) : (
+                    <div className="space-y-2">
+                      {form.fiyatKademeleri.map((k, idx) => (
+                        <div key={idx} className="flex flex-wrap items-center gap-3 rounded-xl border border-violet-100 bg-white/80 p-3">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm text-violet-900">Min. adet</span>
+                            <input
+                              type="number"
+                              min={1}
+                              value={k.minAdet}
+                              onChange={(e) => paketKademesiGuncelle(idx, 'minAdet', parseInt(e.target.value, 10) || 1)}
+                              className="input-field w-20 py-2"
+                            />
+                          </div>
+                          <div className="flex items-center gap-2 flex-1 min-w-[140px]">
+                            <span className="text-sm text-violet-900">İndirim (%)</span>
+                            <input
+                              type="number"
+                              min={0}
+                              max={100}
+                              step={0.5}
+                              value={k.indirimYuzde || ''}
+                              onChange={(e) => paketKademesiGuncelle(idx, 'indirimYuzde', parseFloat(e.target.value) || 0)}
+                              className="input-field flex-1 py-2"
+                            />
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => paketKademesiSil(idx)}
+                            className="p-2 rounded-lg text-violet-300 hover:text-red-600 hover:bg-red-50"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {form.kademeliFiyatAktif && form.sinavIds.length > 0 && (
+                  <div className="rounded-xl border border-violet-100 bg-white/80 p-3 text-sm">
+                    <p className="text-xs font-bold text-violet-800 uppercase mb-1">Seçili denemelerde önizleme</p>
+                    <p className="text-violet-950">
+                      {form.sinavIds.length} deneme için{' '}
+                      <strong>{seciliKademeFiyat.toplam.toLocaleString('tr-TR')} ₺</strong>
+                      {seciliKademeFiyat.indirim > 0 && (
+                        <span className="text-emerald-700"> ({seciliKademeFiyat.indirim.toLocaleString('tr-TR')} ₺ indirim)</span>
+                      )}
+                    </p>
+                  </div>
+                )}
               </div>
 
               <div>
@@ -1139,6 +1344,23 @@ export default function PaketYonetimiSayfasi() {
                               )}
                             </span>
                           </span>
+                          {form.sinavIds.includes(s.id) && (
+                            <div 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                e.preventDefault();
+                              }}
+                              className="flex items-center gap-1 py-0.5 px-1.5 rounded bg-amber-50 border border-amber-200 text-amber-800 text-[10px] font-bold cursor-pointer hover:bg-amber-100 transition-colors select-none shrink-0"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={form.ucretsizSinavIds.includes(s.id)}
+                                onChange={() => ucretsizSinavSecimiToggle(s.id)}
+                                className="w-3 h-3 text-amber-600 rounded border-amber-300 cursor-pointer"
+                              />
+                              <span onClick={() => ucretsizSinavSecimiToggle(s.id)} className="cursor-pointer">Herkese Açık Tanıtım</span>
+                            </div>
+                          )}
                           <span className="text-sm font-black text-emerald-700 shrink-0">
                             {fiyat != null ? `${fiyat.toLocaleString('tr-TR')} ₺` : '—'}
                           </span>
@@ -1157,11 +1379,11 @@ export default function PaketYonetimiSayfasi() {
                         {form.sinavIds.length} deneme seçili
                       </p>
                       <p className="text-xs text-gray-600 mt-0.5">
-                        Takvim liste fiyatı:{' '}
+                        Ücretli denemelerin liste fiyatı:{' '}
                         <strong>{seciliListeToplam.toLocaleString('tr-TR')} ₺</strong>
-                        {kademeForm.aktif && seciliKademeFiyat.indirim > 0 && (
+                        {paketKademeAyarlari.aktif && seciliKademeFiyat.indirim > 0 && (
                           <>
-                            {' '}→ Kademeli:{' '}
+                            {' '}→ Paket içi kademe:{' '}
                             <strong className="text-emerald-700">
                               {seciliKademeFiyat.toplam.toLocaleString('tr-TR')} ₺
                             </strong>
@@ -1177,13 +1399,13 @@ export default function PaketYonetimiSayfasi() {
                       >
                         Liste fiyatından doldur
                       </button>
-                      {kademeForm.aktif && seciliKademeFiyat.indirim > 0 && (
+                      {paketKademeAyarlari.aktif && seciliKademeFiyat.indirim > 0 && (
                         <button
                           type="button"
                           onClick={() => fiyatlariTakvimdenDoldur(true)}
                           className="text-xs font-bold px-3 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700"
                         >
-                          Kademeli paket fiyatı
+                          Paket kademeli fiyatı
                         </button>
                       )}
                     </div>
@@ -1191,27 +1413,63 @@ export default function PaketYonetimiSayfasi() {
                 </div>
               )}
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Normal Fiyat (₺)</label>
-                  <input 
-                    type="number" 
-                    value={form.fiyat}
-                    onChange={e => setForm({...form, fiyat: parseFloat(e.target.value) || 0})}
-                    className="input-field" 
-                  />
+              <button
+                type="button"
+                onClick={() =>
+                  setForm((f) => ({
+                    ...f,
+                    ucretsiz: !f.ucretsiz,
+                    ...(!f.ucretsiz ? { fiyat: '', indirimliFiyat: '' } : {}),
+                  }))
+                }
+                className={`w-full text-left rounded-xl border px-3 py-3 transition-all ${
+                  form.ucretsiz
+                    ? 'border-emerald-400 bg-emerald-50 ring-1 ring-emerald-300'
+                    : 'border-gray-200 bg-white hover:border-emerald-300'
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`w-4 h-4 rounded-md border flex items-center justify-center text-[10px] ${
+                      form.ucretsiz ? 'bg-emerald-600 border-emerald-600 text-white' : 'bg-white border-gray-300'
+                    }`}
+                  >
+                    {form.ucretsiz ? '✓' : ''}
+                  </span>
+                  <span className="text-sm font-bold text-gray-900">Ücretsiz paket</span>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">İndirimli Fiyat (₺)</label>
-                  <input 
-                    type="number" 
-                    value={form.indirimliFiyat}
-                    onChange={e => setForm({...form, indirimliFiyat: e.target.value})}
-                    className="input-field" 
-                    placeholder="Opsiyonel"
-                  />
+                <p className="text-[11px] text-gray-500 mt-1 pl-6">
+                  İşaretlenirse öğrenci ödeme yapmadan alır, erişim anında tanımlanır.
+                </p>
+              </button>
+
+              {!form.ucretsiz && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Normal Fiyat (₺)</label>
+                    <input 
+                      type="number" 
+                      step="0.01"
+                      min="0"
+                      value={form.fiyat}
+                      onChange={e => setForm({...form, fiyat: e.target.value})}
+                      className="input-field" 
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">İndirimli Fiyat (₺)</label>
+                    <input 
+                      type="number" 
+                      step="0.01"
+                      min="0"
+                      value={form.indirimliFiyat}
+                      onChange={e => setForm({...form, indirimliFiyat: e.target.value})}
+                      className="input-field" 
+                      placeholder="Opsiyonel"
+                    />
+                  </div>
                 </div>
-              </div>
+              )}
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Sınav Sayısı (0=Sınırsız)</label>

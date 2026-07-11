@@ -27,6 +27,30 @@ function lgs(ders: string, ad: string): KonuAgaciKayit {
   };
 }
 
+function ortaokulSinif(tur: 'SINIF_6' | 'SINIF_7', ders: string, ad: string): KonuAgaciKayit {
+  const id = konuIdStable([tur, ders, ad]);
+  return {
+    id,
+    ad,
+    ders,
+    ogretimTuru: tur,
+    uniteAdi: null,
+    yksSegment: null,
+  };
+}
+
+function liseSinif(tur: 'SINIF_9', ders: string, ad: string): KonuAgaciKayit {
+  const id = konuIdStable([tur, ders, ad]);
+  return {
+    id,
+    ad,
+    ders,
+    ogretimTuru: tur,
+    uniteAdi: null,
+    yksSegment: null,
+  };
+}
+
 function yks(
   ders: string,
   ad: string,
@@ -114,6 +138,224 @@ const LGS_EN = [
   'Natural Forces',
 ];
 
+const SINIF6_MAT = [
+  'Doğal Sayılarla İşlemler',
+  'Çarpanlar ve Katlar',
+  'Kümeler',
+  'Tam Sayılar',
+  'Kesirlerle İşlemler',
+  'Ondalık Gösterim',
+  'Oran',
+  'Cebirsel İfadeler',
+  'Veri Toplama ve Değerlendirme',
+  'Açılar',
+  'Alan Ölçme',
+  'Çember',
+];
+
+const SINIF6_FEN = [
+  'Güneş Sistemi ve Tutulmalar',
+  'Vücudumuzdaki Sistemler',
+  'Kuvvet ve Hareket',
+  'Madde ve Isı',
+  'Ses ve Özellikleri',
+  'Vücudumuzdaki Sistemler ve Sağlığı',
+  'Elektriğin İletimi',
+];
+
+const SINIF6_TR = [
+  'Sözcükte Anlam',
+  'Cümlede Anlam',
+  'Paragrafta Anlam',
+  'İsimler ve İsim Tamlamaları',
+  'Sıfatlar',
+  'Zamirler',
+  'Fiiller',
+  'Yazım Kuralları',
+  'Noktalama İşaretleri',
+  'Metin Türleri',
+  'Sözel Mantık ve Görsel Okuma',
+];
+
+const SINIF6_SOSYAL = [
+  'Birey ve Toplum',
+  'Kültür ve Miras',
+  'İnsanlar, Yerler ve Çevreler',
+  'Bilim, Teknoloji ve Toplum',
+  'Üretim, Dağıtım ve Tüketim',
+  'Etkin Vatandaşlık',
+  'Küresel Bağlantılar',
+];
+
+const SINIF6_DIN = [
+  'Peygamber ve İlahi Kitap İnancı',
+  'Namaz',
+  'Zararlı Alışkanlıklar',
+  "Hz. Muhammed'in Hayatı",
+  'Temel Değerlerimiz',
+];
+
+const SINIF6_EN = [
+  'Life',
+  'Yummy Breakfast',
+  'Downtown',
+  'Weather and Emotions',
+  'At the Fair',
+  'Occupations',
+  'Holidays',
+  'Bookworms',
+];
+
+const SINIF7_MAT = [
+  'Tam Sayılarla İşlemler',
+  'Rasyonel Sayılar',
+  'Cebirsel İfadeler',
+  'Oran ve Orantı',
+  'Yüzdeler',
+  'Doğrular ve Açılar',
+  'Çokgenler',
+  'Çember ve Daire',
+  'Veri Analizi',
+  'Olasılık',
+  'Cisimlerin Farklı Yönlerden Görünümleri',
+];
+
+const SINIF7_FEN = [
+  'Güneş Sistemi ve Ötesi',
+  'Hücre ve Bölünmeler',
+  'Kuvvet ve Enerji',
+  'Saf Madde ve Karışımlar',
+  'Işığın Madde ile Etkileşimi',
+  'Canlılarda Üreme, Büyüme ve Gelişme',
+  'Elektrik Devreleri',
+];
+
+const SINIF7_TR = [
+  'Fiilde Yapı',
+  'Ek Fiil',
+  'Cümlede Fiil',
+  'Paragrafta Anlam ve Yorum',
+  'Anlatım Biçimleri',
+  'Metin Türleri',
+  'Yazım Kuralları',
+  'Noktalama İşaretleri',
+  'Cümle Türleri',
+  'Sözel Mantık',
+];
+
+const SINIF7_SOSYAL = [
+  'İletişim ve İnsan İlişkileri',
+  'Türk Tarihinde Yolculuk',
+  'Ülkemizde Nüfus',
+  'Zaman İçinde Bilim',
+  'Ekonomi ve Sosyal Hayat',
+  'Yaşayan Demokrasi',
+  'Ülkeler Arası Köprüler',
+];
+
+const SINIF7_DIN = [
+  'Melek ve Ahiret İnancı',
+  'Hac ve Kurban',
+  'Ahlaki Davranışlar',
+  "Allah'ın Kulu ve Elçisi: Hz. Muhammed",
+  'İslam Düşüncesinde Yorumlar',
+];
+
+const SINIF7_EN = [
+  'Appearance and Personality',
+  'Sports',
+  'Biographies',
+  'Wild Animals',
+  'Television',
+  'Celebrations',
+  'Dreams',
+  'Public Buildings',
+  'Environment',
+];
+
+const SINIF9_MAT = [
+  'Mantık',
+  'Kümeler',
+  'Denklem ve Eşitsizlikler',
+  'Üçgenler',
+  'Veri',
+  'Sayı Kümeleri',
+  'Mutlak Değer',
+  'Üslü İfadeler ve Denklemler',
+  'Fonksiyonlar',
+  'Doğrusal Fonksiyonlar',
+];
+
+const SINIF9_FIZIK = [
+  'Fizik Bilimine Giriş',
+  'Madde ve Özellikleri',
+  'Hareket ve Kuvvet',
+  'Enerji',
+  'Isı ve Sıcaklık',
+  'Elektrostatik',
+];
+
+const SINIF9_KIMYA = [
+  'Kimya Bilimi',
+  'Atom ve Periyodik Sistem',
+  'Kimyasal Türler Arası Etkileşimler',
+  'Maddenin Halleri',
+  'Doğa ve Kimya',
+];
+
+const SINIF9_BIYOLOJI = [
+  'Yaşam Bilimi Biyoloji',
+  'Canlıların Ortak Özellikleri',
+  'Canlıların Yapısında Bulunan Temel Bileşikler',
+  'Hücre',
+  'Canlılar Dünyası',
+];
+
+const SINIF9_TRDEB = [
+  'İletişim ve Dil',
+  'Dillerin Sınıflandırılması',
+  'Türkçenin Tarihi Gelişimi',
+  'Metinlerin Sınıflandırılması',
+  'Şiir Bilgisi',
+  'Hikâye',
+  'Masal ve Fabl',
+  'Roman',
+];
+
+const SINIF9_TARIH = [
+  'Tarih Bilimi',
+  'İnsanlığın İlk Dönemleri',
+  'Orta Çağ Dünyası',
+  'İlk ve Orta Çağlarda Türk Dünyası',
+  'İslam Medeniyetinin Doğuşu',
+];
+
+const SINIF9_COGRAFYA = [
+  'Doğa ve İnsan',
+  'Dünyanın Şekli ve Hareketleri',
+  'Harita Bilgisi',
+  'Atmosfer ve İklim',
+  'Yer Şekillerinin Oluşum Süreçleri',
+  'Su Kaynakları',
+];
+
+const SINIF9_DIN = [
+  'Bilgi ve İnanç',
+  'İslam ve İbadet',
+  'Gençlik ve Değerler',
+  'Allah İnsan İlişkisi',
+  'Hz. Muhammed ve Gençlik',
+];
+
+const SINIF9_EN = [
+  'Studying Abroad',
+  'My Environment',
+  'Movies',
+  'Human in Nature',
+  'Inspirational People',
+  'Bridging Cultures',
+];
+
 function tytMatGrup(unite: string, ads: string[]): KonuAgaciKayit[] {
   return ads.map((ad) => yks('Matematik', ad, unite, YksKonuSegmenti.TYT));
 }
@@ -172,6 +414,30 @@ export const KONU_AGACI: KonuAgaciKayit[] = [
   ...LGS_INKILAP.map((ad) => lgs('T.C. İnkılap Tarihi ve Atatürkçülük', ad)),
   ...LGS_DIN.map((ad) => lgs('Din Kültürü ve Ahlak Bilgisi', ad)),
   ...LGS_EN.map((ad) => lgs('İngilizce', ad)),
+
+  ...SINIF6_MAT.map((ad) => ortaokulSinif(OgretimTuru.SINIF_6, 'Matematik', ad)),
+  ...SINIF6_FEN.map((ad) => ortaokulSinif(OgretimTuru.SINIF_6, 'Fen Bilimleri', ad)),
+  ...SINIF6_TR.map((ad) => ortaokulSinif(OgretimTuru.SINIF_6, 'Türkçe', ad)),
+  ...SINIF6_SOSYAL.map((ad) => ortaokulSinif(OgretimTuru.SINIF_6, 'Sosyal Bilgiler', ad)),
+  ...SINIF6_DIN.map((ad) => ortaokulSinif(OgretimTuru.SINIF_6, 'Din Kültürü ve Ahlak Bilgisi', ad)),
+  ...SINIF6_EN.map((ad) => ortaokulSinif(OgretimTuru.SINIF_6, 'İngilizce', ad)),
+
+  ...SINIF7_MAT.map((ad) => ortaokulSinif(OgretimTuru.SINIF_7, 'Matematik', ad)),
+  ...SINIF7_FEN.map((ad) => ortaokulSinif(OgretimTuru.SINIF_7, 'Fen Bilimleri', ad)),
+  ...SINIF7_TR.map((ad) => ortaokulSinif(OgretimTuru.SINIF_7, 'Türkçe', ad)),
+  ...SINIF7_SOSYAL.map((ad) => ortaokulSinif(OgretimTuru.SINIF_7, 'Sosyal Bilgiler', ad)),
+  ...SINIF7_DIN.map((ad) => ortaokulSinif(OgretimTuru.SINIF_7, 'Din Kültürü ve Ahlak Bilgisi', ad)),
+  ...SINIF7_EN.map((ad) => ortaokulSinif(OgretimTuru.SINIF_7, 'İngilizce', ad)),
+
+  ...SINIF9_MAT.map((ad) => liseSinif(OgretimTuru.SINIF_9, 'Matematik', ad)),
+  ...SINIF9_FIZIK.map((ad) => liseSinif(OgretimTuru.SINIF_9, 'Fizik', ad)),
+  ...SINIF9_KIMYA.map((ad) => liseSinif(OgretimTuru.SINIF_9, 'Kimya', ad)),
+  ...SINIF9_BIYOLOJI.map((ad) => liseSinif(OgretimTuru.SINIF_9, 'Biyoloji', ad)),
+  ...SINIF9_TRDEB.map((ad) => liseSinif(OgretimTuru.SINIF_9, 'Türk Dili ve Edebiyatı', ad)),
+  ...SINIF9_TARIH.map((ad) => liseSinif(OgretimTuru.SINIF_9, 'Tarih', ad)),
+  ...SINIF9_COGRAFYA.map((ad) => liseSinif(OgretimTuru.SINIF_9, 'Coğrafya', ad)),
+  ...SINIF9_DIN.map((ad) => liseSinif(OgretimTuru.SINIF_9, 'Din Kültürü ve Ahlak Bilgisi', ad)),
+  ...SINIF9_EN.map((ad) => liseSinif(OgretimTuru.SINIF_9, 'İngilizce', ad)),
 
   ...tytMatGrup('Sayılar', [
     'Temel Kavramlar',

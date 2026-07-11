@@ -1,11 +1,11 @@
 'use client';
 
+import { Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { Button } from '@/components/ui/button';
 import { CheckCircle2, XCircle } from 'lucide-react';
 import Link from 'next/link';
 
-export default function OdemeSonucPage() {
+function OdemeSonucIcerik() {
   const searchParams = useSearchParams();
   const router = useRouter();
   
@@ -26,9 +26,12 @@ export default function OdemeSonucPage() {
             <p className="text-slate-600 mb-8">
               Paketiniz başarıyla hesabınıza tanımlandı. Artık içeriklere erişebilirsiniz.
             </p>
-            <Button asChild className="w-full h-12 text-lg bg-indigo-600 hover:bg-indigo-700">
-              <Link href="/panel">Panele Git</Link>
-            </Button>
+            <Link
+              href="/panel"
+              className="inline-flex w-full items-center justify-center rounded-xl bg-indigo-600 px-4 py-3 text-lg font-medium text-white transition hover:bg-indigo-700"
+            >
+              Panele Git
+            </Link>
           </>
         ) : (
           <>
@@ -44,16 +47,31 @@ export default function OdemeSonucPage() {
               {mesaj === 'OdemeBasarisiz' && 'Banka işlemi reddetti veya bakiyeniz yetersiz.'}
             </p>
             <div className="flex gap-4">
-              <Button variant="outline" onClick={() => router.back()} className="flex-1 h-12">
+              <button
+                type="button"
+                onClick={() => router.back()}
+                className="flex-1 h-12 rounded-xl border border-slate-300 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+              >
                 Geri Dön
-              </Button>
-              <Button asChild className="flex-1 h-12 bg-indigo-600 hover:bg-indigo-700">
-                <Link href="/paketler">Paketleri İncele</Link>
-              </Button>
+              </button>
+              <Link
+                href="/paketler"
+                className="inline-flex h-12 flex-1 items-center justify-center rounded-xl bg-indigo-600 px-4 text-sm font-medium text-white transition hover:bg-indigo-700"
+              >
+                Paketleri İncele
+              </Link>
             </div>
           </>
         )}
       </div>
     </div>
+  );
+}
+
+export default function OdemeSonucPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-slate-50" />}>
+      <OdemeSonucIcerik />
+    </Suspense>
   );
 }

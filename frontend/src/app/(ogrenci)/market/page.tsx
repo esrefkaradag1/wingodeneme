@@ -1,26 +1,26 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useState, useMemo } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { paketApi } from '@/lib/api';
 import {
-  CreditCard,
   CheckCircle2,
   ArrowRight,
   ShieldCheck,
   Zap,
   Sparkles,
   Loader2,
-  X,
   BookOpen,
   Video,
   GraduationCap,
   ExternalLink,
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { toast } from '@/store/toast.store';
 import { OdemeGuvenRozetleri } from '@/components/landing/OdemeGuvenRozetleri';
+import { IyzicoCheckoutModal } from '@/components/payment/IyzicoCheckoutModal';
+import { iyzicoOdemeBaslat } from '@/lib/iyzicoCheckout';
 import {
   kategoriHaritasi,
   paketKategoriEtiket,
@@ -28,6 +28,9 @@ import {
   paketKategoriFromPaket,
   type PaketKategoriKayit,
 } from '@/lib/paketKategori';
+import { kpssOrtami } from '@/lib/platform';
+import { useAuthStore } from '@/store/auth.store';
+import { erisimSonrasiYenile } from '@/lib/erisimYenile';
 
 const VARSAYILAN_WINGOLINK_KATEGORI = [
   {
@@ -60,6 +63,9 @@ export default function MarketSayfasi() {
   const [secilenPaket, setSecilenPaket] = useState<any>(null);
   const [checkoutForm, setCheckoutForm] = useState<string | null>(null);
   const [kategoriFiltre, setKategoriFiltre] = useState<string | 'TUMU'>('TUMU');
+  const kullanici = useAuthStore((s) => s.kullanici);
+  const kpssModu = kpssOrtami(kullanici?.ogretimTuru);
+  const queryClient = useQueryClient();
 
   const { data: paketlerData, isLoading: paketlerYukleniyor } = useQuery({
     queryKey: ['paketler'],
@@ -78,9 +84,13 @@ export default function MarketSayfasi() {
       paketApi.satinAl({ paketId, odemeYontemi: 'KREDI_KARTI' }),
     onSuccess: (response) => {
       const data = response.data.veri;
-      if (data.checkoutFormContent) {
-        setCheckoutForm(data.checkoutFormContent);
-      } else {
+      const acildi = iyzicoOdemeBaslat(data, setCheckoutForm);
+      if (!acildi) {
+        if (data?.ucretsiz) {
+          erisimSonrasiYenile(queryClient);
+          toast.basarili('Ücretsiz paket hesabınıza tanımlandı. Denemelere hemen erişebilirsiniz.');
+          return;
+        }
         toast.basarili('Siparişiniz alındı, ödeme onayı bekleniyor.');
       }
     },
@@ -89,36 +99,11 @@ export default function MarketSayfasi() {
     }
   });
 
-  // Iyzico scriptini inject et
-  useEffect(() => {
-    if (checkoutForm) {
-      const container = document.getElementById('iyzico-form-container');
-      if (container) {
-        // Mevcut scriptleri temizle
-        container.innerHTML = '';
-        
-        // Iyzico'nun döndürdüğü HTML içeriğini (script tag içeren) bir div içine koy
-        const div = document.createElement('div');
-        div.innerHTML = checkoutForm;
-        container.appendChild(div);
-
-        // Script tag'lerini elle çalıştır (bazı tarayıcılarda innerHTML içindeki scriptler çalışmaz)
-        const scripts = div.getElementsByTagName('script');
-        for (let i = 0; i < scripts.length; i++) {
-          const newScript = document.createElement('script');
-          newScript.text = scripts[i].text;
-          document.body.appendChild(newScript);
-        }
-      }
-    }
-  }, [checkoutForm]);
-
   const paketler = paketlerData?.data?.veri || [];
 
-  const wingoPaketleri = useMemo(
-    () => paketler.filter((p: any) => !p.disUrl),
-    [paketler]
-  );
+  const wingoPaketleri = useMemo(() => {
+    return paketler.filter((p: any) => !p.disUrl);
+  }, [paketler]);
 
   const mevcutKategoriler = useMemo(() => {
     const slugSet = new Set<string>();
@@ -167,14 +152,20 @@ export default function MarketSayfasi() {
            <Sparkles className="w-4 h-4" /> Eğitim Paketleri
         </motion.div>
         <h1 className="text-4xl md:text-5xl font-black text-gray-900 tracking-tight">
-          Geleceğine <span className="text-indigo-600">Yatırım Yap</span>
+          {kpssModu ? (
+            <>KPSS <span className="text-indigo-600">Deneme Paketleri</span></>
+          ) : (
+            <>Geleceğine <span className="text-indigo-600">Yatırım Yap</span></>
+          )}
         </h1>
         <p className="text-gray-500 text-lg max-w-2xl mx-auto font-medium leading-relaxed">
-          Hedeflediğin üniversite için ihtiyacın olan tüm deneme sınavları ve yapay zeka destekli analizler burada.
+          {kpssModu
+            ? 'KPSS hazırlık denemeleri, analiz ve yapay zeka destekli içerikler burada.'
+            : 'Hedeflediğin üniversite için ihtiyacın olan tüm deneme sınavları ve yapay zeka destekli analizler burada.'}
         </p>
       </section>
 
-      {/* WingoLink Promo Banner */}
+      {!kpssModu && (
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -225,6 +216,7 @@ export default function MarketSayfasi() {
           </div>
         </div>
       </motion.div>
+      )}
 
       {/* Wingo Deneme Paketleri */}
       <section className="space-y-6">
@@ -321,10 +313,23 @@ export default function MarketSayfasi() {
                             </div>
                           </div>
                           <div className="text-right">
-                            {paket.indirimliFiyat && (
-                              <p className="text-sm text-gray-400 line-through font-bold">₺{paket.fiyat}</p>
-                            )}
-                            <p className="text-3xl font-black text-gray-900">₺{paket.indirimliFiyat || paket.fiyat}</p>
+                            {(() => {
+                              const efektifFiyat =
+                                paket.indirimliFiyat != null && paket.indirimliFiyat > 0
+                                  ? paket.indirimliFiyat
+                                  : paket.fiyat;
+                              if (efektifFiyat <= 0) {
+                                return <p className="text-3xl font-black text-emerald-600">Ücretsiz</p>;
+                              }
+                              return (
+                                <>
+                                  {paket.indirimliFiyat ? (
+                                    <p className="text-sm text-gray-400 line-through font-bold">₺{paket.fiyat}</p>
+                                  ) : null}
+                                  <p className="text-3xl font-black text-gray-900">₺{paket.indirimliFiyat || paket.fiyat}</p>
+                                </>
+                              );
+                            })()}
                           </div>
                         </div>
 
@@ -371,7 +376,12 @@ export default function MarketSayfasi() {
                               <Loader2 className="w-4 h-4 animate-spin" />
                             ) : (
                               <>
-                                Tüm Paket <ArrowRight className="w-4 h-4" />
+                                {(paket.indirimliFiyat != null && paket.indirimliFiyat > 0
+                                  ? paket.indirimliFiyat
+                                  : paket.fiyat) <= 0
+                                  ? 'Ücretsiz Al'
+                                  : 'Tüm Paket'}{' '}
+                                <ArrowRight className="w-4 h-4" />
                               </>
                             )}
                           </button>
@@ -388,7 +398,7 @@ export default function MarketSayfasi() {
         )}
       </section>
 
-      {/* WingoLink Eğitim Paketleri */}
+      {!kpssModu && (
       <section className="space-y-6">
         <div className="flex items-end justify-between gap-4 flex-wrap">
           <div>
@@ -510,6 +520,7 @@ export default function MarketSayfasi() {
               })}
         </div>
       </section>
+      )}
 
       <div className="max-w-2xl mx-auto rounded-[32px] bg-emerald-50/50 border border-emerald-100 p-8 flex flex-col md:flex-row items-center gap-6">
         <div className="w-14 h-14 rounded-2xl bg-emerald-100 flex items-center justify-center text-emerald-600">
@@ -522,53 +533,12 @@ export default function MarketSayfasi() {
         <OdemeGuvenRozetleri className="shrink-0" />
       </div>
 
-      {/* Iyzico Modal */}
-      <AnimatePresence>
-        {checkoutForm && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="absolute inset-0 bg-slate-900/80 backdrop-blur-md"
-              onClick={() => setCheckoutForm(null)}
-            />
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              className="relative w-full max-w-2xl bg-white rounded-[40px] shadow-2xl overflow-hidden"
-            >
-              <div className="p-6 border-b border-gray-50 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-orange-50 flex items-center justify-center text-orange-600">
-                    <CreditCard className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <h2 className="text-lg font-black text-gray-900 leading-tight">Güvenli Ödeme</h2>
-                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{secilenPaket?.ad}</p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setCheckoutForm(null)}
-                  className="w-10 h-10 rounded-xl hover:bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-900 transition-all"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              <div className="p-8 max-h-[70vh] overflow-y-auto">
-                 <div id="iyzico-form-container" className="min-h-[400px]">
-                    <div className="flex flex-col items-center justify-center py-12">
-                       <Loader2 className="w-8 h-8 text-orange-500 animate-spin mb-4" />
-                       <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Ödeme formu yükleniyor...</p>
-                    </div>
-                 </div>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+      <IyzicoCheckoutModal
+        open={Boolean(checkoutForm)}
+        checkoutForm={checkoutForm}
+        subtitle={secilenPaket?.ad}
+        onClose={() => setCheckoutForm(null)}
+      />
     </div>
   );
 }

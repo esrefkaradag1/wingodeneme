@@ -5,12 +5,18 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { Loader2, Users, Mail, Phone, User, GraduationCap, BookOpen, Lock, Eye, EyeOff } from 'lucide-react';
 import { authApi } from '@/lib/api';
 import { useAuthStore } from '@/store/auth.store';
 import { toast } from '@/store/toast.store';
 import AnaSiteyeDonButonu from '@/components/auth/AnaSiteyeDonButonu';
+
+const AuthThreeBackground = dynamic(() => import('@/components/auth/AuthThreeBackground'), {
+  ssr: false,
+  loading: () => <div className="absolute inset-0 -z-10 bg-[#070713]" />,
+});
 
 const sifreKurali = (etiket: string) =>
   z.string()
@@ -77,9 +83,10 @@ export default function VeliKayitSayfasi() {
     }`;
 
   return (
-    <div className="min-h-screen bg-[#0a0f1e] relative overflow-hidden">
+    <div className="min-h-screen relative overflow-hidden">
+      <AuthThreeBackground mode="yks_lgs" />
+      <div className="pointer-events-none absolute inset-0 -z-[5] bg-[radial-gradient(ellipse_at_center,transparent_30%,rgba(7,7,19,0.6)_100%)]" />
       <AnaSiteyeDonButonu />
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_50%_-10%,rgba(99,102,241,0.25),transparent)]" />
 
       <div className="relative z-10 min-h-screen flex items-center justify-center p-4 sm:p-6">
         <div className="w-full max-w-xl">

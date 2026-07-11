@@ -2,6 +2,7 @@ import { Response, NextFunction } from 'express';
 import type { AuthRequest } from '../middlewares/auth.middleware';
 import { AppHatasi } from '../middlewares/hata.middleware';
 import { prisma } from '../config/database';
+import { platformOgretimTuruUyumlu } from '../utils/paketPlatformFiltre';
 import { parseSinavTuru } from '../utils/sinavTur';
 import { parseIsoTarih } from '../utils/sinavZaman';
 import {
@@ -66,7 +67,8 @@ function govdeParse(req: AuthRequest) {
 export async function adminSinavTakvimListeleController(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   try {
     const { yil, ay } = parseYilAy(req.query as Record<string, unknown>);
-    const veri = await adminSinavTakvimListele(yil, ay);
+    const platformTurleri = req.platformTurleri || [];
+    const veri = await adminSinavTakvimListele(yil, ay, platformTurleri);
     res.json({ basarili: true, veri, meta: { yil, ay } });
   } catch (err) {
     next(err);
@@ -102,9 +104,13 @@ function sinavTakvimHataYanit(err: unknown, res: Response, next: NextFunction): 
 export async function adminSinavTakvimOlusturController(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   try {
     const veri = govdeParse(req);
-    const grup = await prisma.grup.findUnique({ where: { id: veri.grupId }, select: { id: true } });
+    const grup = await prisma.grup.findUnique({ where: { id: veri.grupId }, select: { id: true, tur: true } });
     if (!grup) {
       res.status(400).json({ basarili: false, mesaj: 'Seçilen grup bulunamadı' });
+      return;
+    }
+    if (!platformOgretimTuruUyumlu(String(grup.tur), req.platformTurleri)) {
+      res.status(403).json({ basarili: false, mesaj: 'Bu gruba bu platformdan sınav eklenemez' });
       return;
     }
     const sinav = await adminSinavTakvimOlustur(veri);

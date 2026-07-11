@@ -111,6 +111,7 @@ const bosForm = (gun?: Date, tur = 'LGS') => {
     sureDakika,
     ucret: '',
     indirimliUcret: '',
+    ucretsiz: false,
     takvimdeGoster: true,
     satinAlinabilir: true,
     yayinlandi: true,
@@ -189,8 +190,8 @@ export default function AdminSinavTakvimiSayfasi() {
         baslangicZamani: new Date(form.baslangicZamani).toISOString(),
         bitisZamani: new Date(form.bitisZamani).toISOString(),
         sureDakika: Number(form.sureDakika) || 120,
-        ucret: form.ucret === '' ? null : Number(form.ucret),
-        indirimliUcret: form.indirimliUcret === '' ? null : Number(form.indirimliUcret),
+        ucret: form.ucretsiz ? 0 : form.ucret === '' ? null : Number(form.ucret),
+        indirimliUcret: form.ucretsiz ? null : form.indirimliUcret === '' ? null : Number(form.indirimliUcret),
         takvimdeGoster: form.takvimdeGoster,
         satinAlinabilir: form.satinAlinabilir,
         yayinlandi: form.yayinlandi,
@@ -248,6 +249,7 @@ export default function AdminSinavTakvimiSayfasi() {
           sureDakika: sinav.sureDakika,
           ucret: sinav.ucret != null ? String(sinav.ucret) : '',
           indirimliUcret: sinav.indirimliUcret != null ? String(sinav.indirimliUcret) : '',
+          ucretsiz: sinav.ucret === 0 || sinav.indirimliUcret === 0,
           takvimdeGoster: sinav.takvimdeGoster,
           satinAlinabilir: sinav.satinAlinabilir,
           yayinlandi: sinav.yayinlandi,
@@ -384,7 +386,11 @@ export default function AdminSinavTakvimiSayfasi() {
                               className="px-1.5 py-0.5 rounded text-[8px] font-bold bg-violet-50 text-violet-700 border border-violet-100 truncate"
                             >
                               {e.baslik}
-                              {e.gosterilenFiyat != null ? ` · ${e.gosterilenFiyat}₺` : ''}
+                              {e.gosterilenFiyat != null
+                                ? e.gosterilenFiyat > 0
+                                  ? ` · ${e.gosterilenFiyat}₺`
+                                  : ' · Ücretsiz'
+                                : ''}
                             </div>
                           ))}
                         </div>
@@ -416,7 +422,9 @@ export default function AdminSinavTakvimiSayfasi() {
                   </div>
                   <p className="text-xs font-bold text-gray-900 mt-1 line-clamp-1">{s.baslik}</p>
                   <p className="text-[10px] text-gray-500 mt-1">
-                    {s.gosterilenFiyat != null ? `${s.gosterilenFiyat.toLocaleString('tr-TR')} ₺` : 'Ücretsiz'}
+                    {s.gosterilenFiyat != null && s.gosterilenFiyat > 0
+                      ? `${s.gosterilenFiyat.toLocaleString('tr-TR')} ₺`
+                      : 'Ücretsiz'}
                     {s.yayinlandi ? ' · Yayında' : ' · Taslak'}
                   </p>
                 </button>
@@ -631,32 +639,65 @@ export default function AdminSinavTakvimiSayfasi() {
                   <div className="flex items-center gap-2 text-xs font-bold text-emerald-700 uppercase tracking-widest">
                     <Wallet className="w-3.5 h-3.5" /> Fiyatlandırma
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-xs font-semibold text-gray-600">Liste Fiyatı (₺)</label>
-                      <input
-                        type="number"
-                        min={0}
-                        step="0.01"
-                        value={form.ucret}
-                        onChange={(e) => setForm((f) => ({ ...f, ucret: e.target.value }))}
-                        className="mt-1.5 w-full rounded-xl border border-emerald-200 bg-white px-4 py-3 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
-                        placeholder="199"
-                      />
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setForm((f) => ({
+                        ...f,
+                        ucretsiz: !f.ucretsiz,
+                        ...(!f.ucretsiz ? { ucret: '', indirimliUcret: '' } : {}),
+                      }))
+                    }
+                    className={`w-full text-left rounded-xl border px-3 py-3 transition-all ${
+                      form.ucretsiz
+                        ? 'border-emerald-400 bg-emerald-100 ring-1 ring-emerald-300'
+                        : 'border-emerald-200 bg-white hover:border-emerald-300'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`w-4 h-4 rounded-md border flex items-center justify-center text-[10px] ${
+                          form.ucretsiz ? 'bg-emerald-600 border-emerald-600 text-white' : 'bg-white border-gray-300'
+                        }`}
+                      >
+                        {form.ucretsiz ? '✓' : ''}
+                      </span>
+                      <span className="text-sm font-bold text-gray-900">Ücretsiz sınav</span>
                     </div>
-                    <div>
-                      <label className="text-xs font-semibold text-gray-600">İndirimli Fiyat (₺)</label>
-                      <input
-                        type="number"
-                        min={0}
-                        step="0.01"
-                        value={form.indirimliUcret}
-                        onChange={(e) => setForm((f) => ({ ...f, indirimliUcret: e.target.value }))}
-                        className="mt-1.5 w-full rounded-xl border border-emerald-200 bg-white px-4 py-3 text-sm font-bold text-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
-                        placeholder="149"
-                      />
+                    <p className="text-[11px] text-gray-500 mt-1 pl-6">
+                      İşaretlenirse öğrenci ödeme yapmadan paketten seçip anında erişir.
+                    </p>
+                  </button>
+
+                  {!form.ucretsiz && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-xs font-semibold text-gray-600">Liste Fiyatı (₺)</label>
+                        <input
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          value={form.ucret}
+                          onChange={(e) => setForm((f) => ({ ...f, ucret: e.target.value }))}
+                          className="mt-1.5 w-full rounded-xl border border-emerald-200 bg-white px-4 py-3 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+                          placeholder="199"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-semibold text-gray-600">İndirimli Fiyat (₺)</label>
+                        <input
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          value={form.indirimliUcret}
+                          onChange={(e) => setForm((f) => ({ ...f, indirimliUcret: e.target.value }))}
+                          className="mt-1.5 w-full rounded-xl border border-emerald-200 bg-white px-4 py-3 text-sm font-bold text-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+                          placeholder="149"
+                        />
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </section>
 
                 {/* Yayın */}

@@ -7,6 +7,8 @@ import { useSiteIcerik } from '@/contexts/SiteIcerikContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import { siteLogoGorunum } from '@/lib/site-marka-logo';
 import { resolveMarketingNavHref, navLinkNormalize } from '@/lib/publicPaketlerHref';
+import { useAuthStore } from '@/store/auth.store';
+import { LandingKullaniciMenu } from '@/components/landing/LandingKullaniciMenu';
 
 const navLinkVariants = {
   hidden: { opacity: 0, y: -8 },
@@ -20,7 +22,11 @@ const navLinkVariants = {
 export function LandingNav() {
   const [mobilMenu, setMobilMenu] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const site = useSiteIcerik();
+  const token = useAuthStore((s) => s.token);
+  const kullanici = useAuthStore((s) => s.kullanici);
+  const oturumAcik = Boolean(mounted && token && kullanici);
   const navLinks = site.nav.navLinks
     .filter(
       (l) => !String(l.href || '').includes('/rehber') && String(l.label || '').toLowerCase() !== 'rehber'
@@ -29,6 +35,7 @@ export function LandingNav() {
   const logoSt = siteLogoGorunum(site.marka);
 
   useEffect(() => {
+    setMounted(true);
     const handleScroll = () => setScrolled(window.scrollY > 10);
     window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
@@ -101,20 +108,26 @@ export function LandingNav() {
           >
             <Search className="w-4.5 h-4.5" />
           </button>
-          <Link
-            href="/giris"
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-slate-300 hover:text-white hover:bg-white/[0.06] transition-all duration-200"
-          >
-            <User className="w-4 h-4" />
-            {site.nav.girisMetni}
-          </Link>
-          <Link
-            href="/kayit"
-            className="group relative inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#7C6BFF] via-[#6B5CE7] to-[#2ABBA7] px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-indigo-500/25 hover:shadow-indigo-500/40 hover:-translate-y-px transition-all duration-300 overflow-hidden"
-          >
-            <span className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/10 to-white/0 -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
-            <span className="relative z-10">{site.nav.kayitCta}</span>
-          </Link>
+          {oturumAcik ? (
+            <LandingKullaniciMenu />
+          ) : (
+            <>
+              <Link
+                href="/giris"
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-slate-300 hover:text-white hover:bg-white/[0.06] transition-all duration-200"
+              >
+                <User className="w-4 h-4" />
+                {site.nav.girisMetni}
+              </Link>
+              <Link
+                href="/kayit"
+                className="group relative inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#7C6BFF] via-[#6B5CE7] to-[#2ABBA7] px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-indigo-500/25 hover:shadow-indigo-500/40 hover:-translate-y-px transition-all duration-300 overflow-hidden"
+              >
+                <span className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/10 to-white/0 -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
+                <span className="relative z-10">{site.nav.kayitCta}</span>
+              </Link>
+            </>
+          )}
         </div>
 
         {/* Mobile toggle */}
@@ -187,20 +200,26 @@ export function LandingNav() {
                   </motion.div>
                 ))}
                 <div className="h-px bg-white/[0.06] my-2 mx-4" />
-                <Link
-                  href="/giris"
-                  onClick={() => setMobilMenu(false)}
-                  className="block mx-2 px-4 py-3 rounded-xl text-slate-300 font-semibold hover:bg-white/[0.06] transition-all"
-                >
-                  {site.nav.girisMetni}
-                </Link>
-                <Link
-                  href="/kayit"
-                  onClick={() => setMobilMenu(false)}
-                  className="block mx-2 mt-1 text-center rounded-xl bg-gradient-to-r from-[#7C6BFF] to-[#2ABBA7] py-3.5 font-bold text-white shadow-lg shadow-indigo-500/20"
-                >
-                  {site.nav.kayitCta}
-                </Link>
+                {oturumAcik ? (
+                  <LandingKullaniciMenu mobil onNavigate={() => setMobilMenu(false)} />
+                ) : (
+                  <>
+                    <Link
+                      href="/giris"
+                      onClick={() => setMobilMenu(false)}
+                      className="block mx-2 px-4 py-3 rounded-xl text-slate-300 font-semibold hover:bg-white/[0.06] transition-all"
+                    >
+                      {site.nav.girisMetni}
+                    </Link>
+                    <Link
+                      href="/kayit"
+                      onClick={() => setMobilMenu(false)}
+                      className="block mx-2 mt-1 text-center rounded-xl bg-gradient-to-r from-[#7C6BFF] to-[#2ABBA7] py-3.5 font-bold text-white shadow-lg shadow-indigo-500/20"
+                    >
+                      {site.nav.kayitCta}
+                    </Link>
+                  </>
+                )}
               </div>
             </motion.div>
           </>

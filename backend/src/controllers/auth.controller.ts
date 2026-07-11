@@ -3,9 +3,9 @@ import { ogrenciKayit, veliKayit, ogretmenKayit, girisYap, tokenYenile, cikisYap
 import { AuthRequest } from '../middlewares/auth.middleware';
 import { prisma } from '../config/database';
 
-export async function ogrenciKayitController(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function ogrenciKayitController(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   try {
-    const sonuc = await ogrenciKayit(req.body);
+    const sonuc = await ogrenciKayit(req.body, req.platformTurleri);
     res.status(201).json({ basarili: true, veri: sonuc });
   } catch (err) { next(err); }
 }
@@ -17,9 +17,9 @@ export async function veliKayitController(req: Request, res: Response, next: Nex
   } catch (err) { next(err); }
 }
 
-export async function ogretmenKayitController(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function ogretmenKayitController(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   try {
-    const sonuc = await ogretmenKayit(req.body);
+    const sonuc = await ogretmenKayit(req.body, req.platformTurleri);
     res.status(201).json({ basarili: true, veri: sonuc });
   } catch (err) { next(err); }
 }

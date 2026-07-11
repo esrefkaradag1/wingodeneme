@@ -8,7 +8,12 @@ export async function siteIcerikPublicController(
 ): Promise<void> {
   try {
     const veri = await siteIcerikBirlestirilmisGetir();
-    res.set('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=86400');
+    // Domain/origin bazlı CORS başlıkları karışmaması için CDN/tarayıcı cache kapalı.
+    res.set('Cache-Control', 'public, no-store, no-cache, must-revalidate');
+    res.set('CDN-Cache-Control', 'no-store');
+    res.set('Vercel-CDN-Cache-Control', 'no-store');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
     res.json({ basarili: true, veri });
   } catch (err) {
     next(err);

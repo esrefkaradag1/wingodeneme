@@ -6,6 +6,11 @@ const LOCAL_PREFIX = 'local:egitim/';
 export function egitimDepoKoku(): string {
   const ozel = process.env.EGITIM_UPLOAD_DIR?.trim();
   if (ozel) return path.resolve(ozel);
+  // Vercel/serverless ortamında proje kökü (/var/task) salt okunurdur;
+  // yalnızca /tmp yazılabilir olduğundan oraya yönlendiriyoruz.
+  if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) {
+    return path.join('/tmp', 'uploads', 'egitim');
+  }
   return path.resolve(process.cwd(), 'uploads', 'egitim');
 }
 

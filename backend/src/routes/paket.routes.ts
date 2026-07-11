@@ -8,6 +8,7 @@ import {
   paketGuncelle,
   paketSil,
   paketSatinAlimOlustur,
+  paketIciSinavSatinAlimOlustur,
   iyzicoCallback,
 } from '../controllers/paket.controller';
 import {
@@ -30,6 +31,7 @@ router.get('/aktif', aktifPaketleriGetir);
 router.get('/aktif/:id', aktifPaketDetayGetir);
 
 router.post('/satin-al', kimlikDogrula, paketSatinAlimOlustur);
+router.post('/:id/sinavlar/satin-al', kimlikDogrula, rolKontrol('OGRENCI'), paketIciSinavSatinAlimOlustur);
 
 // Iyzico Callback
 router.post('/iyzico/callback', iyzicoCallback);

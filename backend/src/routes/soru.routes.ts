@@ -4,11 +4,11 @@ import { prisma } from '../config/database';
 import { OgretimTuru, SoruOnayDurumu, YksKonuSegmenti } from '@prisma/client';
 import { NextFunction, Request, Response } from 'express';
 import { soruGrubaTopluAtaController } from '../controllers/admin.controller';
-import { reqOgretmenKisit, ogretmenDersiUretebilirMi, ogretmenSoruIslemIzni, ogretmenSoruIdsIslemIzni, ogretmenKendiSorulariWhere } from '../services/ogretmenSinirlama';
+import { reqOgretmenKisit, ogretmenDersiUretebilirMi, ogretmenSoruIslemIzni, ogretmenSoruIdsIslemIzni, ogretmenKendiSorulariWhere, ogretmenIcinGrupTurlari } from '../services/ogretmenSinirlama';
 import { soruKullaniciOzetSelect, kullaniciGorunenAd } from '../utils/soruDuzenleyen';
 import { soruKonuFiltre, soruKonuMetaFiltre, alanKonuWhere } from '../utils/soruKonuEtiket';
-import { soruUygunGrupInclude } from '../utils/soruUygunGrup';
-import { kpssOgretimTuruMu, ogretimTuruIzinUyumlu, ogretimTuruPrismaFiltre } from '../utils/grupOgretimTuru';
+import { soruUygunGrupInclude, soruAlanFiltreKosulu } from '../utils/soruUygunGrup';
+import { kpssOgretimTuruMu, ogretimTuruPrismaFiltre, ogretimTuruEsdegerleri } from '../utils/grupOgretimTuru';
 import { soruOlusturulduAraligi } from '../utils/tarihAraligi';
 import { oturumAktiviteMiddleware } from '../middlewares/oturumAktivite.middleware';
 
@@ -45,13 +45,20 @@ router.get('/hepsi', async (req: AuthRequest, res: Response, next: NextFunction)
     let konuFiltre: Record<string, unknown> | undefined;
     let ogretmenSoruKisiti: Record<string, unknown> | undefined;
     if (ogrKisit) {
-      const turler = ogrKisit.ogretimTurleri?.length ? ogrKisit.ogretimTurleri : [ogrKisit.ogretimTuru];
+      // Öğretmen AI panelinde kardeş kademeyi de (LGS↔YKS ortak müfredat) üretebildiği için
+      // soru bankası listesi de aynı genişletilmiş kademe kümesini göstermeli; aksi halde
+      // ör. LGS öğretmeninin ürettiği TYT (YKS) soruları listede görünmez.
+      const izinliTurler =
+        ogretmenIcinGrupTurlari(ogrKisit) ??
+        (ogrKisit.ogretimTurleri?.length ? ogrKisit.ogretimTurleri : [ogrKisit.ogretimTuru]);
+      const turIzinliMi = (t: OgretimTuru) =>
+        ogretimTuruEsdegerleri(t).some((x) => izinliTurler.includes(x));
       const alanTur = turFiltre ?? (yksKapsamStr ? OgretimTuru.YKS : undefined);
-      if (alanTur && !ogretimTuruIzinUyumlu(alanTur, turler)) {
+      if (alanTur && !turIzinliMi(alanTur)) {
         res.json({ basarili: true, veri: [], meta: { sayfa, boyut, toplam: 0, toplamSayfa: 0 } });
         return;
       }
-      if (yksKapsamStr && !turFiltre && !turler.includes(OgretimTuru.YKS)) {
+      if (yksKapsamStr && !turFiltre && !turIzinliMi(OgretimTuru.YKS)) {
         res.json({ basarili: true, veri: [], meta: { sayfa, boyut, toplam: 0, toplamSayfa: 0 } });
         return;
       }
@@ -64,18 +71,40 @@ router.get('/hepsi', async (req: AuthRequest, res: Response, next: NextFunction)
         yksKapsam: yksKapsamStr,
         ders: dersStr,
       });
-      if (!turFiltre && !yksKapsamStr) konuWhere.ogretimTuru = { in: turler };
+      if (!turFiltre && !yksKapsamStr) konuWhere.ogretimTuru = { in: izinliTurler };
       if (!dersStr) konuWhere.ders = { in: ogrKisit.dersler };
-      konuFiltre = konuWhere;
+      const alanKosul = soruAlanFiltreKosulu({
+        konuWhere,
+        aktifTur: alanTur,
+        yksKapsamStr,
+        platformTurleri: !turFiltre && !yksKapsamStr ? req.platformTurleri : undefined,
+      });
+      if (alanKosul) konuFiltre = alanKosul as Record<string, unknown>;
+      else konuFiltre = undefined;
       if (req.kullanici?.userId) {
         ogretmenSoruKisiti = ogretmenKendiSorulariWhere(req.kullanici.userId);
       }
-    } else if (dersStr || turFiltre || yksKapsamStr) {
-      konuFiltre = alanKonuWhere({
-        ogretimTuru: turFiltre,
+    } else {
+      const platformTurleri = req.platformTurleri;
+      const aktifTur = turFiltre ?? (yksKapsamStr ? OgretimTuru.YKS : undefined);
+
+      const konuWhere = alanKonuWhere({
+        ogretimTuru: aktifTur,
         yksKapsam: yksKapsamStr,
         ders: dersStr,
       });
+
+      if (!aktifTur && platformTurleri) {
+        konuWhere.ogretimTuru = { in: platformTurleri };
+      }
+
+      const alanKosul = soruAlanFiltreKosulu({
+        konuWhere,
+        aktifTur,
+        yksKapsamStr,
+        platformTurleri: !aktifTur ? platformTurleri : undefined,
+      });
+      konuFiltre = alanKosul as Record<string, unknown> | undefined;
     }
 
     const kosullar: Record<string, unknown>[] = [];
@@ -85,7 +114,7 @@ router.get('/hepsi', async (req: AuthRequest, res: Response, next: NextFunction)
       kosullar.push(soruKonuFiltre(konuId));
     }
     if (zorluk) kosullar.push({ zorluk: zorluk as any });
-    if (konuFiltre) kosullar.push(soruKonuMetaFiltre(konuFiltre));
+    if (konuFiltre) kosullar.push(konuFiltre);
     if (onayFiltre) kosullar.push({ onayDurumu: onayFiltre });
     if (
       !ogrKisit &&
@@ -262,7 +291,9 @@ router.get('/konular', async (req: AuthRequest, res: Response, next: NextFunctio
         ? { ogretimTuru: ogretimTuruPrismaFiltre(turFiltre) }
         : ogretmenOgretimTuru
           ? { ogretimTuru: ogretimTuruPrismaFiltre(ogretmenOgretimTuru) }
-          : {}),
+          : !turFiltre && req.platformTurleri?.length
+            ? { ogretimTuru: { in: req.platformTurleri } }
+            : {}),
       ...(aytKapsamYksVarsayilan ? { ogretimTuru: OgretimTuru.YKS } : {}),
       ...(dersFiltre !== undefined ? { ders: dersFiltre as any } : {}),
       ...(typeof uniteAdi === 'string' && uniteAdi.length > 0 ? { uniteAdi } : {}),

@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { supabase } from './supabase';
 import { useAuthStore, oturumTemizle } from '@/store/auth.store';
+import { kpssOrtami } from './platform';
 
 /** Build anında gömülür; yanlışlıkla /api verilse bile /api/v1'e normalize edilir. */
 function normalizeApiUrl(rawUrl?: string): string {
@@ -129,6 +130,10 @@ function oturumTemizleVeYonlendir(): void {
 // Her istekte öncelikle backend JWT token'ını, yoksa Supabase token'ını ekle
 api.interceptors.request.use(async (config) => {
   const url = String(config.url || '');
+  
+  // Platform modunu header olarak ekle (KPSS alanı veya KPSS öğrencisi)
+  const ogretimTuru = useAuthStore.getState().kullanici?.ogretimTuru;
+  config.headers['x-platform-mode'] = kpssOrtami(ogretimTuru) ? 'kpss' : 'yks_lgs';
 
   /** Token yenilemede eski (süresi dolmuş) JWT gönderilmesin */
   if (url.includes('/auth/token-yenile')) {
@@ -281,6 +286,11 @@ export const paketApi = {
     api.get(`/paketler/aktif/${id}`).then((res) => ({ data: { veri: res.data.veri } })),
   satinAl: (veri: { paketId: string; notlar?: string; odemeYontemi?: string }) =>
     api.post('/paketler/satin-al', veri).then((res) => ({ data: { veri: res.data.veri } })),
+  seciliSinavlariSatinAl: (
+    paketId: string,
+    veri: { sinavIds: string[]; notlar?: string; odemeYontemi?: string }
+  ) =>
+    api.post(`/paketler/${paketId}/sinavlar/satin-al`, veri).then((res) => ({ data: { veri: res.data.veri } })),
 };
 
 export const veliApi = {
@@ -334,6 +344,14 @@ export const kullaniciApi = {
   studyGorevDurumGuncelle: (gorevId: string, tamamlandi: boolean) =>
     api.patch(`/kullanicilar/study-planlar/gorev/${gorevId}`, { tamamlandi }),
   navSayaclari: () => api.get('/kullanicilar/nav-sayaclari').then((res) => ({ data: { veri: res.data.veri } })),
+  siparisler: (params?: { sayfa?: number; boyut?: number; durum?: string }) =>
+    api.get('/kullanicilar/siparisler', { params }).then((res) => ({
+      data: { veri: res.data.veri, meta: res.data.meta },
+    })),
+  siparisOdemeBaslat: (id: string) =>
+    api.post(`/kullanicilar/siparisler/${id}/odeme-baslat`).then((res) => ({
+      data: { veri: res.data.veri },
+    })),
 };
 
 export const sosyalApi = {
@@ -408,6 +426,8 @@ export const adminApi = {
   soruTopluUygunGrupGuncelle: (veri: { soruIds: string[]; uygunGrupIds: string[] }) => api.patch('/admin/sorular/toplu-uygun-grup', veri),
   soruTopluSil: (veri: any) => api.delete('/admin/sorular/toplu-sil', { data: veri }),
   soruGuncelle: (id: string, veri: any) => api.patch(`/admin/sorular/${id}`, veri),
+  soruKopyalaTyt: (id: string, veri: { targetKonuId: string }) => api.post(`/admin/sorular/${id}/copy-to-tyt`, veri),
+  soruTopluKopyalaTyt: (veri: { soruIds: string[]; targetKonuId: string }) => api.post('/admin/sorular/toplu-copy-to-tyt', veri),
   sorularGrubaAta: (veri: any) => api.post('/admin/sorular/gruba-ata', veri),
   kullanicilar: (params?: { sayfa?: number; boyut?: number; rol?: string; q?: string }) =>
     api.get('/admin/kullanicilar', { params }).then(res => ({ data: { veri: res.data.veri, meta: res.data.meta } })),

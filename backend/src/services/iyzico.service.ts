@@ -1,4 +1,4 @@
-import { IYZICO_LOCALE } from '../config/iyzico';
+import { IYZICO_CURRENCY, IYZICO_LOCALE } from '../config/iyzico';
 import Iyzipay from 'iyzipay';
 import { logger } from '../utils/logger';
 import { getIyziConfig } from './ayarlar.service';
@@ -55,6 +55,7 @@ export const iyzicoService = {
       iyzipay.checkoutFormInitialize.create(
         {
           locale: IYZICO_LOCALE,
+          currency: IYZICO_CURRENCY,
           ...request,
           enabledInstallments: [2, 3, 6, 9],
         },

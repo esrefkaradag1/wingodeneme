@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useMemo, useState, type ComponentType, type ReactNode } from 'react';
+import { Suspense, useEffect, useMemo, useState, type ComponentType, type ReactNode } from 'react';
 import { useForm, type FieldErrors } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import dynamic from 'next/dynamic';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   Loader2, ChevronRight, ChevronLeft, Users, GraduationCap,
   User, School, Mail, Lock, MapPin, Building2, Target, BookOpen, Phone,
@@ -14,8 +15,15 @@ import {
 import { authApi } from '@/lib/api';
 import { useAuthStore } from '@/store/auth.store';
 import { toast } from '@/store/toast.store';
-import { OGRENCI_SINIF_SECENEKLERI, siniftanOgretimTuru } from '@/lib/ogrenciKademe';
+import { OGRENCI_SINIF_SECENEKLERI, KPSS_OGRENCI_SECENEKLERI, kpssOgretimTuruMu, siniftanOgretimTuru } from '@/lib/ogrenciKademe';
 import AnaSiteyeDonButonu from '@/components/auth/AnaSiteyeDonButonu';
+import { isKpssMode } from '@/lib/platform';
+import { girisUrlWithReturn, guvenliReturnUrl, ogrenciGirisSonrasiHedef } from '@/lib/returnUrl';
+
+const AuthThreeBackground = dynamic(() => import('@/components/auth/AuthThreeBackground'), {
+  ssr: false,
+  loading: () => <div className="absolute inset-0 -z-10 bg-[#070713]" />,
+});
 
 const sifreKurali = (etiket: string) =>
   z.string()
@@ -31,8 +39,8 @@ const kayitSchema = z.object({
   telefon: z.string().optional(),
   okul: z.string().optional(),
   sehir: z.string().optional(),
-  sinif: z.string().min(1, 'Sınıf seçin'),
-  ogretimTuru: z.enum(['YKS', 'LGS']).optional(),
+  sinif: z.string().min(1, 'Seçim yapın'),
+  ogretimTuru: z.enum(['YKS', 'LGS', 'KPSS_LISANS', 'KPSS_ONLISANS', 'KPSS_ORTAOGRETIM']).optional(),
   hedefUniversite: z.string().optional(),
   hedefBolum: z.string().optional(),
   veliEmail: z.union([z.literal(''), z.string().email('Geçerli veli e-postası')]).optional(),
@@ -163,12 +171,14 @@ function FormAlan({
   );
 }
 
-function AdimGostergesi({ adim }: { adim: number }) {
-  const yuzde = ((adim - 1) / (ADIMLAR.length - 1)) * 100;
+type AdimBilgi = (typeof ADIMLAR)[number];
+
+function AdimGostergesi({ adim, adimlar }: { adim: number; adimlar: readonly AdimBilgi[] }) {
+  const yuzde = adimlar.length > 1 ? ((adim - 1) / (adimlar.length - 1)) * 100 : 100;
   return (
     <div className="mb-8">
       <div className="flex items-center justify-between mb-3">
-        {ADIMLAR.map((a) => {
+        {adimlar.map((a) => {
           const aktif = a.no === adim;
           const tamam = a.no < adim;
           const Icon = a.icon;
@@ -201,7 +211,7 @@ function AdimGostergesi({ adim }: { adim: number }) {
           style={{ width: `${yuzde}%` }}
         />
       </div>
-      <p className="text-center text-xs text-slate-500 mt-2 sm:hidden">Adım {adim} / 3 — {ADIMLAR[adim - 1].baslik}</p>
+      <p className="text-center text-xs text-slate-500 mt-2 sm:hidden">Adım {adim} / {adimlar.length} — {adimlar[adim - 1]?.baslik}</p>
     </div>
   );
 }
@@ -255,14 +265,21 @@ function HataOzeti({ hatalar }: { hatalar: { etiket: string; mesaj: string }[] }
   );
 }
 
-export default function KayitSayfasi() {
+function KayitSayfasiIcerik() {
   const [adim, setAdim] = useState(1);
   const [yukleniyor, setYukleniyor] = useState(false);
   const [sifreGoster, setSifreGoster] = useState(false);
   const [veliSifreGoster, setVeliSifreGoster] = useState(false);
   const [hedefListeAcik, setHedefListeAcik] = useState(false);
+  const [kpssModu, setKpssModu] = useState(false);
   const { girisYap } = useAuthStore();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const returnUrl = guvenliReturnUrl(searchParams.get('returnUrl'));
+
+  useEffect(() => {
+    setKpssModu(isKpssMode());
+  }, []);
 
   const {
     register,
@@ -278,14 +295,27 @@ export default function KayitSayfasi() {
     mode: 'onTouched',
   });
 
+  // KPSS adayları yetişkin olduğundan veli adımı gösterilmez (2 adımlı akış).
+  const gorunurAdimlar = useMemo<readonly AdimBilgi[]>(
+    () => (kpssModu ? ADIMLAR.filter((a) => a.no !== 3) : ADIMLAR),
+    [kpssModu],
+  );
+
   const sinif = watch('sinif');
   const sifre = watch('sifre') || '';
   const veliEmail = watch('veliEmail');
   const veliMevcutHesap = watch('veliMevcutHesap');
   const veliBilgisiVar = Boolean((veliEmail || '').trim());
-  const ogretimTuru = useMemo(() => siniftanOgretimTuru(sinif) ?? 'YKS', [sinif]);
+  const ogretimTuru = useMemo(() => {
+    if (kpssOgretimTuruMu(sinif)) return sinif;
+    return siniftanOgretimTuru(sinif) ?? 'YKS';
+  }, [sinif]);
 
   useEffect(() => {
+    if (kpssOgretimTuruMu(sinif)) {
+      setValue('ogretimTuru', sinif as KayitFormu['ogretimTuru']);
+      return;
+    }
     const tur = siniftanOgretimTuru(sinif);
     if (tur) setValue('ogretimTuru', tur);
   }, [sinif, setValue]);
@@ -325,7 +355,7 @@ export default function KayitSayfasi() {
       setAdim(1);
     } else if (ADIM2_ALANLARI.some((a) => formErrors[a])) {
       setAdim(2);
-    } else if (ADIM3_ALANLARI.some((a) => formErrors[a])) {
+    } else if (!kpssModu && ADIM3_ALANLARI.some((a) => formErrors[a])) {
       setAdim(3);
     }
     toast.hata('Kayıt tamamlanamadı. İşaretli alanları kontrol edin.');
@@ -340,18 +370,34 @@ export default function KayitSayfasi() {
   const devamAdim2 = async () => {
     const gecerli = await trigger([...ADIM2_ALANLARI]);
     if (gecerli) setAdim(3);
-    else toast.hata('Sınıf seçimi zorunludur.');
+    else toast.hata(kpssModu ? 'KPSS türü seçimi zorunludur.' : 'Sınıf seçimi zorunludur.');
+  };
+
+  const kpssKayitTamamla = async () => {
+    const gecerli = await trigger([...ADIM2_ALANLARI]);
+    if (!gecerli) {
+      toast.hata('KPSS türü seçimi zorunludur.');
+      return;
+    }
+    handleSubmit(onSubmit, onInvalid)();
   };
 
   const onSubmit = async (veri: KayitFormu) => {
     setYukleniyor(true);
     try {
-      const tur = siniftanOgretimTuru(veri.sinif) ?? 'YKS';
+      const tur = kpssOgretimTuruMu(veri.sinif)
+        ? veri.sinif
+        : siniftanOgretimTuru(veri.sinif) ?? 'YKS';
       const payload: Record<string, unknown> = {
         ...veri,
         ogretimTuru: tur,
+        sinif: kpssOgretimTuruMu(veri.sinif) ? undefined : veri.sinif,
         email: veri.email.trim().toLowerCase(),
       };
+      if (kpssModu || kpssOgretimTuruMu(tur)) {
+        delete payload.hedefUniversite;
+        delete payload.hedefBolum;
+      }
       const veliEmailNorm = typeof veri.veliEmail === 'string' ? veri.veliEmail.trim().toLowerCase() : '';
       if (veliEmailNorm) {
         payload.veliEmail = veliEmailNorm;
@@ -382,8 +428,8 @@ export default function KayitSayfasi() {
       const yanit = await authApi.kayit(payload);
       const { kullanici, token, refreshToken } = yanit.data.veri;
       girisYap({ kullanici, token, refreshToken });
-      toast.basarili('Hesabınız oluşturuldu!', 'WingoSınav\'a hoş geldiniz');
-      router.push('/dashboard');
+      toast.basarili('Hesabınız oluşturuldu!', kpssModu ? 'WingoKPSS\'e hoş geldiniz' : 'WingoSınav\'a hoş geldiniz');
+      router.push(ogrenciGirisSonrasiHedef(kullanici.rol, returnUrl) || '/dashboard');
     } catch (err: any) {
       const mesaj = err?.response?.data?.mesaj || err?.message || 'Kayıt başarısız';
       const alanaYazildi = apiHatasiniAlanaYaz(mesaj);
@@ -397,25 +443,28 @@ export default function KayitSayfasi() {
   const btnIkincil = 'h-11 rounded-xl bg-white/5 hover:bg-white/10 text-slate-200 text-sm font-medium flex items-center justify-center gap-2 transition-all border border-white/10';
 
   return (
-    <div className="min-h-screen bg-[#0a0f1e] relative overflow-hidden">
+    <div className="min-h-screen relative overflow-hidden">
+      <AuthThreeBackground mode={kpssModu ? 'kpss' : 'yks_lgs'} />
+      <div className="pointer-events-none absolute inset-0 -z-[5] bg-[radial-gradient(ellipse_at_center,transparent_30%,rgba(7,7,19,0.6)_100%)]" />
       <AnaSiteyeDonButonu />
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_50%_-10%,rgba(99,102,241,0.25),transparent)]" />
-      <div className="absolute top-1/4 -left-32 w-96 h-96 bg-indigo-600/10 rounded-full blur-3xl" />
-      <div className="absolute bottom-0 right-0 w-80 h-80 bg-violet-600/10 rounded-full blur-3xl" />
 
       <div className="relative z-10 min-h-screen flex items-center justify-center p-4 sm:p-6 lg:p-8">
         <div className="w-full max-w-xl">
           {/* Üst başlık */}
           <div className="text-center mb-6 sm:mb-8">
             <Link href="/" className="inline-flex items-center gap-2.5 mb-5 group">
-              <div className="w-11 h-11 bg-gradient-to-br from-indigo-500 to-violet-600 rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-500/25 group-hover:scale-105 transition-transform">
+              <div className={`w-11 h-11 rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-105 transition-transform ${
+                kpssModu
+                  ? 'bg-gradient-to-br from-teal-500 to-emerald-600 shadow-teal-500/25'
+                  : 'bg-gradient-to-br from-indigo-500 to-violet-600 shadow-indigo-500/25'
+              }`}>
                 <span className="text-white font-bold text-lg">W</span>
               </div>
-              <span className="text-white font-bold text-xl tracking-tight">WingoSınav</span>
+              <span className="text-white font-bold text-xl tracking-tight">{kpssModu ? 'WingoKPSS' : 'WingoSınav'}</span>
             </Link>
             <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">Öğrenci Hesabı Oluştur</h1>
             <p className="text-slate-400 text-sm mt-2 max-w-sm mx-auto">
-              Deneme çöz, analiz gör, hedefinle ilerle.
+              {kpssModu ? 'KPSS denemeleri, analiz ve gelişim raporları için kaydolun.' : 'Deneme çöz, analiz gör, hedefinle ilerle.'}
             </p>
 
             {/* Kayıt türü sekmeleri */}
@@ -434,7 +483,7 @@ export default function KayitSayfasi() {
 
           {/* Form kartı */}
           <div className="rounded-2xl border border-white/10 bg-slate-900/70 backdrop-blur-xl shadow-2xl shadow-black/20 p-6 sm:p-8">
-            <AdimGostergesi adim={adim} />
+            <AdimGostergesi adim={adim} adimlar={gorunurAdimlar} />
 
             <form onSubmit={handleSubmit(onSubmit, onInvalid)} noValidate>
               {/* Adım 1 */}
@@ -498,50 +547,77 @@ export default function KayitSayfasi() {
                     </div>
                     <div>
                       <h2 className="text-base font-semibold text-white">Eğitim Bilgileri</h2>
-                      <p className="text-xs text-slate-500">Okulunuz ve sınav hedefiniz</p>
+                      <p className="text-xs text-slate-500">
+                        {kpssModu ? 'KPSS hazırlık türünüz' : 'Okulunuz ve sınav hedefiniz'}
+                      </p>
                     </div>
                   </div>
-                  <HataOzeti hatalar={adimHatalari(errors, ADIM2_ALANLARI)} />
+                  <HataOzeti hatalar={adimHatalari(errors, ADIM2_ALANLARI).map((h) => ({
+                    ...h,
+                    etiket: h.alan === 'sinif' && kpssModu ? 'KPSS Türü' : h.etiket,
+                    mesaj: h.alan === 'sinif' && kpssModu ? 'KPSS türü seçin' : h.mesaj,
+                  }))} />
 
-                  <FormAlan label="Okul" icon={Building2}>
-                    <input
-                      {...register('okul')}
-                      list={ogretimTuru === 'LGS' ? 'lgs-okul-listesi' : undefined}
-                      className={inputSinifi(false)}
-                      placeholder="Okul adınız"
-                    />
-                    {ogretimTuru === 'LGS' && (
-                      <datalist id="lgs-okul-listesi">
-                        {POPULER_LISELER.map((okul) => <option key={okul} value={okul} />)}
-                      </datalist>
-                    )}
-                  </FormAlan>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <FormAlan label="Şehir" icon={MapPin}>
-                      <input {...register('sehir')} className={inputSinifi(false)} placeholder="Ankara" />
+                  {!kpssModu && (
+                    <FormAlan label="Okul" icon={Building2}>
+                      <input
+                        {...register('okul')}
+                        list={ogretimTuru === 'LGS' ? 'lgs-okul-listesi' : undefined}
+                        className={inputSinifi(false)}
+                        placeholder="Okul adınız"
+                      />
+                      {ogretimTuru === 'LGS' && (
+                        <datalist id="lgs-okul-listesi">
+                          {POPULER_LISELER.map((okul) => <option key={okul} value={okul} />)}
+                        </datalist>
+                      )}
                     </FormAlan>
-                    <FormAlan label="Sınıf" required hint="6–8. sınıf LGS · 9–12 ve mezun YKS" error={errors.sinif?.message}>
+                  )}
+
+                  <div className={`grid grid-cols-1 ${kpssModu ? '' : 'sm:grid-cols-2'} gap-4`}>
+                    {!kpssModu && (
+                      <FormAlan label="Şehir" icon={MapPin}>
+                        <input {...register('sehir')} className={inputSinifi(false)} placeholder="Ankara" />
+                      </FormAlan>
+                    )}
+                    <FormAlan
+                      label={kpssModu ? 'KPSS Türü' : 'Sınıf'}
+                      required
+                      hint={kpssModu ? 'Hazırlık yaptığınız KPSS kademesini seçin' : '6–8. sınıf LGS · 9–12 ve mezun YKS'}
+                      error={errors.sinif?.message ? (kpssModu ? 'KPSS türü seçin' : errors.sinif.message) : undefined}
+                    >
                       <select {...register('sinif')} className={selectSinifi(!!errors.sinif)} aria-invalid={!!errors.sinif}>
-                        <option value="">Sınıf seçin</option>
-                        {OGRENCI_SINIF_SECENEKLERI.map((s) => (
+                        <option value="">{kpssModu ? 'KPSS türü seçin' : 'Sınıf seçin'}</option>
+                        {(kpssModu ? KPSS_OGRENCI_SECENEKLERI : OGRENCI_SINIF_SECENEKLERI).map((s) => (
                           <option key={s.value} value={s.value}>{s.etiket}</option>
                         ))}
                       </select>
                     </FormAlan>
+                    {kpssModu && (
+                      <FormAlan label="Şehir" icon={MapPin}>
+                        <input {...register('sehir')} className={inputSinifi(false)} placeholder="İstanbul" />
+                      </FormAlan>
+                    )}
                   </div>
 
                   {sinif && (
                     <div className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border text-xs font-medium ${
-                      ogretimTuru === 'LGS'
-                        ? 'bg-sky-500/10 border-sky-500/25 text-sky-300'
-                        : 'bg-indigo-500/10 border-indigo-500/25 text-indigo-300'
+                      kpssModu
+                        ? 'bg-teal-500/10 border-teal-500/25 text-teal-300'
+                        : ogretimTuru === 'LGS'
+                          ? 'bg-sky-500/10 border-sky-500/25 text-sky-300'
+                          : 'bg-indigo-500/10 border-indigo-500/25 text-indigo-300'
                     }`}>
                       <Sparkles className="w-3.5 h-3.5 shrink-0" />
-                      {ogretimTuru === 'LGS' ? 'LGS paneli açılacak' : 'YKS paneli açılacak'}
+                      {kpssModu
+                        ? `${KPSS_OGRENCI_SECENEKLERI.find((s) => s.value === sinif)?.etiket ?? 'KPSS'} paneli açılacak`
+                        : ogretimTuru === 'LGS'
+                          ? 'LGS paneli açılacak'
+                          : 'YKS paneli açılacak'}
                     </div>
                   )}
 
+                  {!kpssModu && (
                   <div className="rounded-xl border border-white/8 bg-white/[0.02] p-4 space-y-4">
                     <p className="text-xs font-medium text-slate-400 flex items-center gap-1.5">
                       <Target className="w-3.5 h-3.5" /> Hedeflerin <span className="text-slate-600">(isteğe bağlı)</span>
@@ -591,20 +667,28 @@ export default function KayitSayfasi() {
                       </FormAlan>
                     )}
                   </div>
+                  )}
 
                   <div className="flex gap-3 pt-1">
                     <button type="button" onClick={() => setAdim(1)} className={`flex-1 ${btnIkincil}`}>
                       <ChevronLeft className="w-4 h-4" /> Geri
                     </button>
-                    <button type="button" onClick={devamAdim2} className={`flex-1 ${btnBirincil}`}>
-                      Devam <ChevronRight className="w-4 h-4" />
-                    </button>
+                    {kpssModu ? (
+                      <button type="button" onClick={kpssKayitTamamla} disabled={yukleniyor} className={`flex-1 ${btnBirincil}`}>
+                        {yukleniyor ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                        {yukleniyor ? 'Oluşturuluyor...' : 'Hesap Oluştur'}
+                      </button>
+                    ) : (
+                      <button type="button" onClick={devamAdim2} className={`flex-1 ${btnBirincil}`}>
+                        Devam <ChevronRight className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
                 </div>
               )}
 
-              {/* Adım 3 */}
-              {adim === 3 && (
+              {/* Adım 3 — Veli (yalnızca YKS/LGS; KPSS adaylarında gizli) */}
+              {!kpssModu && adim === 3 && (
                 <div className="space-y-5">
                   <div className="flex items-center gap-3 pb-1">
                     <div className="w-9 h-9 rounded-lg bg-indigo-500/15 flex items-center justify-center">
@@ -708,7 +792,7 @@ export default function KayitSayfasi() {
             <div className="mt-6 pt-5 border-t border-white/8 text-center text-sm text-slate-500 space-y-2">
               <p>
                 Zaten hesabınız var mı?{' '}
-                <Link href="/giris" className="text-indigo-400 hover:text-indigo-300 font-medium transition-colors">Giriş Yapın</Link>
+                <Link href={returnUrl ? girisUrlWithReturn(returnUrl) : '/giris'} className="text-indigo-400 hover:text-indigo-300 font-medium transition-colors">Giriş Yapın</Link>
               </p>
               <Link href="/sifremi-unuttum" className="text-slate-500 hover:text-slate-300 text-xs transition-colors">
                 Şifremi unuttum
@@ -718,5 +802,13 @@ export default function KayitSayfasi() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function KayitSayfasi() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-[#070713]" />}>
+      <KayitSayfasiIcerik />
+    </Suspense>
   );
 }

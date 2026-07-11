@@ -31,6 +31,7 @@ enum OgretimTuru {
   KPSS_ONLISANS
   SINIF_6
   SINIF_7
+  SINIF_9
   SINIF_10
   SINIF_11
 }
@@ -969,9 +970,13 @@ model Paket {
   kategori      String   @default("GENEL")
   fiyat         Float
   indirimliFiyat Float?
+  kademeliFiyatAktif Boolean @default(false)
+  tekilSinavFiyati Float?
+  fiyatKademeleriJson Json?
   sinavSayisi   Int         @default(0)
   ozellikler    Json?
   sinavIds      String[]    @default([])
+  ucretsizSinavIds String[]  @default([])
   grupIds       String[]    @default([])
   kocId         String?     // Paket bir koça bağlı olabilir
   koc           Koc?        @relation(fields: [kocId], references: [id])

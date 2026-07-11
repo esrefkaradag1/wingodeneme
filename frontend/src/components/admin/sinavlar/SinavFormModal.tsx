@@ -705,9 +705,7 @@ export default function SinavFormModal({ id, onClose, gruplar, layout = 'modal' 
               <div className="rounded-xl border border-indigo-100 bg-indigo-50/60 px-4 py-3 text-sm text-indigo-950">
                 {form.tur === 'KPSS' ? (
                   <>
-                    KPSS iki oturumla uygulanır: önce <b>Genel Yetenek</b>, ardından yaklaşık{' '}
-                    <b>{KPSS_OTURUM_ARA_DK} dakika</b> ara, sonra <b>Genel Kültür</b>. Her oturum için başlangıç, bitiş
-                    ve süreyi ayrı girin.
+                    KPSS iki oturumla uygulanır: önce <b>Genel Yetenek</b>, ardından ara verilmeden (0 dakika) <b>Genel Kültür</b> başlar. Her oturum için başlangıç, bitiş ve süreyi girin.
                   </>
                 ) : (
                   <>

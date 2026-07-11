@@ -1,5 +1,21 @@
-/** 6–8. sınıf → LGS; 9–12 ve mezun → YKS */
-export type OgretimTuruDeger = 'YKS' | 'LGS';
+/** 6–8. sınıf → LGS; 9–12 ve mezun → YKS; KPSS alt türleri doğrudan kaydedilir */
+export type OgretimTuruDeger = 'YKS' | 'LGS' | 'KPSS_LISANS' | 'KPSS_ONLISANS' | 'KPSS_ORTAOGRETIM';
+
+const KPSS_TURLER = new Set<OgretimTuruDeger>(['KPSS_LISANS', 'KPSS_ONLISANS', 'KPSS_ORTAOGRETIM']);
+
+export function kpssOgretimTuruMu(tur?: string | null): tur is OgretimTuruDeger {
+  if (!tur) return false;
+  return KPSS_TURLER.has(String(tur).trim().toUpperCase() as OgretimTuruDeger);
+}
+
+function kpssTurParse(v?: string | null): OgretimTuruDeger | null {
+  if (!v) return null;
+  const s = String(v).trim().toUpperCase();
+  if (s === 'KPSS_LISANS' || s === 'KPSS') return 'KPSS_LISANS';
+  if (s === 'KPSS_ONLISANS') return 'KPSS_ONLISANS';
+  if (s === 'KPSS_ORTAOGRETIM') return 'KPSS_ORTAOGRETIM';
+  return null;
+}
 
 export function siniftanOgretimTuru(sinif?: string | null): OgretimTuruDeger | null {
   if (!sinif) return null;
@@ -30,6 +46,11 @@ export function ogretimTuruBelirle(
   sinif?: string | null,
   mevcut?: string | null,
 ): OgretimTuruDeger {
+  const kpssFromMevcut = kpssTurParse(mevcut);
+  if (kpssFromMevcut) return kpssFromMevcut;
+  const kpssFromSinif = kpssTurParse(sinif);
+  if (kpssFromSinif) return kpssFromSinif;
+
   const siniftan = siniftanOgretimTuru(sinif ?? legacySinifNorm(mevcut, null));
   if (siniftan) return siniftan;
   const ham = String(mevcut ?? '').toUpperCase();

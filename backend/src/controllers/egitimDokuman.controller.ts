@@ -124,6 +124,13 @@ export async function egitimDokumanYukleController(
     const hariciDosyaBoyut = Number(req.body?.dosyaBoyut || 0);
     const dosya = (req as AuthRequest & { file?: Express.Multer.File }).file;
 
+    const platformTurleri = req.platformTurleri || [];
+    let defaultOgretimTuru: any = null;
+    if (platformTurleri.length > 0) {
+      defaultOgretimTuru = platformTurleri.includes('KPSS') ? 'KPSS' : 'YKS';
+    }
+    const docOgretimTuru = ogretimTuru || defaultOgretimTuru;
+
     if (!dosya && !kaynakUrl && !hariciDosyaUrl) {
       res.status(400).json({ basarili: false, mesaj: 'Lütfen bir dosya yükleyin veya bir URL adresi girin.' });
       return;
@@ -171,7 +178,7 @@ export async function egitimDokumanYukleController(
           baslik: String(baslik).trim(),
           ders: ders ? String(ders) : null,
           konuId: konuId ? String(konuId) : null,
-          ogretimTuru: ogretimTuru || null,
+          ogretimTuru: docOgretimTuru || null,
           tur: dokumanTuru as any,
           dosyaAd,
           dosyaTipi,
@@ -256,7 +263,7 @@ export async function egitimDokumanYukleController(
         baslik: String(baslik).trim(),
         ders: ders ? String(ders) : null,
         konuId: konuId ? String(konuId) : null,
-        ogretimTuru: ogretimTuru || null,
+        ogretimTuru: docOgretimTuru || null,
         tur: dokumanTuru as any,
         dosyaAd,
         dosyaTipi,
@@ -287,21 +294,28 @@ export async function egitimDokumanListeleController(
 ) {
   try {
     const { ders, konuId, durum } = req.query;
+    const platformTurleri = req.platformTurleri || [];
+
+    const whereClause: any = {
+      ders: ders ? String(ders) : undefined,
+      konuId: konuId ? String(konuId) : undefined,
+      durum: durum ? (String(durum) as 'BEKLIYOR' | 'ISLENIYOR' | 'HAZIR' | 'HATA') : undefined,
+    };
+
+    if (platformTurleri.length > 0) {
+      whereClause.OR = [
+        { ogretimTuru: { in: platformTurleri } },
+        { ogretimTuru: null }
+      ];
+    }
+
     const [dokumanlar, ozet] = await Promise.all([
       prisma.egitimDokuman.findMany({
-        where: {
-          ders: ders ? String(ders) : undefined,
-          konuId: konuId ? String(konuId) : undefined,
-          durum: durum ? (String(durum) as 'BEKLIYOR' | 'ISLENIYOR' | 'HAZIR' | 'HATA') : undefined,
-        },
+        where: whereClause,
         orderBy: { olusturuldu: 'desc' },
       }),
       prisma.egitimDokuman.aggregate({
-        where: {
-          ders: ders ? String(ders) : undefined,
-          konuId: konuId ? String(konuId) : undefined,
-          durum: durum ? (String(durum) as 'BEKLIYOR' | 'ISLENIYOR' | 'HAZIR' | 'HATA') : undefined,
-        },
+        where: whereClause,
         _sum: { dosyaBoyut: true, chunkSayisi: true },
         _count: true,
       }),

@@ -14,9 +14,22 @@ import {
   GraduationCap,
   Sparkles,
   School,
+  ShoppingBag,
 } from 'lucide-react';
 
-export type OgretimTuru = 'YKS' | 'LGS';
+export type OgretimTuru = 'YKS' | 'LGS' | 'KPSS_LISANS' | 'KPSS_ONLISANS' | 'KPSS_ORTAOGRETIM';
+
+export const KPSS_OGRENCI_SECENEKLERI = [
+  { value: 'KPSS_LISANS', etiket: 'KPSS Lisans' },
+  { value: 'KPSS_ONLISANS', etiket: 'KPSS Önlisans' },
+  { value: 'KPSS_ORTAOGRETIM', etiket: 'KPSS Ortaöğretim' },
+] as const;
+
+export function kpssOgretimTuruMu(tur?: string | null): tur is OgretimTuru {
+  if (!tur) return false;
+  const s = String(tur).trim().toUpperCase();
+  return s === 'KPSS_LISANS' || s === 'KPSS_ONLISANS' || s === 'KPSS_ORTAOGRETIM';
+}
 
 /** 6–8. sınıf → LGS; 9–12 ve mezun → YKS */
 export function siniftanOgretimTuru(sinif?: string | null): OgretimTuru | null {
@@ -57,13 +70,22 @@ export function ogretimTuruCoz(
 ): OgretimTuru {
   const hamOgretim = profil?.ogrenciProfil?.ogretimTuru ?? kullanici?.ogretimTuru;
   const sinif = legacySinifNorm(hamOgretim, profil?.ogrenciProfil?.sinif);
+  if (kpssOgretimTuruMu(hamOgretim)) return hamOgretim;
+  if (kpssOgretimTuruMu(sinif)) return sinif;
   const siniftan = siniftanOgretimTuru(sinif);
   if (siniftan) return siniftan;
   return String(hamOgretim).toUpperCase() === 'LGS' ? 'LGS' : 'YKS';
 }
 
+export function kpssMi(tur: OgretimTuru): boolean {
+  return kpssOgretimTuruMu(tur);
+}
+
 export function sinifEtiketi(sinif?: string | null): string {
   if (!sinif) return '—';
+  if (kpssOgretimTuruMu(sinif)) {
+    return KPSS_OGRENCI_SECENEKLERI.find((s) => s.value === sinif)?.etiket ?? sinif;
+  }
   if (sinif === 'mezun') return 'Mezun';
   return `${sinif}. Sınıf`;
 }
@@ -136,6 +158,7 @@ const TUM_NAV_GRUPLAR: NavGrup[] = [
     baslik: 'Satın Alma',
     ogeler: [
       { href: '/market', ikon: CreditCard, etiket: 'Paket Al', renk: 'blue' },
+      { href: '/market/siparislerim', ikon: ShoppingBag, etiket: 'Siparişlerim', renk: 'amber' },
     ],
   },
 ];
@@ -243,7 +266,7 @@ export function hizliLinkler(tur: OgretimTuru): Array<HizliLink & { ikon: Lucide
     { href: '/study-plan', etiket: 'Çalışma Planı', alt: 'Görev takibi', ikon: Map, color: '#10B981', bg: 'rgba(16, 185, 129, 0.1)' },
     { href: '/takvim', etiket: 'Takvim', alt: 'Tarihler', ikon: Calendar, color: '#EF4444', bg: 'rgba(239, 68, 68, 0.1)' },
   ];
-  if (tur === 'LGS') {
+  if (tur === 'LGS' || kpssMi(tur)) {
     return [...ortak];
   }
   return [
@@ -273,7 +296,22 @@ export const KADEME_TEMA = {
     etiket: 'LGS',
     panelAdi: 'LGS Paneli',
   },
+  KPSS: {
+    accent: 'teal',
+    heroBg: 'bg-teal-600',
+    heroText: 'text-teal-100',
+    badge: 'bg-teal-600',
+    kartBorder: 'border-teal-100',
+    kartBg: 'from-teal-50/90',
+    etiket: 'KPSS',
+    panelAdi: 'KPSS Paneli',
+  },
 } as const;
+
+export function kademeTemasi(tur: OgretimTuru) {
+  if (kpssMi(tur)) return KADEME_TEMA.KPSS;
+  return KADEME_TEMA[tur as 'YKS' | 'LGS'];
+}
 
 export const LGS_RESMI_TAKIP = {
   baslik: 'LGS kılavuzu & MEB',
@@ -289,6 +327,17 @@ export const YKS_RESMI_TAKIP = {
   baslik: 'YKS kılavuzu & ÖSYM',
   kilavuzUrl: 'https://www.osym.gov.tr/TR,33851/2026-yuksekogretim-kurumlari-sinavi-yks-kilavuzu.html',
   kilavuzEtiket: '2026 YKS kılavuzu',
+  kurumUrl: 'https://www.osym.gov.tr/',
+  kurum: 'ÖSYM',
+  ikon: Compass,
+};
+
+export const KPSS_RESMI_TAKIP = {
+  baslik: 'KPSS kılavuzu & ÖSYM',
+  aciklama:
+    'KPSS başvuru, sınav takvimi ve yerleştirme duyuruları için resmi kaynak ÖSYM’dir. Güncel duyurular için osym.gov.tr adresini kullanın.',
+  kilavuzUrl: 'https://www.osym.gov.tr/',
+  kilavuzEtiket: 'ÖSYM resmi sitesi',
   kurumUrl: 'https://www.osym.gov.tr/',
   kurum: 'ÖSYM',
   ikon: Compass,

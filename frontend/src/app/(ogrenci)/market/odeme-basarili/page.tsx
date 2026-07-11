@@ -34,16 +34,16 @@ export default function OdemeBasariliSayfasi() {
 
         <div className="flex flex-col gap-3">
            <Link 
-            href="/dashboard"
+            href="/market/siparislerim"
             className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black text-sm flex items-center justify-center gap-2 hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-600/20 active:scale-95"
            >
-            Kontrol Paneline Git <ArrowRight className="w-4 h-4" />
+            Siparişlerimi Gör <ShoppingBag className="w-4 h-4" />
            </Link>
            <Link 
             href="/sinavlar"
             className="w-full py-4 bg-gray-50 text-gray-600 rounded-2xl font-black text-sm flex items-center justify-center gap-2 hover:bg-gray-100 transition-all active:scale-95"
            >
-            Sınavlarımı Görüntüle <ShoppingBag className="w-4 h-4" />
+            Sınavlarımı Görüntüle <ArrowRight className="w-4 h-4" />
            </Link>
         </div>
       </motion.div>

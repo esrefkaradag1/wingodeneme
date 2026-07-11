@@ -60,6 +60,7 @@ export const MODEL_SLUG_GUNCELLE: Record<string, string> = {
   'deepseek/deepseek-chat': 'deepseek/deepseek-chat-v3-0324',
   'mistralai/mistral-large': 'mistralai/mistral-large-2512',
   'google/gemini-2.0-flash-001': 'google/gemini-2.5-flash',
+  'google/gemini-3.1-pro-preview': 'google/gemini-2.5-pro',
 };
 
 let panelCache: { ayar: OpenRouterModelAyar; ts: number } | null = null;

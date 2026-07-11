@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { adminApi } from '@/lib/api';
 import { api } from '@/lib/api';
@@ -14,7 +14,7 @@ import { toast } from '@/store/toast.store';
 import { confirmAsk } from '@/store/confirm-dialog.store';
 import { motion, AnimatePresence } from 'framer-motion';
 import { grupKonuOgretimTuru, ogretimTuruKisaEtiket } from '@/lib/grupOgretimTuru';
-import { OGRETIM_TURU_SECENEKLERI } from '@/lib/ogretimTuruSecenekleri';
+import { OGRETIM_TURU_SECENEKLERI, getOgretimTuruSecenekleri } from '@/lib/ogretimTuruSecenekleri';
 import { bagliGruplariFiltrele, grupYoluHaritasi } from '@/lib/grupYolu';
 
 interface Grup {
@@ -42,6 +42,7 @@ const turRenkleri: Record<string, string> = {
   KPSS_ORTAOGRETIM: 'bg-orange-100 text-orange-800',
   SINIF_6: 'bg-cyan-100 text-cyan-700',
   SINIF_7: 'bg-teal-100 text-teal-700',
+  SINIF_9: 'bg-sky-100 text-sky-700',
   SINIF_10: 'bg-orange-100 text-orange-700',
   SINIF_11: 'bg-pink-100 text-pink-700',
 };
@@ -92,6 +93,16 @@ export default function GruplarSayfasi() {
   
   const [form, setForm] = useState({ ad: '', tur: 'YKS', aciklama: '', parentId: '' });
   const [duzenleForm, setDuzenleForm] = useState({ ad: '', tur: 'YKS', aciklama: '', parentId: '' });
+  const [ogretimTuruSecenekleri, setOgretimTuruSecenekleri] = useState<any[]>([]);
+
+  useEffect(() => {
+    const secenekler = getOgretimTuruSecenekleri();
+    setOgretimTuruSecenekleri(secenekler);
+    if (secenekler.length > 0) {
+      setForm(f => ({ ...f, tur: secenekler[0].value }));
+      setDuzenleForm(f => ({ ...f, tur: secenekler[0].value }));
+    }
+  }, []);
 
   const qc = useQueryClient();
 
@@ -233,7 +244,7 @@ export default function GruplarSayfasi() {
                   onChange={(e) => setDuzenleForm({ ...duzenleForm, tur: e.target.value })}
                   className="px-3 py-1.5 rounded-lg border border-indigo-300 focus:ring-2 focus:ring-indigo-500 outline-none text-sm"
                 >
-                  {OGRETIM_TURU_SECENEKLERI.map((s) => (
+                  {ogretimTuruSecenekleri.map((s) => (
                     <option key={s.value} value={s.value}>{s.label}</option>
                   ))}
                 </select>
@@ -440,9 +451,9 @@ export default function GruplarSayfasi() {
                          onChange={(e) => setForm({ ...form, tur: e.target.value })}
                          className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-medium"
                        >
-                         {OGRETIM_TURU_SECENEKLERI.map((s) => (
-                           <option key={s.value} value={s.value}>{s.label}</option>
-                         ))}
+                          {ogretimTuruSecenekleri.map((s) => (
+                            <option key={s.value} value={s.value}>{s.label}</option>
+                          ))}
                        </select>
                     </div>
 

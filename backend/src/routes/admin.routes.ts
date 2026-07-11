@@ -26,6 +26,8 @@ import {
   sinavSureAnaliziController,
   sinavKatilimlariAdminController,
   denemeKarnesiAdminController,
+  soruKopyalaTytController,
+  soruTopluKopyalaTytController,
 } from '../controllers/admin.controller';
 import {
   odemeAyarlariGetController,
@@ -70,6 +72,15 @@ import { adminPanelSayaclari } from '../services/navSayaclari.service';
 
 const router = Router();
 router.use(kimlikDogrula, rolKontrol('ADMIN', 'SUPER_ADMIN', 'TEACHER'), oturumAktiviteMiddleware);
+router.use((_req, res, next) => {
+  // Yönetim verileri kimlik doğrulamalı ve origin'e duyarlı; 304/CORS karışmasını önlemek için cache kapalı.
+  res.set('Cache-Control', 'private, no-store, no-cache, must-revalidate');
+  res.set('CDN-Cache-Control', 'no-store');
+  res.set('Vercel-CDN-Cache-Control', 'no-store');
+  res.set('Pragma', 'no-cache');
+  res.set('Expires', '0');
+  next();
+});
 
 router.get('/panel-sayaclari', async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
@@ -110,6 +121,8 @@ router.post('/sinavlar/:id/sorular', soruEkleController);
 router.post('/sinavlar/:sinavId/ogrenci-ata', sinavOgrenciAtaController);
 router.delete('/sinavlar/:sinavId/ogrenci/:ogrenciId', sinavOgrenciAtamaKaldirController);
 router.get('/sinavlar/:sinavId/ogrenciler', sinavAtananOgrencilerController);
+router.post('/sorular/:id/copy-to-tyt', rolKontrol('ADMIN', 'SUPER_ADMIN'), soruKopyalaTytController);
+router.post('/sorular/toplu-copy-to-tyt', rolKontrol('ADMIN', 'SUPER_ADMIN'), soruTopluKopyalaTytController);
 
 router.get('/kullanicilar', kullanicilarListesiController);
 router.post('/kullanicilar/veli-eslestir', veliOgrenciEslestirAdminController);

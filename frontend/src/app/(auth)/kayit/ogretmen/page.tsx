@@ -5,12 +5,19 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { Loader2, GraduationCap, Home } from 'lucide-react';
 import { authApi } from '@/lib/api';
 import { useAuthStore } from '@/store/auth.store';
 import { toast } from '@/store/toast.store';
 import AnaSiteyeDonButonu from '@/components/auth/AnaSiteyeDonButonu';
+import { isKpssMode } from '@/lib/platform';
+
+const AuthThreeBackground = dynamic(() => import('@/components/auth/AuthThreeBackground'), {
+  ssr: false,
+  loading: () => <div className="absolute inset-0 -z-10 bg-[#070713]" />,
+});
 
 const LGS_BRANSLARI = [
   'Matematik', 'Fen Bilimleri', 'Türkçe',
@@ -33,6 +40,7 @@ const KPSS_BRANSLARI = [
 const KADEME_SECENEKLERI = [
   { value: 'YKS', label: 'YKS (TYT/AYT)' },
   { value: 'LGS', label: 'LGS' },
+  { value: 'KPSS_LISANS', label: 'KPSS Lisans' },
   { value: 'KPSS_ONLISANS', label: 'KPSS Önlisans' },
   { value: 'KPSS_ORTAOGRETIM', label: 'KPSS Ortaöğretim' },
 ] as const;
@@ -51,7 +59,7 @@ const ogretmenSchema = z.object({
   email: z.string().email('Geçerli e-posta girin'),
   sifre: z.string().min(8, 'Şifre en az 8 karakter').regex(/[A-Z]/, 'Büyük harf içermeli').regex(/[0-9]/, 'Rakam içermeli'),
   telefon: z.string().optional(),
-  ogretimTurleri: z.array(z.enum(['YKS', 'LGS', 'KPSS_ONLISANS', 'KPSS_ORTAOGRETIM'])).min(1, 'En az bir kademe seçin'),
+  ogretimTurleri: z.array(z.enum(['YKS', 'LGS', 'KPSS_LISANS', 'KPSS_ONLISANS', 'KPSS_ORTAOGRETIM'])).min(1, 'En az bir kademe seçin'),
   branslarByTur: z.record(z.array(z.string())).default({}),
 }).superRefine((v, ctx) => {
   for (const tur of v.ogretimTurleri) {
@@ -72,10 +80,19 @@ export default function OgretmenKayitSayfasi() {
   const [yukleniyor, setYukleniyor] = useState(false);
   const { girisYap } = useAuthStore();
   const router = useRouter();
+  const kpssModu = isKpssMode();
+  const gorunurKademeler = useMemo(
+    () =>
+      kpssModu
+        ? KADEME_SECENEKLERI.filter((k) => k.value.startsWith('KPSS'))
+        : KADEME_SECENEKLERI.filter((k) => k.value === 'YKS' || k.value === 'LGS'),
+    [kpssModu],
+  );
+  const varsayilanKademe = kpssModu ? 'KPSS_LISANS' : 'YKS';
 
   const { register, handleSubmit, watch, setValue, formState: { errors } } = useForm<OgretmenFormu>({
     resolver: zodResolver(ogretmenSchema),
-    defaultValues: { ogretimTurleri: ['YKS'], branslarByTur: { YKS: [] } as any },
+    defaultValues: { ogretimTurleri: [varsayilanKademe], branslarByTur: { [varsayilanKademe]: [] } as any },
   });
 
   const ogretimTurleri = (watch('ogretimTurleri') ?? []) as Kademe[];
@@ -104,9 +121,11 @@ export default function OgretmenKayitSayfasi() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 flex items-center justify-center p-4">
+    <div className="min-h-screen relative overflow-hidden flex items-center justify-center p-4">
+      <AuthThreeBackground mode={kpssModu ? 'kpss' : 'yks_lgs'} />
+      <div className="pointer-events-none absolute inset-0 -z-[5] bg-[radial-gradient(ellipse_at_center,transparent_30%,rgba(7,7,19,0.6)_100%)]" />
       <AnaSiteyeDonButonu />
-      <div className="w-full max-w-md">
+      <div className="relative z-10 w-full max-w-md">
         <div className="mb-4">
           <Link href="/" className="inline-flex items-center gap-2 text-sm text-gray-400 hover:text-white transition-colors">
             <Home className="w-4 h-4" /> Ana sayfa
@@ -125,7 +144,7 @@ export default function OgretmenKayitSayfasi() {
           </p>
         </div>
 
-        <div className="bg-white/5 border border-white/10 rounded-2xl p-8 backdrop-blur-sm">
+        <div className="bg-slate-900/70 border border-white/10 rounded-2xl p-8 backdrop-blur-xl shadow-2xl shadow-black/20">
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -160,7 +179,7 @@ export default function OgretmenKayitSayfasi() {
             <div>
               <label className="block text-sm text-gray-300 mb-1.5">Kademe</label>
               <div className="grid grid-cols-2 gap-3">
-                {KADEME_SECENEKLERI.map((k) => {
+                {gorunurKademeler.map((k) => {
                   const secili = ogretimTurleri.includes(k.value);
                   return (
                     <label

@@ -3,6 +3,7 @@ const BRANS_DERS: Record<string, string[]> = {
   Matematik: ['Matematik', 'Geometri'],
   Geometri: ['Geometri', 'Matematik'],
   'Fen Bilimleri': ['Fen Bilimleri', 'Fizik', 'Kimya', 'Biyoloji'],
+  'Sosyal Bilgiler': ['Sosyal Bilgiler', 'Tarih', 'Coğrafya', 'İnkılap Tarihi ve Atatürkçülük', 'T.C. İnkılap Tarihi ve Atatürkçülük'],
 };
 
 const BRANS_AYRAC = /[,;|]+/;

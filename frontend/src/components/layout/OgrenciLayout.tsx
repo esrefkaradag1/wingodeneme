@@ -10,7 +10,7 @@ import { authApi, kullaniciApi } from '@/lib/api';
 import { toast } from '@/store/toast.store';
 import { useSiteIcerik } from '@/contexts/SiteIcerikContext';
 import { siteLogoGorunum } from '@/lib/site-marka-logo';
-import { KADEME_TEMA, NAV_RENK_SINIFLARI, navGruplari, ogretimTuruCoz } from '@/lib/ogrenciKademe';
+import { KADEME_TEMA, NAV_RENK_SINIFLARI, kademeTemasi, kpssMi, lgsMi, navGruplari, ogretimTuruCoz } from '@/lib/ogrenciKademe';
 
 function navAktif(pathname: string, href: string): boolean {
   if (href === '/dashboard') return pathname === '/dashboard';
@@ -50,9 +50,10 @@ export function OgrenciLayout({ children }: { children: React.ReactNode }) {
   };
 
   const kademe = ogretimTuruCoz(kullanici, profilData?.data?.veri);
-  const tema = KADEME_TEMA[kademe];
+  const tema = kademeTemasi(kademe);
   const navGruplariListesi = navGruplari(kademe);
-  const lgs = kademe === 'LGS';
+  const lgs = lgsMi(kademe);
+  const kpss = kpssMi(kademe);
 
   useEffect(() => {
     if (!kullanici || !profilData?.data?.veri) return;
@@ -77,29 +78,33 @@ export function OgrenciLayout({ children }: { children: React.ReactNode }) {
   const SidebarIcerik = () => (
     <div className="flex h-full flex-col bg-white/80 backdrop-blur-md border-r border-gray-100">
       <div className="p-6 border-b border-gray-100">
-        <div className="flex items-center gap-3">
+        <Link href="/" className="flex items-center gap-3 hover:opacity-90 transition-opacity" onClick={() => setMobilAcik(false)}>
           {logoUrl ? (
             <img src={logoUrl} alt={site.marka.ad} className={logoSt.className} style={logoSt.style} />
           ) : (
             <>
               <div
                 className={`w-9 h-9 rounded-xl flex items-center justify-center shadow-md ${
-                  lgs ? 'bg-gradient-to-br from-blue-600 to-sky-600' : 'bg-gradient-to-br from-indigo-600 to-violet-600'
+                  kpss
+                    ? 'bg-gradient-to-br from-teal-600 to-emerald-600'
+                    : lgs
+                      ? 'bg-gradient-to-br from-blue-600 to-sky-600'
+                      : 'bg-gradient-to-br from-indigo-600 to-violet-600'
                 }`}
               >
                 <span className="text-white font-bold text-base">{site.marka.kisaLogo || 'W'}</span>
               </div>
               <div className="flex flex-col min-w-0">
                 <span className="font-bold text-gray-900 text-lg tracking-tight truncate">{site.marka.ad}</span>
-                <span className={`text-[9px] font-bold uppercase tracking-[0.1em] -mt-0.5 ${lgs ? 'text-blue-600' : 'text-indigo-500'}`}>
+                <span className={`text-[9px] font-bold uppercase tracking-[0.1em] -mt-0.5 ${kpss ? 'text-teal-600' : lgs ? 'text-blue-600' : 'text-indigo-500'}`}>
                   {tema.panelAdi}
                 </span>
               </div>
             </>
           )}
-        </div>
+        </Link>
         {logoUrl ? (
-          <span className={`mt-3 inline-flex text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-md ${lgs ? 'bg-blue-50 text-blue-700' : 'bg-indigo-50 text-indigo-700'}`}>
+          <span className={`mt-3 inline-flex text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-md ${kpss ? 'bg-teal-50 text-teal-700' : lgs ? 'bg-blue-50 text-blue-700' : 'bg-indigo-50 text-indigo-700'}`}>
             {tema.etiket} öğrenci
           </span>
         ) : null}

@@ -1,10 +1,13 @@
 import { Request, Response, NextFunction } from 'express';
+import { OgretimTuru } from '@prisma/client';
 import { tokenDogrula, JwtPayload } from '../utils/jwt';
 import { prisma } from '../config/database';
 import { supabase } from '../config/supabase';
 
 export interface AuthRequest extends Request {
   kullanici?: JwtPayload & { id: string };
+  platformTurleri?: OgretimTuru[];
+  isKpssPlatform?: boolean;
 }
 
 async function tokenIleKullaniciBul(token: string): Promise<(JwtPayload & { id: string }) | null> {

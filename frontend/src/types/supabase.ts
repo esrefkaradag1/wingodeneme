@@ -1553,6 +1553,7 @@ export type Database = {
         | "LGS"
         | "SINIF_6"
         | "SINIF_7"
+        | "SINIF_9"
         | "SINIF_10"
         | "SINIF_11"
       Rol: "OGRENCI" | "VELI" | "TEACHER" | "ADMIN" | "SUPER_ADMIN"
@@ -1719,7 +1720,7 @@ export const Constants = {
         "IADE_EDILDI",
         "HATA",
       ],
-      OgretimTuru: ["YKS", "LGS", "SINIF_6", "SINIF_7", "SINIF_10", "SINIF_11"],
+      OgretimTuru: ["YKS", "LGS", "SINIF_6", "SINIF_7", "SINIF_9", "SINIF_10", "SINIF_11"],
       Rol: ["OGRENCI", "VELI", "TEACHER", "ADMIN", "SUPER_ADMIN"],
       SinavAtamaKaynak: ["MANUEL", "PAKET"],
       SinavTuru: ["TYT", "AYT", "AYT_TYT", "LGS"],

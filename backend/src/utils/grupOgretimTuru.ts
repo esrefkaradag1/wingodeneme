@@ -12,20 +12,37 @@ export const KPSS_TUM_TURLER: OgretimTuru[] = [
   ...KPSS_TURLERI,
 ];
 
-/** Soru/konu listesinde ogretimTuru filtresi (KPSS = tüm alt türler) */
+export function ogretimTuruEsdegerleri(tur: OgretimTuru): OgretimTuru[] {
+  if (tur === OgretimTuru.KPSS) return KPSS_TUM_TURLER;
+  if (tur === OgretimTuru.YKS) return [OgretimTuru.YKS, OgretimTuru.SINIF_9, OgretimTuru.SINIF_10, OgretimTuru.SINIF_11];
+  if (tur === OgretimTuru.LGS) return [OgretimTuru.LGS, OgretimTuru.SINIF_6, OgretimTuru.SINIF_7];
+  return [tur];
+}
+
+export function ogretimTurleriniGenislet(turler: OgretimTuru[]): OgretimTuru[] {
+  return [...new Set(turler.flatMap((tur) => ogretimTuruEsdegerleri(tur)))];
+}
+
+/**
+ * Soru/konu listesinde ogretimTuru filtresi.
+ * Üst kademeler alt sınıfları kapsar: LGS → 6/7. sınıf, YKS → 9/10/11. sınıf, KPSS → tüm alt türler.
+ */
 export function ogretimTuruPrismaFiltre(
   tur: OgretimTuru,
 ): OgretimTuru | { in: OgretimTuru[] } {
-  if (tur === OgretimTuru.KPSS) return { in: KPSS_TUM_TURLER };
+  const esdegerler = ogretimTuruEsdegerleri(tur);
+  if (esdegerler.length > 1) return { in: esdegerler };
   return tur;
 }
 
 /** Öğretmenin izinli kademeleri seçilen filtreye uyuyor mu */
 export function ogretimTuruIzinUyumlu(turFiltre: OgretimTuru, izinliTurler: OgretimTuru[]): boolean {
-  if (turFiltre === OgretimTuru.KPSS) {
-    return izinliTurler.some((t) => KPSS_TUM_TURLER.includes(t));
+  const filtreSet = new Set(ogretimTuruEsdegerleri(turFiltre));
+  const izinSet = new Set(ogretimTurleriniGenislet(izinliTurler));
+  for (const tur of filtreSet) {
+    if (izinSet.has(tur)) return true;
   }
-  return izinliTurler.includes(turFiltre);
+  return false;
 }
 
 function adNorm(ad: string): string {

@@ -4,3 +4,4 @@ deploy_package
 *.zip
 .env.local
 Arşiv.zip
+.vercel

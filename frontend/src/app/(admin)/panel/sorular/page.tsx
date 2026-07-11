@@ -8,7 +8,8 @@ import SoruZenginMetinEditoru from '@/components/admin/SoruZenginMetinEditoru';
 import SoruAiSohbet, { AiOneri } from '@/components/admin/SoruAiSohbet';
 import KonuSecici from '@/components/admin/KonuSecici';
 import { kpssOgretimTuruMu, kpssOgretimTuruEtiket } from '@/lib/grupOgretimTuru';
-import { ALAN_FILTRE_SECENEKLERI, alanFiltreApiParams, alanKonuEtiketi, type AlanTab } from '@/lib/alanFiltre';
+import { ALAN_FILTRE_SECENEKLERI, alanFiltreApiParams, alanKonuEtiketi, type AlanTab, getAlanFiltreSecenekleri } from '@/lib/alanFiltre';
+import { isKpssMode } from '@/lib/platform';
 import {
   Plus, 
   Trash2, 
@@ -218,6 +219,28 @@ export default function SorularSayfasi() {
       : null
   );
   const [alanTab, setAlanTab] = useState<AlanTab>('HEPSI');
+  const [filtreSecenekleri, setFiltreSecenekleri] = useState<typeof ALAN_FILTRE_SECENEKLERI>([]);
+
+  useEffect(() => {
+    setFiltreSecenekleri(getAlanFiltreSecenekleri());
+  }, []);
+
+  const [kopyalanacakSoruId, setKopyalanacakSoruId] = useState<string | null>(null);
+  const [topluKopyalaModalAcik, setTopluKopyalaModalAcik] = useState(false);
+  const [targetTytKonuId, setTargetTytKonuId] = useState('');
+  const [kpssModu, setKpssModu] = useState(false);
+
+  useEffect(() => {
+    setKpssModu(isKpssMode());
+  }, []);
+
+  const { data: yksKonularData } = useQuery({
+    queryKey: ['yks-konular-kopyalama', kopyalanacakSoruId, topluKopyalaModalAcik],
+    queryFn: () => api.get('/sorular/konular', { params: { ogretimTuru: 'YKS' } }),
+    enabled: !!kopyalanacakSoruId || topluKopyalaModalAcik,
+  });
+  const yksKonular = yksKonularData?.data?.veri || [];
+
   const [aramaMetni, setAramaMetni] = useState('');
   const [debouncedAramaMetni, setDebouncedAramaMetni] = useState('');
   const [secilenDers, setSecilenDers] = useState('');
@@ -551,7 +574,13 @@ export default function SorularSayfasi() {
 
   const onayMutation = useMutation({
     mutationFn: ({ id, onayDurumu }: { id: string; onayDurumu: string }) => adminApi.soruOnayGuncelle(id, { onayDurumu }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-sorular'] }),
+    onSuccess: (_veri, degiskenler) => {
+      qc.invalidateQueries({ queryKey: ['admin-sorular'] });
+      if (degiskenler?.onayDurumu === 'ONAYLANDI') {
+        toast.basarili('Soru onaylandı', 'Soru artık sınavlarda kullanılabilir.');
+      }
+    },
+    onError: () => toast.hata('Onay işlemi başarısız oldu.'),
   });
 
   const topluOnayMutation = useMutation({
@@ -624,6 +653,39 @@ export default function SorularSayfasi() {
   const soruSilMutation = useMutation({
     mutationFn: (id: string) => api.delete(`/sorular/${id}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-sorular'] }),
+  });
+
+  const tytKopyalaMutation = useMutation({
+    mutationFn: () => {
+      if (!kopyalanacakSoruId) throw new Error('Soru bulunamadı');
+      return adminApi.soruKopyalaTyt(kopyalanacakSoruId, { targetKonuId: targetTytKonuId });
+    },
+    onSuccess: () => {
+      toast.basarili('Soru başarıyla TYT havuzuna kopyalandı.');
+      setKopyalanacakSoruId(null);
+      setTargetTytKonuId('');
+      qc.invalidateQueries({ queryKey: ['admin-sorular'] });
+    },
+    onError: (err: any) => {
+      toast.hata(err?.response?.data?.mesaj || 'Soru kopyalanırken hata oluştu.');
+    },
+  });
+
+  const topluTytKopyalaMutation = useMutation({
+    mutationFn: () => {
+      if (secilenIds.length === 0) throw new Error('Seçilen soru bulunamadı');
+      return adminApi.soruTopluKopyalaTyt({ soruIds: secilenIds, targetKonuId: targetTytKonuId });
+    },
+    onSuccess: () => {
+      toast.basarili(`${secilenIds.length} soru başarıyla TYT havuzuna kopyalandı.`);
+      setTopluKopyalaModalAcik(false);
+      setTargetTytKonuId('');
+      setSecilenIds([]);
+      qc.invalidateQueries({ queryKey: ['admin-sorular'] });
+    },
+    onError: (err: any) => {
+      toast.hata(err?.response?.data?.mesaj || 'Sorular kopyalanırken hata oluştu.');
+    },
   });
 
   const dersler = Array.from(new Set(konular.map((k: any) => String(k.ders)))) as string[];
@@ -699,7 +761,7 @@ export default function SorularSayfasi() {
       <div className="p-4 rounded-2xl bg-amber-50 border border-amber-100 flex items-center gap-4 text-amber-800 shadow-sm">
          <Info className="w-5 h-5 shrink-0" />
          <p className="text-xs font-bold leading-relaxed">
-            <span className="opacity-70">Sistem Bilgisi:</span> Sınavlarda sadece <span className="underlineDecoration">Onaylandı</span> durumundaki sorular yer alır. AI ile üretilen sorular editör onayı bekler.
+            <span className="opacity-70">Sistem Bilgisi:</span> Sınavlarda sadece <span className="underlineDecoration">Onaylandı</span> durumundaki sorular yer alır. AI ile üretilen sorular soru bankasına eklenir; öğretmen onayından sonra sınavlarda kullanılabilir.
          </p>
       </div>
 
@@ -713,7 +775,7 @@ export default function SorularSayfasi() {
                </div>
                <div className="h-10 w-px bg-gray-100 hidden lg:block" />
                <div className="flex flex-wrap bg-white border border-gray-100 shadow-sm p-1 rounded-2xl gap-0.5 max-w-full">
-                  {ALAN_FILTRE_SECENEKLERI.map((k) => (
+                  {filtreSecenekleri.map((k) => (
                     <button
                       key={k.id}
                       type="button"
@@ -849,29 +911,40 @@ export default function SorularSayfasi() {
          {/* Selection Sidebar (Bulk Actions) */}
          <AnimatePresence>
             {secilenIds.length > 0 && (
-              <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 20, opacity: 0 }} className="p-4 rounded-3xl bg-indigo-600 text-white shadow-2xl flex flex-wrap items-center justify-between gap-6 overflow-visible relative z-40">
-                 <div className="flex items-center gap-6 relative z-10">
+              <motion.div 
+                initial={{ y: 20, opacity: 0 }} 
+                animate={{ y: 0, opacity: 1 }} 
+                exit={{ y: 20, opacity: 0 }} 
+                className="p-5 rounded-3xl bg-indigo-600 text-white shadow-2xl flex flex-col gap-4 overflow-visible relative z-40"
+              >
+                 {/* Top Bar: Info and Cancel Selection */}
+                 <div className="flex items-center justify-between border-b border-white/10 pb-3">
                     <div className="flex items-center gap-3">
                        <CheckCircle2 className="w-5 h-5 text-indigo-200" />
                        <span className="text-sm font-bold tracking-tight">{secilenIds.length} Soru Seçildi</span>
                     </div>
-                    <div className="h-8 w-px bg-white/20" />
-                    <div className="relative flex items-center gap-2 z-50">
-                      <span className="text-[10px] uppercase font-bold text-indigo-200">Uygun Gruplar:</span>
+                    <button onClick={() => setSecilenIds([])} className="text-xs font-black uppercase tracking-wider text-indigo-200 hover:text-white transition-all">Seçimi İptal Et</button>
+                 </div>
+
+                 {/* Bottom Bar: Action Items (Wrapped) */}
+                 <div className="flex flex-wrap items-center gap-4 relative z-10">
+                    {/* Uygun Gruplar */}
+                    <div className="relative flex items-center gap-2">
+                      <span className="text-[10px] uppercase font-bold text-indigo-200 shrink-0">Uygun Gruplar:</span>
                       <button
                         type="button"
                         onClick={() => setTopluUygunGrupAcik((v) => !v)}
-                        className="bg-white/10 border border-white/20 rounded-xl px-4 py-2 text-xs font-bold outline-none focus:bg-white/20 flex items-center gap-2 min-w-[160px] justify-between"
+                        className="bg-white/10 border border-white/20 rounded-xl px-3 py-2 text-xs font-bold outline-none focus:bg-white/20 flex items-center gap-2 min-w-[140px] justify-between"
                       >
                         <span className="truncate">
                           {topluUygunGrupIds.length > 0
-                            ? `${topluUygunGrupIds.length} grup seçili`
+                            ? `${topluUygunGrupIds.length} grup`
                             : 'Grup seçin...'}
                         </span>
                         <ChevronDown className={`w-3.5 h-3.5 transition-transform ${topluUygunGrupAcik ? 'rotate-180' : ''}`} />
                       </button>
                       {topluUygunGrupAcik ? (
-                        <div className="absolute left-0 bottom-full mb-2 z-[200] w-[300px] max-h-[320px] overflow-y-auto rounded-2xl bg-white text-gray-900 shadow-2xl border border-gray-100 p-3">
+                        <div className="absolute left-0 bottom-full mb-2 z-[200] w-[260px] max-h-[260px] overflow-y-auto rounded-2xl bg-white text-gray-900 shadow-2xl border border-gray-100 p-3">
                           <UygunGrupCheckboxleri
                             gruplar={gruplar}
                             seciliIds={topluUygunGrupIds}
@@ -885,20 +958,19 @@ export default function SorularSayfasi() {
                         type="button"
                         disabled={topluUygunGrupMutation.isPending}
                         onClick={() => topluUygunGrupMutation.mutate()}
-                        className="px-4 py-2 rounded-xl bg-white text-indigo-600 text-xs font-bold shadow-xl hover:bg-gray-50 flex items-center gap-2 disabled:opacity-50"
+                        className="px-3 py-2 rounded-xl bg-white text-indigo-600 text-xs font-bold shadow-xl hover:bg-gray-50 flex items-center gap-1.5 disabled:opacity-50"
                       >
-                        {topluUygunGrupMutation.isPending ? (
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        ) : (
-                          <Tag className="w-3.5 h-3.5" />
-                        )}
+                        {topluUygunGrupMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Tag className="w-3.5 h-3.5" />}
                         Etiketle
                       </button>
                     </div>
-                    <div className="h-8 w-px bg-white/20" />
-                    <div className="flex items-center gap-3">
-                       <span className="text-[10px] uppercase font-bold text-indigo-200">Taşı/Ata:</span>
-                       <select value={toplukGrupId} onChange={(e) => setToplukGrupId(e.target.value)} className="bg-white/10 border border-white/20 rounded-xl px-4 py-2 text-xs font-bold outline-none focus:bg-white/20">
+
+                    <div className="h-6 w-px bg-white/20" />
+
+                    {/* Taşı / Ata */}
+                    <div className="flex items-center gap-2">
+                       <span className="text-[10px] uppercase font-bold text-indigo-200 shrink-0">Taşı/Ata:</span>
+                       <select value={toplukGrupId} onChange={(e) => setToplukGrupId(e.target.value)} className="bg-white/10 border border-white/20 rounded-xl px-3 py-2 text-xs font-bold outline-none focus:bg-white/20">
                           <option value="">Grup Seçin...</option>
                           {gruplar.map((g: any) => <option key={g.id} value={g.id} className="text-gray-900">{g.ad}</option>)}
                        </select>
@@ -906,32 +978,46 @@ export default function SorularSayfasi() {
                          type="button"
                          disabled={!toplukGrupId || secilenIds.length === 0 || topluGrubaAtaMutation.isPending}
                          onClick={() => topluGrubaAtaMutation.mutate()}
-                         className="px-5 py-2 rounded-xl bg-white text-indigo-600 text-xs font-bold shadow-xl hover:bg-gray-50 flex items-center gap-2 disabled:opacity-50"
+                         className="px-4 py-2 rounded-xl bg-white text-indigo-600 text-xs font-bold shadow-xl hover:bg-gray-50 flex items-center gap-1.5 disabled:opacity-50"
                        >
-                         {topluGrubaAtaMutation.isPending ? (
-                           <Loader2 className="w-4 h-4 animate-spin" />
-                         ) : (
-                           <Users className="w-4 h-4" />
-                         )}
-                         Transfer Et
+                         {topluGrubaAtaMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Users className="w-4 h-4" />}
+                         Ata
                        </button>
                     </div>
-                    <div className="h-8 w-px bg-white/20" />
+
+                    <div className="h-6 w-px bg-white/20" />
+
+                    {/* Toplu Onayla */}
                     <button 
                        onClick={() => topluOnayMutation.mutate('ONAYLANDI')}
                        disabled={topluOnayMutation.isPending}
-                       className="px-5 py-2 rounded-xl bg-emerald-500 text-white text-xs font-bold shadow-xl hover:bg-emerald-600 flex items-center gap-2 disabled:opacity-50 transition-all active:scale-95"
+                       className="px-4 py-2 rounded-xl bg-emerald-500 text-white text-xs font-bold shadow-xl hover:bg-emerald-600 flex items-center gap-1.5 disabled:opacity-50 transition-all active:scale-95"
                     >
                        {topluOnayMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-                       Toplu Onayla
+                       Onayla
                     </button>
-                    <div className="h-8 w-px bg-white/20" />
+
+                    {/* TYT'ye Gönder (Sadece KPSS modunda) */}
+                    {kpssModu && (
+                      <button 
+                         onClick={() => setTopluKopyalaModalAcik(true)}
+                         disabled={topluTytKopyalaMutation.isPending}
+                         className="px-4 py-2 rounded-xl bg-[#2ABBA7] text-white text-xs font-bold shadow-xl hover:bg-[#1fa897] flex items-center gap-1.5 disabled:opacity-50 transition-all active:scale-95"
+                      >
+                         {topluTytKopyalaMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-4 h-4" />}
+                         TYT'ye Gönder
+                      </button>
+                    )}
+
+                    <div className="h-6 w-px bg-white/20" />
+
+                    {/* Kazanım Ata */}
                     <div className="flex items-center gap-2">
                       <input
                         value={topluKazanim}
                         onChange={(e) => setTopluKazanim(e.target.value)}
-                        placeholder="Kazanım metni (toplu)..."
-                        className="w-[320px] bg-white/10 border border-white/20 rounded-xl px-4 py-2 text-xs font-bold outline-none focus:bg-white/20 placeholder:text-indigo-200/70"
+                        placeholder="Kazanım metni..."
+                        className="w-[200px] bg-white/10 border border-white/20 rounded-xl px-3 py-2 text-xs font-bold outline-none focus:bg-white/20 placeholder:text-indigo-200/70"
                       />
                       <button
                         onClick={() => {
@@ -940,13 +1026,17 @@ export default function SorularSayfasi() {
                           topluKazanimMutation.mutate(k);
                         }}
                         disabled={topluKazanimMutation.isPending}
-                        className="px-5 py-2 rounded-xl bg-white text-indigo-600 text-xs font-bold shadow-xl hover:bg-gray-50 flex items-center gap-2 disabled:opacity-50 transition-all active:scale-95"
-                        title="Seçili soruların kazanımını güncelle"
+                        className="px-4 py-2 rounded-xl bg-white text-indigo-600 text-xs font-bold shadow-xl hover:bg-gray-50 flex items-center gap-1.5 disabled:opacity-50 transition-all active:scale-95"
+                        title="Kazanım Güncelle"
                       >
                         {topluKazanimMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Tag className="w-4 h-4" />}
-                        Kazanım Ata
+                        Kazanım
                       </button>
                     </div>
+
+                    <div className="h-6 w-px bg-white/20" />
+
+                    {/* Silme */}
                     <button 
                        onClick={async () => {
                          if (await confirmAsk({ title: 'Toplu Sil', message: `${secilenIds.length} soruyu silmek istediğinize emin misiniz?`, variant: 'destructive' })) {
@@ -954,14 +1044,12 @@ export default function SorularSayfasi() {
                          }
                        }}
                        disabled={topluSilMutation.isPending}
-                       className="px-5 py-2 rounded-xl bg-rose-500 text-white text-xs font-bold shadow-xl hover:bg-rose-600 flex items-center gap-2 disabled:opacity-50 transition-all active:scale-95"
+                       className="px-4 py-2 rounded-xl bg-rose-500 text-white text-xs font-bold shadow-xl hover:bg-rose-600 flex items-center gap-1.5 disabled:opacity-50 transition-all active:scale-95 ml-auto"
                     >
                        {topluSilMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-                       Seçilenleri Sil
+                       Sil
                     </button>
                  </div>
-                 <button onClick={() => setSecilenIds([])} className="text-xs font-bold text-indigo-200 hover:text-white relative z-10">Seçimi İptal Et</button>
-                 <div className="absolute right-0 top-0 bottom-0 w-1/3 bg-gradient-to-l from-white/10 to-transparent pointer-events-none" />
               </motion.div>
             )}
          </AnimatePresence>
@@ -1138,13 +1226,24 @@ export default function SorularSayfasi() {
                        </td>
                        <td className="p-6">
                           <div className="flex items-center justify-center gap-2">
-                             {islemAcik ? (
-                               <>
-                             <button
-                               type="button"
-                               title="Soruyu düzenle"
-                               onClick={() => {
-                               const parsed = parseMetinParcalari(soru.metinHtml);
+                            {islemAcik ? (
+                              <>
+                            {(soru.onayDurumu || 'ONAYLANDI') !== 'ONAYLANDI' && (
+                              <button
+                                type="button"
+                                title="Soruyu onayla"
+                                disabled={onayMutation.isPending}
+                                onClick={() => onayMutation.mutate({ id: soru.id, onayDurumu: 'ONAYLANDI' })}
+                                className="p-2 rounded-xl bg-emerald-50 border border-emerald-100 text-emerald-600 hover:bg-emerald-100 hover:border-emerald-200 shadow-sm transition-all disabled:opacity-50"
+                              >
+                                <CheckCircle2 className="w-4 h-4" />
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              title="Soruyu düzenle"
+                              onClick={() => {
+                              const parsed = parseMetinParcalari(soru.metinHtml);
                                const cozumAlan =
                                  parsed.cozumHtml || cozumDuzMetinAiMetadan(soru.aiMeta);
                                setForm({
@@ -1182,6 +1281,9 @@ export default function SorularSayfasi() {
                                setDuzenlenenSoruId(soru.id);
                                setYeniSoruForm(true);
                              }} className="p-2 rounded-xl bg-white border border-gray-100 text-gray-500 hover:text-amber-600 hover:border-amber-200 shadow-sm transition-all"><MoreVertical className="w-4 h-4" /></button>
+                             {kpssModu && (
+                               <button type="button" onClick={() => setKopyalanacakSoruId(soru.id)} className="p-2 rounded-xl bg-white border border-gray-100 text-gray-400 hover:text-teal-600 hover:border-teal-100 shadow-sm transition-all" title="TYT'ye Gönder"><Upload className="w-4 h-4" /></button>
+                             )}
                              <button type="button" onClick={() => setAcikSoruId(acikSoruId === soru.id ? null : soru.id)} className="p-2 rounded-xl bg-white border border-gray-100 text-gray-400 hover:text-indigo-600 hover:border-indigo-100 shadow-sm transition-all" title="Önizle"><BarChart3 className="w-4 h-4" /></button>
                              <button type="button" onClick={async () => {
                                 if (await confirmAsk({ title: 'Soru Sil', message: 'Bu soruyu silmek istediğinize emin misiniz?' })) {
@@ -1330,6 +1432,17 @@ export default function SorularSayfasi() {
                                   <div className="text-center">
                                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Onay Durumu</p>
                                      <StatusBadge status={soru.onayDurumu || 'ONAYLANDI'} guncellendi={soruManuelGuncellendi(soru)} />
+                                     {(soru.onayDurumu || 'ONAYLANDI') !== 'ONAYLANDI' &&
+                                       soruIslemYapilabilir(soru, Boolean(ogretmenKisit), kullaniciId) && (
+                                       <button
+                                         type="button"
+                                         disabled={onayMutation.isPending}
+                                         onClick={() => onayMutation.mutate({ id: soru.id, onayDurumu: 'ONAYLANDI' })}
+                                         className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500 text-white text-[11px] font-bold hover:bg-emerald-600 shadow-sm transition-all disabled:opacity-50"
+                                       >
+                                         <CheckCircle2 className="w-3.5 h-3.5" /> Onayla
+                                       </button>
+                                     )}
                                   </div>
                                   {duzenleyen && !ogretmenKisit && (
                                     <>
@@ -1807,6 +1920,112 @@ export default function SorularSayfasi() {
                      >
                         {topluIthalMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
                         Sisteme Aktar ({importedQuestions.length} Soru)
+                     </button>
+                  </div>
+              </motion.div>
+           </motion.div>
+         )}
+      </AnimatePresence>
+
+      {/* KPSS'den TYT'ye Soru Kopyalama Modalı */}
+      <AnimatePresence>
+         {kopyalanacakSoruId && (
+           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto">
+              <motion.div initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 20 }} className="w-full max-w-lg bg-white rounded-3xl shadow-2xl relative my-8 flex flex-col overflow-hidden">
+                  {/* Header */}
+                  <div className="p-6 border-b border-gray-100 flex items-center justify-between shrink-0 bg-gray-50/50">
+                     <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shadow-lg"><Upload className="w-5 h-5" /></div>
+                        <div>
+                           <h3 className="text-lg font-bold text-gray-900">TYT Havuzuna Gönder</h3>
+                           <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mt-0.5">KPSS Sorusu Kopyalama</p>
+                        </div>
+                     </div>
+                     <button onClick={() => { setKopyalanacakSoruId(null); setTargetTytKonuId(''); }} className="w-9 h-9 rounded-full bg-white border border-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-900 shadow-sm transition-all">✕</button>
+                  </div>
+
+                  {/* Body */}
+                  <div className="p-6 space-y-4">
+                     <div className="space-y-2">
+                        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Hedef YKS/TYT Konusu</label>
+                        <select
+                          value={targetTytKonuId}
+                          onChange={(e) => setTargetTytKonuId(e.target.value)}
+                          className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-medium text-sm"
+                        >
+                          <option value="">-- Lütfen bir konu seçin --</option>
+                          {yksKonular.map((k: any) => (
+                            <option key={k.id} value={k.id}>
+                              [{k.ders}] {k.ad} {k.uniteAdi ? `(${k.uniteAdi})` : ''}
+                            </option>
+                          ))}
+                        </select>
+                     </div>
+                  </div>
+
+                  {/* Footer */}
+                  <div className="p-6 border-t border-gray-100 bg-gray-50/30 flex items-center justify-end gap-3 shrink-0">
+                     <button onClick={() => { setKopyalanacakSoruId(null); setTargetTytKonuId(''); }} className="px-6 py-3 rounded-2xl font-bold text-xs uppercase tracking-widest text-gray-400 hover:text-gray-900 transition">İptal</button>
+                     <button
+                       onClick={() => tytKopyalaMutation.mutate()}
+                       disabled={tytKopyalaMutation.isPending || !targetTytKonuId}
+                       className="px-8 py-3.5 rounded-2xl bg-[#2ABBA7] text-white font-bold text-xs uppercase tracking-widest hover:bg-[#1fa897] shadow-xl shadow-teal-100 active:scale-95 transition flex items-center gap-2 disabled:opacity-50"
+                     >
+                        {tytKopyalaMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                        TYT'ye Gönder
+                     </button>
+                  </div>
+              </motion.div>
+           </motion.div>
+         )}
+      </AnimatePresence>
+
+      {/* KPSS'den TYT'ye Toplu Soru Kopyalama Modalı */}
+      <AnimatePresence>
+         {topluKopyalaModalAcik && (
+           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto">
+              <motion.div initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 20 }} className="w-full max-w-lg bg-white rounded-3xl shadow-2xl relative my-8 flex flex-col overflow-hidden">
+                  {/* Header */}
+                  <div className="p-6 border-b border-gray-100 flex items-center justify-between shrink-0 bg-gray-50/50">
+                     <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shadow-lg"><Upload className="w-5 h-5" /></div>
+                        <div>
+                           <h3 className="text-lg font-bold text-gray-900">Seçilenleri TYT Havuzuna Gönder</h3>
+                           <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mt-0.5">{secilenIds.length} Soru Kopyalanacak</p>
+                        </div>
+                     </div>
+                     <button onClick={() => { setTopluKopyalaModalAcik(false); setTargetTytKonuId(''); }} className="w-9 h-9 rounded-full bg-white border border-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-900 shadow-sm transition-all">✕</button>
+                  </div>
+
+                  {/* Body */}
+                  <div className="p-6 space-y-4">
+                     <div className="space-y-2">
+                        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Hedef YKS/TYT Konusu</label>
+                        <select
+                          value={targetTytKonuId}
+                          onChange={(e) => setTargetTytKonuId(e.target.value)}
+                          className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-medium text-sm"
+                        >
+                          <option value="">-- Lütfen bir konu seçin --</option>
+                          {yksKonular.map((k: any) => (
+                            <option key={k.id} value={k.id}>
+                              [{k.ders}] {k.ad} {k.uniteAdi ? `(${k.uniteAdi})` : ''}
+                            </option>
+                          ))}
+                        </select>
+                     </div>
+                  </div>
+
+                  {/* Footer */}
+                  <div className="p-6 border-t border-gray-100 bg-gray-50/30 flex items-center justify-end gap-3 shrink-0">
+                     <button onClick={() => { setTopluKopyalaModalAcik(false); setTargetTytKonuId(''); }} className="px-6 py-3 rounded-2xl font-bold text-xs uppercase tracking-widest text-gray-400 hover:text-gray-900 transition">İptal</button>
+                     <button
+                       onClick={() => topluTytKopyalaMutation.mutate()}
+                       disabled={topluTytKopyalaMutation.isPending || !targetTytKonuId}
+                       className="px-8 py-3.5 rounded-2xl bg-[#2ABBA7] text-white font-bold text-xs uppercase tracking-widest hover:bg-[#1fa897] shadow-xl shadow-teal-100 active:scale-95 transition flex items-center gap-2 disabled:opacity-50"
+                     >
+                        {topluTytKopyalaMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                        Kopyala ve Gönder
                      </button>
                   </div>
               </motion.div>

@@ -2,11 +2,16 @@
 
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { motion } from 'framer-motion';
-import { ArrowRight, Check, Loader2, Sparkles, Star, Zap } from 'lucide-react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useRouter } from 'next/navigation';
+import { Loader2, Sparkles, Star } from 'lucide-react';
 import { api, paketApi } from '@/lib/api';
 import { MarketingShell } from '@/components/layout/MarketingShell';
+import { PaketSatisKarti, type PaketSatisVeri } from '@/components/landing/PaketSatisKarti';
+import { kpssOrtami } from '@/lib/platform';
+import { useAuthStore } from '@/store/auth.store';
+import { toast } from '@/store/toast.store';
+import { erisimSonrasiYenile } from '@/lib/erisimYenile';
 import {
   kategoriHaritasi,
   paketKategoriFromPaket,
@@ -14,20 +19,18 @@ import {
   type PaketKategoriKayit,
 } from '@/lib/paketKategori';
 
-interface Paket {
-  id: string;
-  ad: string;
-  aciklama: string | null;
-  kategori?: string;
-  fiyat: number;
-  indirimliFiyat: number | null;
-  sinavSayisi: number;
-  ozellikler: string[];
-  populer: boolean;
-}
+interface Paket extends PaketSatisVeri {}
+
+const paketEfektifFiyat = (p: Paket) =>
+  p.indirimliFiyat != null && p.indirimliFiyat > 0 ? p.indirimliFiyat : p.fiyat;
 
 export default function PaketlerSayfasi() {
   const [kategoriFiltre, setKategoriFiltre] = useState<string | 'TUMU'>('TUMU');
+  const [alinanPaketId, setAlinanPaketId] = useState<string | null>(null);
+  const token = useAuthStore((s) => s.token);
+  const kullanici = useAuthStore((s) => s.kullanici);
+  const router = useRouter();
+  const queryClient = useQueryClient();
 
   const { data, isLoading } = useQuery({
     queryKey: ['landing-aktif-paketler'],
@@ -35,13 +38,53 @@ export default function PaketlerSayfasi() {
     staleTime: 5 * 60 * 1000,
   });
 
+  const ucretsizAlMutation = useMutation({
+    mutationFn: (paketId: string) => paketApi.satinAl({ paketId, odemeYontemi: 'KREDI_KARTI' }),
+    onSuccess: (response) => {
+      const veri = response.data?.veri;
+      if (veri?.ucretsiz) {
+        queryClient.invalidateQueries({ queryKey: ['landing-aktif-paketler'] });
+        erisimSonrasiYenile(queryClient);
+        toast.basarili('Ücretsiz paket hesabınıza tanımlandı. Denemelere hemen erişebilirsiniz.');
+        router.push('/sinavlar');
+        return;
+      }
+      toast.basarili('Siparişiniz oluşturuldu.');
+    },
+    onError: (err: unknown) => {
+      const mesaj =
+        (err as { response?: { data?: { mesaj?: string } } })?.response?.data?.mesaj ||
+        'Paket alınamadı';
+      toast.hata(String(mesaj));
+    },
+    onSettled: () => setAlinanPaketId(null),
+  });
+
+  const ucretsizAl = (paketId: string) => {
+    if (!token) {
+      router.push('/giris');
+      return;
+    }
+    setAlinanPaketId(paketId);
+    ucretsizAlMutation.mutate(paketId);
+  };
+
   const { data: kategorilerData } = useQuery({
     queryKey: ['landing-paket-kategorileri'],
     queryFn: () => paketApi.kategoriler(),
     staleTime: 5 * 60 * 1000,
   });
 
-  const paketler: Paket[] = data?.data?.veri || [];
+  const hamPaketler: Paket[] = data?.data?.veri || [];
+  
+  const paketler = useMemo(() => {
+    const isKpss = kpssOrtami(kullanici?.ogretimTuru);
+    return hamPaketler.filter((p) => {
+      const pKpss = (p.kategori && p.kategori.toUpperCase().includes('KPSS')) || p.ad.toUpperCase().includes('KPSS');
+      return isKpss ? pKpss : !pKpss;
+    });
+  }, [hamPaketler, kullanici?.ogretimTuru]);
+
   const kategoriler: PaketKategoriKayit[] = kategorilerData?.data?.veri || [];
   const kategoriHarita = useMemo(() => kategoriHaritasi(kategoriler), [kategoriler]);
 
@@ -136,82 +179,20 @@ export default function PaketlerSayfasi() {
               <p className="text-slate-400 text-sm mt-2">Yakında yeni paketler eklenecek.</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5 lg:gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6 lg:gap-7 items-stretch pt-2">
               {siraliPaketler.map((paket, i) => {
                 const katInfo = paketKategoriFromPaket(paket, kategoriHarita);
+                const ucretsiz = paketEfektifFiyat(paket) <= 0;
                 return (
-                  <motion.div
+                  <PaketSatisKarti
                     key={paket.id}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: i * 0.05, duration: 0.4 }}
-                    className={`relative h-full flex flex-col rounded-2xl border p-7 overflow-hidden ${
-                      paket.populer
-                        ? 'bg-gradient-to-b from-[#0F2137] via-[#132844] to-[#0F2137] border-[#2ABBA7]/30'
-                        : 'bg-slate-900/50 border-white/[0.07]'
-                    }`}
-                  >
-                    {paket.populer && (
-                      <div className="absolute top-0 right-6">
-                        <span className="inline-flex items-center gap-1 px-3.5 py-1.5 rounded-b-xl bg-gradient-to-r from-[#2ABBA7] to-[#1fa897] text-white text-[10px] font-black">
-                          <Star className="w-3 h-3 fill-current" /> Popüler
-                        </span>
-                      </div>
-                    )}
-                    <span
-                      className={`inline-block mb-2 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border ${katInfo.renk}`}
-                    >
-                      {katInfo.ad}
-                    </span>
-                    <h2 className="text-lg font-black text-white mb-2">{paket.ad}</h2>
-                    {paket.aciklama && (
-                      <p className="text-xs text-slate-400 line-clamp-2 mb-4">{paket.aciklama}</p>
-                    )}
-                    <div className="mb-5 pb-5 border-b border-dashed border-white/[0.06]">
-                      <div className="flex items-baseline gap-2">
-                        <span className="text-3xl font-black text-white">
-                          {(paket.indirimliFiyat ?? paket.fiyat).toLocaleString('tr-TR')} ₺
-                        </span>
-                        {paket.indirimliFiyat && (
-                          <span className="text-xs line-through text-slate-500">
-                            {paket.fiyat.toLocaleString('tr-TR')} ₺
-                          </span>
-                        )}
-                      </div>
-                      <div className="mt-2 flex items-center gap-1.5 text-xs font-bold text-[#2ABBA7]">
-                        <Zap className="w-3.5 h-3.5" />
-                        {paket.sinavSayisi === 0
-                          ? 'Sınırsız sınav'
-                          : `${paket.sinavSayisi} sınav hakkı`}
-                      </div>
-                    </div>
-                    <ul className="space-y-2 mb-6 flex-1">
-                      {(Array.isArray(paket.ozellikler) ? paket.ozellikler : [])
-                        .slice(0, 4)
-                        .map((oz, idx) => (
-                          <li key={idx} className="grid grid-cols-[0.875rem_1fr] gap-x-2.5 items-start text-xs text-slate-300">
-                            <Check className="w-3.5 h-3.5 text-[#2ABBA7] shrink-0 mt-0.5" />
-                            <span className="text-justify leading-relaxed hyphens-auto [text-align-last:left]">
-                              {oz}
-                            </span>
-                          </li>
-                        ))}
-                    </ul>
-                    <div className="grid grid-cols-2 gap-3 mt-auto">
-                      <Link
-                        href={`/paket/${encodeURIComponent(paket.id)}`}
-                        className="inline-flex items-center justify-center rounded-xl py-3 font-black text-xs bg-[#2ABBA7] text-white hover:bg-[#1fa897] transition-colors"
-                      >
-                        Denemeleri seç
-                      </Link>
-                      <Link
-                        href={`/paket/${encodeURIComponent(paket.id)}`}
-                        className="inline-flex items-center justify-center gap-1 rounded-xl py-3 font-bold text-xs border border-white/10 text-slate-300 hover:text-white hover:border-white/20 transition-colors"
-                      >
-                        Detay <ArrowRight className="w-3 h-3" />
-                      </Link>
-                    </div>
-                  </motion.div>
+                    paket={paket}
+                    kategoriAd={katInfo.ad}
+                    kategoriSlug={katInfo.slug}
+                    index={i}
+                    ucretsizYukleniyor={alinanPaketId === paket.id}
+                    onUcretsizAl={ucretsiz ? () => ucretsizAl(paket.id) : undefined}
+                  />
                 );
               })}
             </div>

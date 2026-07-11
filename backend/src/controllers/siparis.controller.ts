@@ -4,6 +4,17 @@ import { prisma } from '../config/database';
 import type { AuthRequest } from '../middlewares/auth.middleware';
 import { bildirimGonder } from '../services/bildirim.service';
 import { satinAlimPaketHaklariniUygula } from '../services/paket-erisim.service';
+import { iyzicoService } from '../services/iyzico.service';
+import { publicApiBaseUrl } from '../utils/apiBaseUrl';
+import {
+  iyzicoAdresBilgileri,
+  iyzicoAnaSiparisIdFromNot,
+  iyzicoBekleyenGrupSiparisleri,
+  iyzicoCokluSepetOlustur,
+  iyzicoGrupEtiketi,
+  iyzicoTutarStr,
+} from '../utils/iyzicoOdemeYardimci';
+import { logger } from '../utils/logger';
 
 const DURUMLAR: OdemeDurumu[] = ['BEKLEMEDE', 'TAMAMLANDI', 'IPTAL_EDILDI', 'IADE_EDILDI', 'HATA'] as any;
 
@@ -307,6 +318,188 @@ export async function siparisManuelOlusturController(req: AuthRequest, res: Resp
     });
 
     res.status(201).json({ basarili: true, veri: olusturulan });
+  } catch (err) {
+    next(err);
+  }
+}
+
+const ogrenciSiparisInclude = {
+  paket: { select: { id: true, ad: true, sinavSayisi: true } },
+  sinav: { select: { id: true, baslik: true, tur: true } },
+};
+
+/** Giriş yapmış öğrencinin kendi siparişleri */
+export async function ogrenciSiparislerController(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const uid = req.kullanici?.id;
+    if (!uid) {
+      res.status(401).json({ basarili: false, mesaj: 'Oturum gerekli' });
+      return;
+    }
+
+    const sayfa = Math.max(1, parseInt(String(req.query.sayfa || '1'), 10) || 1);
+    const sayfaBoyutu = Math.min(50, Math.max(5, parseInt(String(req.query.boyut || '20'), 10) || 20));
+    const atla = (sayfa - 1) * sayfaBoyutu;
+    const durumFiltre = parseDurum(req.query.durum);
+
+    const where: Prisma.SatinAlimWhereInput = { kullaniciId: uid };
+    if (durumFiltre) where.durum = durumFiltre;
+
+    const [kayitlar, toplam] = await Promise.all([
+      prisma.satinAlim.findMany({
+        where,
+        skip: atla,
+        take: sayfaBoyutu,
+        orderBy: { olusturuldu: 'desc' },
+        include: ogrenciSiparisInclude,
+      }),
+      prisma.satinAlim.count({ where }),
+    ]);
+
+    res.json({
+      basarili: true,
+      veri: kayitlar,
+      meta: { sayfa, sayfaBoyutu, toplam, toplamSayfa: Math.ceil(toplam / sayfaBoyutu) || 1 },
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/** Bekleyen sipariş için iyzico ödeme formunu yeniden başlatır */
+export async function ogrenciSiparisOdemeBaslatController(
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const uid = req.kullanici?.id;
+    if (!uid) {
+      res.status(401).json({ basarili: false, mesaj: 'Oturum gerekli' });
+      return;
+    }
+
+    const { id } = req.params;
+    const siparis = await prisma.satinAlim.findFirst({
+      where: { id, kullaniciId: uid, durum: 'BEKLEMEDE' },
+      include: { paket: true, sinav: true },
+    });
+
+    if (!siparis) {
+      res.status(404).json({ basarili: false, mesaj: 'Bekleyen sipariş bulunamadı' });
+      return;
+    }
+
+    if ((siparis.miktar || 0) <= 0) {
+      res.status(400).json({ basarili: false, mesaj: 'Bu sipariş için ödeme gerekmez' });
+      return;
+    }
+
+    const anaSiparisId = iyzicoAnaSiparisIdFromNot(siparis.notlar, siparis.id);
+    const grupSiparisler = (await iyzicoBekleyenGrupSiparisleri(anaSiparisId)).filter(
+      (s) => s.kullaniciId === uid
+    );
+
+    if (grupSiparisler.length === 0) {
+      res.status(404).json({ basarili: false, mesaj: 'Ödenecek sipariş bulunamadı' });
+      return;
+    }
+
+    const kullanici = await prisma.kullanici.findUnique({
+      where: { id: uid },
+      include: { ogrenciProfil: true },
+    });
+    if (!kullanici) {
+      res.status(404).json({ basarili: false, mesaj: 'Kullanıcı bulunamadı' });
+      return;
+    }
+
+    const adres = iyzicoAdresBilgileri(uid, kullanici, req);
+    const anaSiparis = grupSiparisler.find((s) => s.id === anaSiparisId) ?? grupSiparisler[0];
+    const odenecek = grupSiparisler.filter((s) => (s.miktar || 0) > 0);
+
+    if (odenecek.length === 0) {
+      res.status(400).json({ basarili: false, mesaj: 'Ödenecek tutar bulunamadı' });
+      return;
+    }
+
+    let iyzicoYanit;
+    if (odenecek.length > 1) {
+      const sepet = iyzicoCokluSepetOlustur(
+        odenecek.map((s) => ({
+          id: s.sinavId || s.paketId || s.id,
+          name: s.sinav?.baslik || s.paket?.ad || 'Sipariş',
+          tutar: s.miktar || 0,
+        }))
+      );
+      iyzicoYanit = await iyzicoService.checkoutFormInitialize({
+        conversationId: anaSiparis.id,
+        price: sepet.price,
+        paidPrice: sepet.paidPrice,
+        basketId: anaSiparis.id,
+        paymentGroup: 'PRODUCT',
+        callbackUrl: `${publicApiBaseUrl()}/paketler/iyzico/callback`,
+        ...adres,
+        basketItems: sepet.basketItems,
+      });
+    } else {
+      const s = odenecek[0];
+      const tutar = s.miktar || 0;
+      iyzicoYanit = await iyzicoService.checkoutFormInitialize({
+        conversationId: s.id,
+        price: iyzicoTutarStr(tutar),
+        paidPrice: iyzicoTutarStr(tutar),
+        basketId: s.id,
+        paymentGroup: 'PRODUCT',
+        callbackUrl: `${publicApiBaseUrl()}/paketler/iyzico/callback`,
+        ...adres,
+        basketItems: [
+          {
+            id: s.sinavId || s.paketId || s.id,
+            name: s.sinav?.baslik || s.paket?.ad || 'Sipariş',
+            category1: 'Eğitim',
+            itemType: 'VIRTUAL',
+            price: iyzicoTutarStr(tutar),
+          },
+        ],
+      });
+    }
+
+    if (iyzicoYanit.status !== 'success') {
+      logger.error('Bekleyen sipariş iyzico hatası:', iyzicoYanit.errorMessage);
+      res.status(400).json({ basarili: false, mesaj: iyzicoYanit.errorMessage || 'Ödeme başlatılamadı' });
+      return;
+    }
+
+    const grupEtiketi = iyzicoGrupEtiketi(anaSiparis.id);
+    await Promise.all(
+      odenecek.map((s) => {
+        const mevcutNot = s.notlar?.trim() || '';
+        const notlar =
+          odenecek.length > 1
+            ? mevcutNot.includes(grupEtiketi)
+              ? mevcutNot
+              : mevcutNot
+                ? `${mevcutNot} | ${grupEtiketi}`
+                : grupEtiketi
+            : mevcutNot || null;
+        return prisma.satinAlim.update({
+          where: { id: s.id },
+          data: { odemeMetodu: 'KREDI_KARTI', ...(notlar != null ? { notlar } : {}) },
+        });
+      })
+    );
+
+    res.json({
+      basarili: true,
+      veri: {
+        checkoutFormContent: iyzicoYanit.checkoutFormContent,
+        paymentPageUrl: iyzicoYanit.paymentPageUrl,
+        token: iyzicoYanit.token,
+        siparisId: anaSiparis.id,
+        adet: odenecek.length,
+      },
+    });
   } catch (err) {
     next(err);
   }

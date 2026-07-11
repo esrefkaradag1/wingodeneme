@@ -3,6 +3,31 @@ import { prisma } from '../config/database';
 import type { AuthRequest } from '../middlewares/auth.middleware';
 import { iyzipay } from '../utils/iyzipay';
 import { satinAlimPaketHaklariniUygula } from '../services/paket-erisim.service';
+import { publicApiBaseUrl } from '../utils/apiBaseUrl';
+import { frontendBaseUrl, kpssFrontendBaseUrl } from '../utils/frontendBaseUrl';
+import { paketKpssMi } from '../utils/paketPlatformFiltre';
+
+/** Satın alım içeriğinden ödeme sonucu için doğru frontend adresini çözer */
+async function satinAlimFrontendUrl(satinAlimId: string): Promise<string> {
+  try {
+    const kayit = await prisma.satinAlim.findUnique({
+      where: { id: satinAlimId },
+      select: {
+        paket: { select: { ad: true, kategori: true } },
+        sinav: { select: { grup: { select: { tur: true } } } },
+      },
+    });
+    let isKpss = false;
+    if (kayit?.paket) {
+      isKpss = paketKpssMi(kayit.paket);
+    } else if (kayit?.sinav?.grup?.tur) {
+      isKpss = String(kayit.sinav.grup.tur).toUpperCase().startsWith('KPSS');
+    }
+    return isKpss ? kpssFrontendBaseUrl() : frontendBaseUrl();
+  } catch {
+    return frontendBaseUrl();
+  }
+}
 const Iyzipay = require('iyzipay');
 
 /**
@@ -78,7 +103,7 @@ export async function odemeBaslatController(req: AuthRequest, res: Response, nex
     const telefon = kullanici.telefon || '+905555555555'; // Iyzico telefon numarasını zorunlu tutabiliyor
     const email = kullanici.email || 'email@email.com';
     const appUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_NAME || 'http://localhost:3000';
-    const callbackUrl = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1'}/odeme/callback`;
+    const callbackUrl = `${publicApiBaseUrl()}/odeme/callback`;
 
     const request = {
       locale: Iyzipay.LOCALE.TR,
@@ -130,7 +155,7 @@ export async function odemeBaslatController(req: AuthRequest, res: Response, nex
       ]
     };
 
-    iyzipay.checkoutFormInitialize.create(request, function (err, result) {
+    iyzipay.checkoutFormInitialize.create(request, function (err: unknown, result: any) {
       if (err) {
         console.error('Iyzico Hata:', err);
         return res.status(500).json({ basarili: false, mesaj: 'Ödeme sistemi hatası', hata: err });
@@ -162,7 +187,7 @@ export async function odemeBaslatController(req: AuthRequest, res: Response, nex
 export async function odemeCallbackController(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   try {
     const token = req.body.token;
-    const frontendSonucUrl = `${process.env.APP_URL || 'http://localhost:3000'}/odeme/sonuc`;
+    const frontendSonucUrl = `${frontendBaseUrl()}/odeme/sonuc`;
 
     if (!token) {
       // Token yoksa ana sayfaya dön veya hata
@@ -173,7 +198,7 @@ export async function odemeCallbackController(req: AuthRequest, res: Response, n
     iyzipay.checkoutForm.retrieve({
       locale: Iyzipay.LOCALE.TR,
       token: token
-    }, async function (err, result) {
+    }, async function (err: unknown, result: any) {
       if (err) {
         console.error('Iyzico Retrieve Hata:', err);
         return res.redirect(`${frontendSonucUrl}?status=error&mesaj=OdemeDogrulanamadi`);
@@ -185,6 +210,7 @@ export async function odemeCallbackController(req: AuthRequest, res: Response, n
 
       // conversationId = satinAlim.id
       const satinAlimId = result.conversationId;
+      const platformSonucUrl = `${await satinAlimFrontendUrl(satinAlimId)}/odeme/sonuc`;
 
       if (result.paymentStatus === 'SUCCESS') {
         // Ödeme başarılı
@@ -201,7 +227,7 @@ export async function odemeCallbackController(req: AuthRequest, res: Response, n
         // Paketi tanımla
         await satinAlimPaketHaklariniUygula(satinAlimId);
 
-        res.redirect(`${frontendSonucUrl}?status=success`);
+        res.redirect(`${platformSonucUrl}?status=success`);
       } else {
         // Ödeme başarısız
         await prisma.satinAlim.update({
@@ -212,12 +238,12 @@ export async function odemeCallbackController(req: AuthRequest, res: Response, n
           }
         });
 
-        res.redirect(`${frontendSonucUrl}?status=error&mesaj=OdemeBasarisiz`);
+        res.redirect(`${platformSonucUrl}?status=error&mesaj=OdemeBasarisiz`);
       }
     });
 
   } catch (err) {
     console.error('Odeme Callback Hata:', err);
-    res.redirect(`${process.env.APP_URL || 'http://localhost:3000'}/odeme/sonuc?status=error`);
+    res.redirect(`${frontendBaseUrl()}/odeme/sonuc?status=error`);
   }
 }

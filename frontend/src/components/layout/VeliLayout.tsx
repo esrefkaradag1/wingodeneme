@@ -146,7 +146,7 @@ function VeliLayoutInner({ children }: { children: React.ReactNode }) {
   const SidebarIcerik = () => (
     <div className="flex h-full flex-col bg-white/90 backdrop-blur-xl border-r border-gray-100">
       <div className="p-5 border-b border-gray-100">
-        <div className="flex items-center gap-3">
+        <Link href="/" className="flex items-center gap-3 hover:opacity-90 transition-opacity" onClick={() => setMobilAcik(false)}>
           {logoUrl ? (
             <img src={logoUrl} alt={site.marka.ad} className={logoSt.className} style={logoSt.style} />
           ) : (
@@ -160,7 +160,7 @@ function VeliLayoutInner({ children }: { children: React.ReactNode }) {
               </div>
             </>
           )}
-        </div>
+        </Link>
         <span className="mt-3 inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-lg bg-violet-50 text-violet-700 ring-1 ring-violet-100">
           <Eye className="w-3 h-3" /> İzleme modu
         </span>

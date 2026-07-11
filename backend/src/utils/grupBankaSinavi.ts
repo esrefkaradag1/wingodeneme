@@ -6,6 +6,7 @@ export const GRUP_BANKA_SINAV_BASLIGI = 'Soru Bankası (Grup)';
 
 function ogretimTuruToSinavTuru(tur: OgretimTuru): SinavTuru {
   if (tur === 'LGS') return 'LGS';
+  if (tur.startsWith('KPSS')) return 'KPSS';
   return 'TYT';
 }
 

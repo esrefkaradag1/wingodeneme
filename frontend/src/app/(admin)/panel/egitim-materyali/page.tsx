@@ -100,6 +100,7 @@ const KPSS_DERSLERI = [
 const KADEME_SECENEKLERI = [
   { value: 'YKS', label: 'YKS' },
   { value: 'LGS', label: 'LGS' },
+  { value: 'KPSS_LISANS', label: 'KPSS Lisans' },
   { value: 'KPSS_ORTAOGRETIM', label: 'KPSS Ortaöğretim' },
   { value: 'KPSS_ONLISANS', label: 'KPSS Önlisans' },
 ] as const;

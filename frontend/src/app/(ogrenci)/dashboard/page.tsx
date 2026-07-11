@@ -29,8 +29,11 @@ import { motion } from 'framer-motion';
 import {
   hizliLinkler,
   LGS_RESMI_TAKIP,
+  KPSS_RESMI_TAKIP,
   ogretimTuruCoz,
   YKS_RESMI_TAKIP,
+  kpssMi,
+  kademeTemasi,
 } from '@/lib/ogrenciKademe';
 
 type DuyuruAlici = {
@@ -69,6 +72,10 @@ export default function DashboardSayfasi() {
 
   const kademe = ogretimTuruCoz(kullanici, profilData?.data?.veri);
   const lgs = kademe === 'LGS';
+  const kpss = kpssMi(kademe);
+  const tema = kademeTemasi(kademe);
+  const vurguMetin = lgs ? 'text-blue-700' : kpss ? 'text-teal-700' : 'text-indigo-700';
+  const vurguDolgu = lgs ? 'fill-blue-600' : kpss ? 'fill-teal-600' : 'fill-indigo-600';
 
   useEffect(() => {
     if (!kullanici || !profilData?.data?.veri) return;
@@ -82,7 +89,7 @@ export default function DashboardSayfasi() {
     queryKey: ['public', 'osym-ozet'],
     queryFn: () => publicApi.osymOzet(),
     staleTime: 5 * 60 * 1000,
-    enabled: !lgs,
+    enabled: !lgs && !kpss,
   });
 
   const analiz = analizData?.data?.veri;
@@ -110,7 +117,7 @@ export default function DashboardSayfasi() {
   const osymAna = osymKaynaklar.find((x: any) => x.kod === 'OSYM_ANASAYFA');
 
   const hizliLinklerListe = hizliLinkler(kademe);
-  const resmiTakip = lgs ? LGS_RESMI_TAKIP : YKS_RESMI_TAKIP;
+  const resmiTakip = lgs ? LGS_RESMI_TAKIP : kpss ? KPSS_RESMI_TAKIP : YKS_RESMI_TAKIP;
   const ResmiIkon = resmiTakip.ikon;
 
   const stats = [
@@ -124,28 +131,28 @@ export default function DashboardSayfasi() {
     <div className="space-y-8 pb-12">
       {/* Karşılama - Font sizes slightly increased */}
       <section
-        className={`relative overflow-hidden rounded-2xl p-10 text-white shadow-xl ${lgs ? 'bg-blue-600' : 'bg-indigo-600'}`}
+        className={`relative overflow-hidden rounded-2xl p-10 text-white shadow-xl ${tema.heroBg}`}
       >
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-8">
           <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }}>
-            <p className={`text-xs font-bold uppercase tracking-widest mb-2 ${lgs ? 'text-blue-200' : 'text-indigo-200'}`}>
-              {lgs ? 'LGS Paneli' : 'YKS Paneli'}
+            <p className={`text-xs font-bold uppercase tracking-widest mb-2 ${tema.heroText}`}>
+              {tema.panelAdi}
             </p>
             <h1 className="text-3xl font-bold tracking-tight">Merhaba, {kullanici?.ad}!</h1>
-            <p className={`mt-2 text-base font-medium opacity-90 max-w-xl ${lgs ? 'text-blue-100' : 'text-indigo-100'}`}>
+            <p className={`mt-2 text-base font-medium opacity-90 max-w-xl ${tema.heroText}`}>
               {lgs
                 ? '8. sınıf hedeflerine odaklan; LGS denemelerin ve analizlerin burada.'
-                : 'Hedeflerine her geçen gün bir adım daha yaklaşıyorsun. Motivasyonunu yüksek tut!'}
+                : kpss
+                  ? 'GY-GK hedeflerine odaklan; KPSS denemelerin ve analiz raporların burada.'
+                  : 'Hedeflerine her geçen gün bir adım daha yaklaşıyorsun. Motivasyonunu yüksek tut!'}
             </p>
           </motion.div>
           <div className="flex gap-4">
             <Link
               href="/sinavlar"
-              className={`px-6 py-3 rounded-2xl bg-white font-bold shadow-lg hover:bg-gray-50 transition-all text-sm flex items-center gap-2 ${
-                lgs ? 'text-blue-700' : 'text-indigo-700'
-              }`}
+              className={`px-6 py-3 rounded-2xl bg-white font-bold shadow-lg hover:bg-gray-50 transition-all text-sm flex items-center gap-2 ${vurguMetin}`}
             >
-              <Zap className={`w-5 h-5 ${lgs ? 'fill-blue-600' : 'fill-indigo-600'}`} /> Sınava Başla
+              <Zap className={`w-5 h-5 ${vurguDolgu}`} /> Sınava Başla
             </Link>
           </div>
         </div>
@@ -203,20 +210,22 @@ export default function DashboardSayfasi() {
         className={`rounded-2xl border p-6 shadow-lg ${
           lgs
             ? 'border-blue-100 bg-gradient-to-br from-blue-50/90 to-white shadow-blue-500/5'
-            : 'border-indigo-100 bg-gradient-to-br from-indigo-50/90 to-white shadow-indigo-500/5'
+            : kpss
+              ? 'border-teal-100 bg-gradient-to-br from-teal-50/90 to-white shadow-teal-500/5'
+              : 'border-indigo-100 bg-gradient-to-br from-indigo-50/90 to-white shadow-indigo-500/5'
         }`}
       >
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex gap-4 min-w-0">
             <div
               className={`w-12 h-12 rounded-2xl text-white flex items-center justify-center shadow-lg shrink-0 ${
-                lgs ? 'bg-blue-600' : 'bg-indigo-600'
+                lgs ? 'bg-blue-600' : kpss ? 'bg-teal-600' : 'bg-indigo-600'
               }`}
             >
               {lgs ? <ResmiIkon className="w-6 h-6" /> : <Globe className="w-6 h-6" />}
             </div>
             <div className="min-w-0">
-              <p className={`text-[10px] font-bold uppercase tracking-widest ${lgs ? 'text-blue-600' : 'text-indigo-600'}`}>
+              <p className={`text-[10px] font-bold uppercase tracking-widest ${lgs ? 'text-blue-600' : kpss ? 'text-teal-600' : 'text-indigo-600'}`}>
                 Resmi takip
               </p>
               <h2 className="text-lg font-bold text-gray-900 mt-0.5">{resmiTakip.baslik}</h2>
@@ -231,6 +240,19 @@ export default function DashboardSayfasi() {
                       className="font-semibold text-blue-700 hover:underline inline-flex items-center gap-1"
                     >
                       {LGS_RESMI_TAKIP.kilavuzEtiket}
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </>
+                ) : kpss ? (
+                  <>
+                    {KPSS_RESMI_TAKIP.aciklama}{' '}
+                    <a
+                      href={KPSS_RESMI_TAKIP.kilavuzUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-semibold text-teal-700 hover:underline inline-flex items-center gap-1"
+                    >
+                      {KPSS_RESMI_TAKIP.kilavuzEtiket}
                       <ExternalLink className="w-3 h-3" />
                     </a>
                   </>
@@ -264,6 +286,17 @@ export default function DashboardSayfasi() {
               LGS başvuru ve sınav tarihleri için{' '}
               <a href="https://www.meb.gov.tr/" target="_blank" rel="noopener noreferrer" className="font-semibold text-blue-700 hover:underline">
                 meb.gov.tr
+              </a>{' '}
+              adresini düzenli kontrol edin.
+            </p>
+          </div>
+        ) : kpss ? (
+          <div className="mt-5 rounded-xl bg-white/80 border border-teal-100/80 p-4">
+            <p className="text-xs font-bold text-gray-500 uppercase">ÖSYM duyuruları</p>
+            <p className="text-sm text-gray-600 mt-2">
+              KPSS başvuru ve sınav takvimi için{' '}
+              <a href={KPSS_RESMI_TAKIP.kurumUrl} target="_blank" rel="noopener noreferrer" className="font-semibold text-teal-700 hover:underline">
+                osym.gov.tr
               </a>{' '}
               adresini düzenli kontrol edin.
             </p>
@@ -317,7 +350,7 @@ export default function DashboardSayfasi() {
                 <Link
                   key={link.href}
                   href={link.href}
-                  className={`group card !p-6 hover:shadow-2xl transition-all border-white ${lgs ? 'hover:border-blue-100' : 'hover:border-indigo-100'}`}
+                  className={`group card !p-6 hover:shadow-2xl transition-all border-white ${lgs ? 'hover:border-blue-100' : kpss ? 'hover:border-teal-100' : 'hover:border-indigo-100'}`}
                 >
                    <div className="w-12 h-12 rounded-2xl flex items-center justify-center mb-5 transition-transform group-hover:scale-110 shadow-sm" style={{ backgroundColor: link.bg, color: link.color }}>
                       {(() => { const Ikon = link.ikon; return <Ikon className="w-6 h-6" />; })()}

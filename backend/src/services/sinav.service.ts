@@ -18,7 +18,37 @@ export async function ogrenciSinavErisimiVar(
   const atama = await prisma.ogrenciSinavAtama.findUnique({
     where: { ogrenciId_sinavId: { ogrenciId, sinavId: sinav.id } },
   });
-  return !!atama;
+  if (atama) return true;
+
+  return sinavUcretsizHerkeseAcikMi(sinav.id);
+}
+
+export async function herkeseAcikUcretsizSinavIdleriGetir(): Promise<string[]> {
+  const aktifPaketler = await prisma.paket.findMany({
+    where: { aktif: true },
+    select: { ucretsizSinavIds: true },
+  });
+
+  const ucretsizIds = new Set<string>();
+  for (const p of aktifPaketler) {
+    if (!Array.isArray(p.ucretsizSinavIds)) continue;
+    for (const sid of p.ucretsizSinavIds) {
+      if (sid) ucretsizIds.add(sid);
+    }
+  }
+
+  return [...ucretsizIds];
+}
+
+export async function sinavUcretsizHerkeseAcikMi(sinavId: string): Promise<boolean> {
+  const kayit = await prisma.paket.findFirst({
+    where: {
+      aktif: true,
+      ucretsizSinavIds: { has: sinavId },
+    },
+    select: { id: true },
+  });
+  return !!kayit;
 }
 
 export async function sinavListesiGetir(ogrenciId: string) {
@@ -31,6 +61,7 @@ export async function sinavListesiGetir(ogrenciId: string) {
 
   const grupIdleri = ogrenci.gruplar.map((g) => g.grupId);
   const simdi = new Date();
+  const ucretsizSinavIds = await herkeseAcikUcretsizSinavIdleriGetir();
 
   const [grupSinavlari, atamalar, katilimlar] = await Promise.all([
     grupIdleri.length
@@ -54,7 +85,8 @@ export async function sinavListesiGetir(ogrenciId: string) {
 
   const atamaIdleri = atamalar.map((a) => a.sinavId);
   const katildigimIdler = katilimlar.map((k) => k.sinavId);
-  const tumEkIdler = [...new Set([...atamaIdleri, ...katildigimIdler])];
+  const tumEkIdler = [...new Set([...atamaIdleri, ...katildigimIdler, ...ucretsizSinavIds])];
+  const erisimliIdSet = new Set(tumEkIdler);
 
   // Grup sınavlarında taslaklar gösterilmez; öğrenciye doğrudan/paket atanan sınavlarda
   // veya zaten katıldığı sınavlarda listede görünsün.
@@ -69,8 +101,17 @@ export async function sinavListesiGetir(ogrenciId: string) {
         })
       : [];
 
+  // Takvimde satışa sunulan ücretli sınavlar, satın alma tamamlanmadan (atama/katılım
+  // oluşmadan) yalnızca grup üyeliği sebebiyle listeye düşmesin. Ücretsiz grup sınavları
+  // ve erişimi olan (satın alınmış / atanmış / ücretsiz örnek) sınavlar görünmeye devam eder.
+  const gorunurGrupSinavlari = grupSinavlari.filter((s) => {
+    const ucretliSatista = s.satinAlinabilir === true && (s.ucret ?? 0) > 0;
+    if (!ucretliSatista) return true;
+    return erisimliIdSet.has(s.id);
+  });
+
   const birlesik = new Map<string, (typeof grupSinavlari)[0]>();
-  for (const s of grupSinavlari) birlesik.set(s.id, s);
+  for (const s of gorunurGrupSinavlari) birlesik.set(s.id, s);
   for (const s of ekSinavlar) birlesik.set(s.id, s);
 
   const sinavlar = [...birlesik.values()].sort(

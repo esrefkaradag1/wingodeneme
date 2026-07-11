@@ -49,6 +49,19 @@ function segmentEtiketi(seg?: string | null): string | null {
   return seg;
 }
 
+/** Ara sınıf konuları (6/7 ve 9/10/11) ünitesiz gelir; kademeden sınıf etiketi türet. */
+function kademeUniteEtiketi(tur?: string): string | null {
+  switch (tur) {
+    case 'SINIF_6': return '6. Sınıf';
+    case 'SINIF_7': return '7. Sınıf';
+    case 'SINIF_8': return '8. Sınıf';
+    case 'SINIF_9': return '9. Sınıf';
+    case 'SINIF_10': return '10. Sınıf';
+    case 'SINIF_11': return '11. Sınıf';
+    default: return null;
+  }
+}
+
 export default function KonuSecici({
   konular, value, onChange, havuzSayilari = {}, placeholder = 'Konu seçin', className = '', oncelikliKapsam = null,
 }: Props) {
@@ -92,7 +105,7 @@ export default function KonuSecici({
       const dersAd = k.ders || 'Diğer';
       if (!map.has(dersAd)) map.set(dersAd, new Map());
       const uniteMap = map.get(dersAd)!;
-      const uniteAd = k.uniteAdi || '— Genel —';
+      const uniteAd = k.uniteAdi || kademeUniteEtiketi(k.ogretimTuru) || '— Genel —';
       if (!uniteMap.has(uniteAd)) uniteMap.set(uniteAd, []);
       uniteMap.get(uniteAd)!.push(k);
     }

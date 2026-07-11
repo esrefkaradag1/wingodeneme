@@ -228,7 +228,7 @@ export function gorselGerektirir(ders: string, konu?: string, uniteAdi?: string)
 export function modelSecGorselUretim(ders: string, zorluk: string | undefined, varsayilan: string): string {
   const d = (ders || '').toLowerCase();
   const z = (zorluk || '').toUpperCase();
-  const gorselModel = 'google/gemini-3.1-pro-preview';
+  const gorselModel = 'google/gemini-2.5-pro';
   if (GORSEL_GEO.some((g) => d.includes(g))) {
     return z === 'ZOR' ? 'openai/o4-mini' : gorselModel;
   }

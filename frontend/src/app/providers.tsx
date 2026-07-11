@@ -3,6 +3,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useState } from 'react';
 import { ConfirmDialogHost } from '@/components/ui/ConfirmDialogHost';
+import { PaketSepetFloating } from '@/components/payment/PaketSepetFloating';
 import { SiteIcerikProvider } from '@/contexts/SiteIcerikContext';
 import { Toaster } from './toaster';
 
@@ -27,6 +28,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
         {children}
       </SiteIcerikProvider>
       <ConfirmDialogHost />
+      <PaketSepetFloating />
       <Toaster />
     </QueryClientProvider>
   );

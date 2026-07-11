@@ -299,6 +299,17 @@ export function anaSayfaMetadata(): Metadata {
   });
 }
 
+export function anaSayfaMetadataKpss(): Metadata {
+  return buildMetadata({
+    title: 'KPSS Online Deneme Sınavı — Lisans, Önlisans, Ortaöğretim | Türkiye Geneli',
+    description:
+      'Wingo KPSS: Türkiye geneli online KPSS deneme platformu. KPSS Lisans, Önlisans ve Ortaöğretim denemeleri. Gerçek süreli sınav, yapay zeka analizli konu rehberi.',
+    path: '/',
+    keywords: ['kpss deneme', 'kpss online deneme', 'kpss lisans deneme', 'kpss önlisans deneme', 'kpss ortaöğretim deneme', 'kpss deneme çöz'],
+  });
+}
+
+
 export function landingMetadata(key: keyof typeof SEO_LANDING): Metadata {
   const p = SEO_LANDING[key];
   return buildMetadata({

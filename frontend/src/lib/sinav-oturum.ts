@@ -17,7 +17,7 @@ export const LGS_VARSAYILAN_OTURUMLAR: Omit<SinavOturumForm, 'baslangicZamani' |
 ];
 
 /** KPSS: Genel Yetenek + Genel Kültür (yaygın 60+60 soru, 65+65 dk) */
-export const KPSS_OTURUM_ARA_DK = 15;
+export const KPSS_OTURUM_ARA_DK = 0;
 
 export const KPSS_VARSAYILAN_OTURUMLAR: Omit<SinavOturumForm, 'baslangicZamani' | 'bitisZamani'>[] = [
   { kod: 'GY', ad: 'Genel Yetenek', sureDakika: 65, soruSayisi: 60 },

@@ -96,20 +96,20 @@ export async function paketSinavlariniGetir(paket: {
   grupIds: string[];
   kategori?: string | null;
 }) {
-  const genisletilmisGrupIds = await paketIcinGrupIdleriCoz(paket);
-  const orKosullar: Array<Record<string, unknown>> = [];
-
+  // Belirli denemeler seçilmişse paket YALNIZCA o denemeleri kapsar (tekli/sabit paket).
+  // Hiç deneme seçilmemişse gruba/kategoriye ait tüm takvim denemeleri gösterilir.
+  let sinavWhere: Record<string, unknown>;
   if (paket.sinavIds.length > 0) {
-    orKosullar.push({ id: { in: paket.sinavIds } });
+    sinavWhere = { id: { in: paket.sinavIds } };
+  } else {
+    const genisletilmisGrupIds = await paketIcinGrupIdleriCoz(paket);
+    if (genisletilmisGrupIds.length === 0) return [];
+    sinavWhere = { grupId: { in: genisletilmisGrupIds } };
   }
-  if (genisletilmisGrupIds.length > 0) {
-    orKosullar.push({ grupId: { in: genisletilmisGrupIds } });
-  }
-  if (orKosullar.length === 0) return [];
 
   const sinavlar = await prisma.sinav.findMany({
     where: {
-      OR: orKosullar,
+      ...sinavWhere,
       yayinlandi: true,
       takvimdeGoster: true,
     },

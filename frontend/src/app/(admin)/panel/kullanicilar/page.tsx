@@ -24,12 +24,52 @@ import { useAuthStore } from '@/store/auth.store';
 import axios from 'axios';
 import {
   OGRENCI_SINIF_SECENEKLERI,
+  KPSS_OGRENCI_SECENEKLERI,
   legacySinifNorm,
   siniftanOgretimTuru,
   sinifEtiketi,
+  ogretimTuruCoz,
+  kpssOgretimTuruMu,
 } from '@/lib/ogrenciKademe';
 import { branslarParse } from '@/lib/ogretmenSinirlama';
 import { AranabilirSelect } from '@/components/ui/AranabilirSelect';
+import { isKpssMode } from '@/lib/platform';
+
+/** Öğrenci form seçiminden öğretim türünü çözer (KPSS dahil). */
+function ogrenciTurCoz(sinif?: string | null): string {
+  if (kpssOgretimTuruMu(sinif)) return sinif;
+  return siniftanOgretimTuru(sinif) ?? 'YKS';
+}
+
+/** Tek bir öğretim türü değerini okunur etikete çevirir. */
+function turEtiketiTekil(tur?: string | null): string {
+  if (!tur) return '';
+  const s = String(tur).toUpperCase();
+  if (kpssOgretimTuruMu(s)) return sinifEtiketi(s);
+  if (s === 'LGS') return 'LGS';
+  if (s === 'YKS') return 'YKS';
+  return s;
+}
+
+/**
+ * Öğretmen/admin için TÜR sütununda platforma uygun öğretim türlerini gösterir.
+ * KPSS panelinde yalnızca KPSS türleri, YKS/LGS panelinde yalnızca YKS/LGS türleri listelenir;
+ * böylece KPSS'te ders veren bir öğretmen "YKS" gibi kafa karıştırıcı görünmez.
+ */
+function ogretmenTurEtiketi(
+  profil: { ogretimTuru?: string | null; ogretimTurleri?: string[] | null } | null | undefined,
+  kpss: boolean,
+): string {
+  if (!profil) return '—';
+  const hepsi = (profil.ogretimTurleri?.length ? profil.ogretimTurleri : [profil.ogretimTuru])
+    .filter((t): t is string => Boolean(t))
+    .map((t) => String(t).toUpperCase());
+  const benzersiz = Array.from(new Set(hepsi));
+  const platformTurleri = benzersiz.filter((t) => (kpss ? kpssOgretimTuruMu(t) : !kpssOgretimTuruMu(t)));
+  const gosterilecek = platformTurleri.length ? platformTurleri : benzersiz;
+  const etiketler = Array.from(new Set(gosterilecek.map(turEtiketiTekil).filter(Boolean)));
+  return etiketler.length ? etiketler.join(', ') : '—';
+}
 
 interface IliskiliKullanici {
   id: string;
@@ -66,6 +106,7 @@ interface AdminProfil {
   soyad: string;
   brans?: string | null;
   ogretimTuru?: string | null;
+  ogretimTurleri?: string[] | null;
 }
 
 interface Kullanici {
@@ -110,25 +151,45 @@ type Kademe = (typeof KADEME_SECENEKLERI)[number]['value'];
 // Hardcoded fallback — API yetersiz kaldığında kullanılır
 const YEDEK_BRANSLAR: Record<string, string[]> = {
   YKS: ['Matematik', 'Geometri', 'Fizik', 'Kimya', 'Biyoloji', 'Türkçe', 'Edebiyat', 'Tarih', 'Coğrafya', 'Felsefe', 'Din Kültürü ve Ahlak Bilgisi', 'İngilizce', 'Almanca', 'Fransızca'],
-  LGS: ['Matematik', 'Fen Bilimleri', 'Türkçe', 'İnkılap Tarihi ve Atatürkçülük', 'Din Kültürü ve Ahlak Bilgisi', 'İngilizce'],
+  LGS: ['Matematik', 'Fen Bilimleri', 'Türkçe', 'Sosyal Bilgiler', 'İnkılap Tarihi ve Atatürkçülük', 'Din Kültürü ve Ahlak Bilgisi', 'İngilizce'],
   KPSS_LISANS: ['Türkçe', 'Matematik', 'Tarih', 'Coğrafya', 'Vatandaşlık', 'Güncel Bilgiler'],
   KPSS_ONLISANS: ['Türkçe', 'Matematik', 'Tarih', 'Coğrafya', 'Vatandaşlık', 'Güncel Bilgiler'],
   KPSS_ORTAOGRETIM: ['Türkçe', 'Matematik', 'Tarih', 'Coğrafya', 'Vatandaşlık', 'Güncel Bilgiler'],
 };
 
+function metinNorm(v: string): string {
+  return v
+    .toLocaleLowerCase('tr-TR')
+    .replace(/[\s()/_-]+/g, '')
+    .replace(/[^a-z0-9çğıöşü]/gi, '');
+}
+
+const KADEME_NORM_SET = new Set(
+  KADEME_SECENEKLERI.flatMap((k) => [metinNorm(k.value), metinNorm(k.label)])
+);
+
+function tekrarKademeGorunumuTemizle(liste: string[]): string[] {
+  return liste.filter((item) => !KADEME_NORM_SET.has(metinNorm(item)));
+}
+
+function kademeTekrariGrupMu(grupAdi: string, kademeDegeri: string, kademeEtiketi: string): boolean {
+  const grupNorm = metinNorm(grupAdi);
+  return grupNorm === metinNorm(kademeDegeri) || grupNorm === metinNorm(kademeEtiketi);
+}
+
 // Artık backend'teki gruplardan geliyor; yetersizse yedek liste kullanılır
 function kademeBranslari(k: Kademe, bransHaritasi: Record<string, string[]> | undefined): string[] {
   // KPSS varyantlarını tek çatı altında topla
   if (k.startsWith('KPSS')) {
-    const apiList = [
+    const apiList = tekrarKademeGorunumuTemizle([
       ...(bransHaritasi?.['KPSS_ONLISANS'] || []),
       ...(bransHaritasi?.['KPSS_ORTAOGRETIM'] || []),
       ...(bransHaritasi?.['KPSS'] || []),
-    ].filter((v, i, a) => a.indexOf(v) === i);
+    ]).filter((v, i, a) => a.indexOf(v) === i);
     if (apiList.length >= 3) return apiList.sort((a, b) => a.localeCompare(b, 'tr'));
     return YEDEK_BRANSLAR['KPSS_ONLISANS'];
   }
-  const apiList = bransHaritasi?.[k] || [];
+  const apiList = tekrarKademeGorunumuTemizle(bransHaritasi?.[k] || []);
   // API'den en az 3 branş geliyorsa onu kullan, yoksa yedek listeye düş
   if (apiList.length >= 3) return apiList;
   return YEDEK_BRANSLAR[k] || apiList;
@@ -217,6 +278,11 @@ export default function KullanicilarSayfasi() {
   const [secilenIds, setSecilenIds] = useState<string[]>([]);
   const [hizliVeliSecim, setHizliVeliSecim] = useState('');
   const [hizliOgrenciSecim, setHizliOgrenciSecim] = useState('');
+  const [kpssModu, setKpssModu] = useState(false);
+
+  useEffect(() => {
+    setKpssModu(isKpssMode());
+  }, []);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -259,6 +325,26 @@ export default function KullanicilarSayfasi() {
     staleTime: 60_000,
   });
   const tumGruplar: { id: string; ad: string; tur: string }[] = tumGruplarData?.data?.veri || [];
+
+  const ogretmenGrupSunumu = useMemo(() => {
+    const harita: Record<string, { gorunurGruplar: { id: string; ad: string; tur: string }[]; otomatikGrupIds: string[] }> = {};
+
+    for (const tur of form.ogretimTurleri) {
+      const turLabel = KADEME_SECENEKLERI.find((k) => k.value === tur)?.label || tur;
+      const turGruplari = tumGruplar.filter((g) => g.tur === tur);
+      const tekrarGruplari = turGruplari.filter((g) => kademeTekrariGrupMu(g.ad, tur, turLabel));
+      const gorunurGruplar = turGruplari.filter((g) => !kademeTekrariGrupMu(g.ad, tur, turLabel));
+      const otomatikGrupIds = gorunurGruplar.length === 0 && tekrarGruplari.length === 1 ? [tekrarGruplari[0].id] : [];
+      harita[tur] = { gorunurGruplar, otomatikGrupIds };
+    }
+
+    return harita;
+  }, [form.ogretimTurleri, tumGruplar]);
+
+  const efektifOgretmenGrupIds = useMemo(
+    () => [...new Set([...form.grupIds, ...Object.values(ogretmenGrupSunumu).flatMap((x) => x.otomatikGrupIds)])],
+    [form.grupIds, ogretmenGrupSunumu]
+  );
 
   const kullanicilar: Kullanici[] = data?.data?.veri || [];
   const veliListesi: Kullanici[] = veliListeData?.data?.veri || [];
@@ -413,8 +499,10 @@ export default function KullanicilarSayfasi() {
         ad: op?.ad || k.veliProfil?.ad || k.adminProfil?.ad || '',
         soyad: op?.soyad || k.veliProfil?.soyad || k.adminProfil?.soyad || '',
         telefon: k.telefon || k.veliProfil?.telefon || '',
-        sinif: legacySinifNorm(op?.ogretimTuru, op?.sinif) || '',
-        ogretimTuru: k.adminProfil?.ogretimTuru || siniftanOgretimTuru(legacySinifNorm(op?.ogretimTuru, op?.sinif)) || 'YKS',
+        sinif: kpssOgretimTuruMu(op?.ogretimTuru)
+          ? (op?.ogretimTuru as string)
+          : legacySinifNorm(op?.ogretimTuru, op?.sinif) || '',
+        ogretimTuru: k.adminProfil?.ogretimTuru || (op ? ogretimTuruCoz(null, { ogrenciProfil: op }) : 'YKS'),
         ogretimTurleri: (k.adminProfil as any)?.ogretimTurleri?.length ? (k.adminProfil as any).ogretimTurleri : [k.adminProfil?.ogretimTuru || 'YKS'],
         branslarByTur: (k.adminProfil as any)?.ogretmenBranslar || {},
         okul: op?.okul || '',
@@ -448,11 +536,15 @@ export default function KullanicilarSayfasi() {
       if (form.telefon.trim()) veri.telefon = form.telefon.trim();
       if (form.rol === 'OGRENCI') {
         if (!form.sinif) {
-          toast.hata('Öğrenci için sınıf seçin');
+          toast.hata(kpssModu ? 'Öğrenci için KPSS türü seçin' : 'Öğrenci için sınıf seçin');
           return;
         }
-        veri.sinif = form.sinif;
-        veri.ogretimTuru = siniftanOgretimTuru(form.sinif) ?? 'YKS';
+        if (kpssOgretimTuruMu(form.sinif)) {
+          veri.ogretimTuru = form.sinif;
+        } else {
+          veri.sinif = form.sinif;
+          veri.ogretimTuru = siniftanOgretimTuru(form.sinif) ?? 'YKS';
+        }
         if (form.okul.trim()) veri.okul = form.okul.trim();
         if (form.veliEmail.trim()) veri.veliEmail = form.veliEmail.trim();
       }
@@ -461,12 +553,16 @@ export default function KullanicilarSayfasi() {
           toast.hata('En az bir kademe seçin');
           return;
         }
+        if (efektifOgretmenGrupIds.length === 0) {
+          toast.hata('En az bir grup seçmelisiniz');
+          return;
+        }
         // geriye uyum: birleşik brans listesi
         veri.branslar = form.branslar;
         veri.ogretimTuru = (form as any).ogretimTurleri[0] || form.ogretimTuru;
         veri.ogretimTurleri = (form as any).ogretimTurleri;
         veri.branslarByTur = (form as any).branslarByTur;
-        veri.grupIds = form.grupIds;
+        veri.grupIds = efektifOgretmenGrupIds;
       }
       kaydetMutation.mutate(veri);
       return;
@@ -486,11 +582,16 @@ export default function KullanicilarSayfasi() {
     }
     if ((form.rol || duzenlenen.rol) === 'OGRENCI') {
       if (!form.sinif) {
-        toast.hata('Öğrenci için sınıf seçin');
+        toast.hata(kpssModu ? 'Öğrenci için KPSS türü seçin' : 'Öğrenci için sınıf seçin');
         return;
       }
-      veri.sinif = form.sinif;
-      veri.ogretimTuru = siniftanOgretimTuru(form.sinif) ?? 'YKS';
+      if (kpssOgretimTuruMu(form.sinif)) {
+        veri.sinif = null;
+        veri.ogretimTuru = form.sinif;
+      } else {
+        veri.sinif = form.sinif;
+        veri.ogretimTuru = siniftanOgretimTuru(form.sinif) ?? 'YKS';
+      }
       veri.okul = form.okul.trim() || '';
       veri.veliEmail = form.veliEmail.trim();
     }
@@ -502,11 +603,15 @@ export default function KullanicilarSayfasi() {
         toast.hata('En az bir kademe seçin');
         return;
       }
+      if (efektifOgretmenGrupIds.length === 0) {
+        toast.hata('En az bir grup seçmelisiniz');
+        return;
+      }
       veri.branslar = form.branslar;
       veri.ogretimTuru = (form as any).ogretimTurleri[0] || form.ogretimTuru;
       veri.ogretimTurleri = (form as any).ogretimTurleri;
       veri.branslarByTur = (form as any).branslarByTur;
-      veri.grupIds = form.grupIds;
+      veri.grupIds = efektifOgretmenGrupIds;
     }
     kaydetMutation.mutate(veri);
   };
@@ -771,11 +876,13 @@ export default function KullanicilarSayfasi() {
                     <td className="px-6 py-4 text-sm text-gray-600">
                       {kullanici.ogrenciProfil
                         ? (() => {
-                            const s = legacySinifNorm(kullanici.ogrenciProfil.ogretimTuru, kullanici.ogrenciProfil.sinif);
-                            const tur = siniftanOgretimTuru(s) ?? (kullanici.ogrenciProfil.ogretimTuru === 'LGS' ? 'LGS' : 'YKS');
+                            const op = kullanici.ogrenciProfil;
+                            const tur = ogretimTuruCoz(null, { ogrenciProfil: op });
+                            if (kpssOgretimTuruMu(tur)) return sinifEtiketi(tur);
+                            const s = legacySinifNorm(op.ogretimTuru, op.sinif);
                             return s ? `${sinifEtiketi(s)} · ${tur}` : tur;
                           })()
-                        : kullanici.adminProfil?.ogretimTuru || '—'}
+                        : ogretmenTurEtiketi(kullanici.adminProfil, kpssModu)}
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-600">
                       {branslarParse(kullanici.adminProfil?.brans).join(', ') || '—'}
@@ -985,22 +1092,38 @@ export default function KullanicilarSayfasi() {
               {(duzenlenen ? !!duzenlenen.ogrenciProfil : form.rol === 'OGRENCI') && (
                 <>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Sınıf</label>
-                    <p className="text-xs text-gray-500 mb-2">6–8. sınıf → LGS paneli · 9–12 ve mezun → YKS paneli</p>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      {kpssModu ? 'KPSS Türü' : 'Sınıf'}
+                    </label>
+                    <p className="text-xs text-gray-500 mb-2">
+                      {kpssModu
+                        ? 'Öğrencinin hazırlandığı KPSS kademesini seçin'
+                        : '6–8. sınıf → LGS paneli · 9–12 ve mezun → YKS paneli'}
+                    </p>
                     <select
                       required
                       value={form.sinif}
                       onChange={(e) => setForm((f) => ({ ...f, sinif: e.target.value }))}
                       className="input-field w-full"
                     >
-                      <option value="">Sınıf seçin</option>
-                      {OGRENCI_SINIF_SECENEKLERI.map((s) => (
+                      <option value="">{kpssModu ? 'KPSS türü seçin' : 'Sınıf seçin'}</option>
+                      {(kpssModu ? KPSS_OGRENCI_SECENEKLERI : OGRENCI_SINIF_SECENEKLERI).map((s) => (
                         <option key={s.value} value={s.value}>{s.etiket}</option>
                       ))}
                     </select>
                     {form.sinif && (
-                      <p className={`mt-2 text-xs font-semibold ${siniftanOgretimTuru(form.sinif) === 'LGS' ? 'text-blue-600' : 'text-indigo-600'}`}>
-                        Panel: {siniftanOgretimTuru(form.sinif) === 'LGS' ? 'LGS Paneli' : 'YKS Paneli'}
+                      <p className={`mt-2 text-xs font-semibold ${
+                        kpssOgretimTuruMu(form.sinif)
+                          ? 'text-teal-600'
+                          : siniftanOgretimTuru(form.sinif) === 'LGS'
+                            ? 'text-blue-600'
+                            : 'text-indigo-600'
+                      }`}>
+                        Panel: {kpssOgretimTuruMu(form.sinif)
+                          ? `${sinifEtiketi(form.sinif)} Paneli`
+                          : siniftanOgretimTuru(form.sinif) === 'LGS'
+                            ? 'LGS Paneli'
+                            : 'YKS Paneli'}
                       </p>
                     )}
                   </div>
@@ -1104,8 +1227,8 @@ export default function KullanicilarSayfasi() {
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Kademeler ve Gruplar{' '}
-                      {form.grupIds.length > 0 && (
-                        <span className="text-gray-500 font-normal">({form.grupIds.length} grup seçili)</span>
+                      {efektifOgretmenGrupIds.length > 0 && (
+                        <span className="text-gray-500 font-normal">({efektifOgretmenGrupIds.length} grup seçili)</span>
                       )}
                     </label>
                     <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 space-y-4">
@@ -1158,66 +1281,117 @@ export default function KullanicilarSayfasi() {
 
                       {/* Her seçili kademe için DB grupları */}
                       {form.ogretimTurleri.length === 0 ? (
-                        <p className="text-xs text-gray-500">Grupları görüntülemek için kademe seçin.</p>
-                      ) : tumGruplar.length === 0 ? (
-                        <p className="text-xs text-gray-500">Gruplar yükleniyor…</p>
+                        <p className="text-xs text-gray-500">Grupları ve branşları görüntülemek için kademe seçin.</p>
                       ) : (
                         form.ogretimTurleri.map((tur) => {
-                          const turGruplari = tumGruplar.filter((g) => g.tur === tur);
-                          if (turGruplari.length === 0) return null;
+                          const turLabel = KADEME_SECENEKLERI.find((k) => k.value === tur)?.label || tur;
+                          const branslar = kademeBranslari(tur as Kademe, bransSecenekleri);
+                          const grupSunumu = ogretmenGrupSunumu[tur] || { gorunurGruplar: [], otomatikGrupIds: [] };
+                          const turGruplari = grupSunumu.gorunurGruplar;
+                          const seciliBranslar = form.branslarByTur[tur] || [];
+
                           return (
-                            <div key={tur} className="border-t border-gray-200 pt-3 first:border-t-0 first:pt-0">
-                              <div className="text-xs font-semibold text-gray-700 mb-1.5">{tur}</div>
-                              <div className="space-y-0.5 max-h-48 overflow-y-auto">
-                                {turGruplari.map((g) => {
-                                  const secili = form.grupIds.includes(g.id);
-                                  return (
-                                    <label
-                                      key={g.id}
-                                      className={`flex items-center gap-2 px-2 py-1 rounded-lg cursor-pointer transition-colors ${
-                                        secili ? 'bg-indigo-50 text-indigo-900' : 'hover:bg-white'
-                                      }`}
-                                    >
-                                      <input
-                                        type="checkbox"
-                                        checked={secili}
-                                        onChange={() =>
-                                          setForm((f) => {
-                                            const yeniGrupIds = secili
-                                              ? f.grupIds.filter((x) => x !== g.id)
-                                              : [...f.grupIds, g.id];
-                                            // branslarByTur ve branslar'ı grup adlarından türet
-                                            const yeniHarita: Record<string, string[]> = {};
-                                            for (const gid of yeniGrupIds) {
-                                              const grp = tumGruplar.find((gg) => gg.id === gid);
-                                              if (!grp) continue;
-                                              if (!yeniHarita[grp.tur]) yeniHarita[grp.tur] = [];
-                                              if (!yeniHarita[grp.tur].includes(grp.ad)) {
-                                                yeniHarita[grp.tur].push(grp.ad);
-                                              }
-                                            }
-                                            const birlesik = [...new Set(Object.values(yeniHarita).flat())];
-                                            return {
-                                              ...f,
-                                              grupIds: yeniGrupIds,
-                                              branslarByTur: yeniHarita,
-                                              branslar: birlesik,
-                                            };
-                                          })
-                                        }
-                                        className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                                      />
-                                      <span className="text-sm">{g.ad}</span>
-                                    </label>
-                                  );
-                                })}
+                            <div key={tur} className="border-t border-gray-200 pt-4 first:border-t-0 first:pt-0 space-y-3">
+                              <div className="text-xs font-bold uppercase tracking-wider text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-md inline-block">
+                                {turLabel}
                               </div>
+                              
+                              {/* Branş Seçimi */}
+                              <div className="space-y-1.5">
+                                <span className="block text-xs font-semibold text-gray-700">Yetkili Dersler:</span>
+                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 p-2 bg-white rounded-lg border border-gray-100 max-h-36 overflow-y-auto">
+                                  {branslar.map((b) => {
+                                    const bSecili = seciliBranslar.includes(b);
+                                    return (
+                                      <label
+                                        key={b}
+                                        className={`flex items-center gap-1.5 px-2 py-1 rounded text-xs cursor-pointer transition-colors ${
+                                          bSecili ? 'bg-indigo-50 text-indigo-900 font-medium' : 'hover:bg-gray-50 text-gray-600'
+                                        }`}
+                                      >
+                                        <input
+                                          type="checkbox"
+                                          checked={bSecili}
+                                          onChange={() =>
+                                            setForm((f) => {
+                                              const yeniHarita = { ...f.branslarByTur };
+                                              if (!yeniHarita[tur]) yeniHarita[tur] = [];
+                                              if (yeniHarita[tur].includes(b)) {
+                                                yeniHarita[tur] = yeniHarita[tur].filter((x) => x !== b);
+                                              } else {
+                                                yeniHarita[tur] = [...yeniHarita[tur], b];
+                                              }
+                                              const birlesik = [...new Set(Object.values(yeniHarita).flat())];
+                                              return {
+                                                ...f,
+                                                branslarByTur: yeniHarita,
+                                                branslar: birlesik,
+                                              };
+                                            })
+                                          }
+                                          className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 h-3.5 w-3.5"
+                                        />
+                                        <span className="truncate">{b}</span>
+                                      </label>
+                                    );
+                                  })}
+                                </div>
+                                {seciliBranslar.length === 0 && (
+                                  <p className="text-[10px] text-amber-600">Lütfen en az bir branş seçin.</p>
+                                )}
+                                <p className="text-[10px] text-gray-400">
+                                  Kademe yukarıda seçildiği için burada yalnızca o kademeye ait dersler listelenir.
+                                </p>
+                              </div>
+
+                              {/* Sınıf/Grup Seçimi */}
+                              {turGruplari.length > 0 && (
+                                <div className="space-y-1.5">
+                                  <span className="block text-xs font-semibold text-gray-700">Yetkili Sınıflar / Gruplar:</span>
+                                  <div className="space-y-1 p-2 bg-white rounded-lg border border-gray-100 max-h-36 overflow-y-auto">
+                                    {turGruplari.map((g) => {
+                                      const secili = form.grupIds.includes(g.id);
+                                      return (
+                                        <label
+                                          key={g.id}
+                                          className={`flex items-center gap-2 px-2 py-1 rounded text-xs cursor-pointer transition-colors ${
+                                            secili ? 'bg-indigo-50 text-indigo-900 font-medium' : 'hover:bg-gray-50 text-gray-600'
+                                          }`}
+                                        >
+                                          <input
+                                            type="checkbox"
+                                            checked={secili}
+                                            onChange={() =>
+                                              setForm((f) => {
+                                                const yeniGrupIds = secili
+                                                  ? f.grupIds.filter((x) => x !== g.id)
+                                                  : [...f.grupIds, g.id];
+                                                return {
+                                                  ...f,
+                                                  grupIds: yeniGrupIds,
+                                                };
+                                              })
+                                            }
+                                            className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 h-3.5 w-3.5"
+                                          />
+                                          <span>{g.ad}</span>
+                                        </label>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              )}
+                              {turGruplari.length === 0 && grupSunumu.otomatikGrupIds.length > 0 && (
+                                <div className="rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-[11px] text-emerald-700">
+                                  Bu kademe tek havuzla eşleştiği için grup yetkisi otomatik uygulanır.
+                                </div>
+                              )}
                             </div>
                           );
                         })
                       )}
                     </div>
-                    {form.grupIds.length === 0 && (
+                    {efektifOgretmenGrupIds.length === 0 && (
                       <p className="text-xs text-amber-600 mt-1">En az bir grup seçmelisiniz.</p>
                     )}
                     <p className="text-[11px] text-gray-400 mt-1">

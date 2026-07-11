@@ -8,6 +8,8 @@ export type AlanTab =
   | 'KPSS_ORTAOGRETIM'
   | 'KPSS_ONLISANS';
 
+import { isKpssMode } from './platform';
+
 export const ALAN_FILTRE_SECENEKLERI: { id: AlanTab; etiket: string; aktifSinif: string }[] = [
   { id: 'HEPSI', etiket: 'Tümü', aktifSinif: 'bg-gray-900 text-white shadow' },
   { id: 'TYT', etiket: 'TYT', aktifSinif: 'bg-indigo-600 text-white shadow' },
@@ -17,6 +19,24 @@ export const ALAN_FILTRE_SECENEKLERI: { id: AlanTab; etiket: string; aktifSinif:
   { id: 'KPSS_ONLISANS', etiket: 'KPSS ÖL', aktifSinif: 'bg-sky-700 text-white shadow' },
   { id: 'KPSS_LISANS', etiket: 'KPSS LİS', aktifSinif: 'bg-teal-700 text-white shadow' },
 ];
+
+export function getAlanFiltreSecenekleri() {
+  if (isKpssMode()) {
+    return [
+      { id: 'HEPSI' as const, etiket: 'Tümü', aktifSinif: 'bg-gray-900 text-white shadow' },
+      { id: 'KPSS_ORTAOGRETIM' as const, etiket: 'KPSS OÖ', aktifSinif: 'bg-cyan-700 text-white shadow' },
+      { id: 'KPSS_ONLISANS' as const, etiket: 'KPSS ÖL', aktifSinif: 'bg-sky-700 text-white shadow' },
+      { id: 'KPSS_LISANS' as const, etiket: 'KPSS LİS', aktifSinif: 'bg-teal-700 text-white shadow' },
+    ];
+  }
+  return [
+    { id: 'HEPSI' as const, etiket: 'Tümü', aktifSinif: 'bg-gray-900 text-white shadow' },
+    { id: 'TYT' as const, etiket: 'TYT', aktifSinif: 'bg-indigo-600 text-white shadow' },
+    { id: 'AYT' as const, etiket: 'AYT', aktifSinif: 'bg-violet-600 text-white shadow' },
+    { id: 'LGS' as const, etiket: 'LGS', aktifSinif: 'bg-amber-500 text-white shadow' },
+  ];
+}
+
 
 export function alanFiltreApiParams(tab: AlanTab): {
   ogretimTuru?: string;

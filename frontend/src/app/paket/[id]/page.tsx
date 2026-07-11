@@ -2,14 +2,13 @@
 
 import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useParams } from 'next/navigation';
-import { useMemo, useState, useEffect } from 'react';
+import { useParams, usePathname } from 'next/navigation';
+import { useMemo, useState, useEffect, useRef } from 'react';
 import { format, addMonths, subMonths, startOfMonth, endOfMonth, isWithinInterval, isSameDay, isSameMonth } from 'date-fns';
 import { tr } from 'date-fns/locale';
-import { paketApi, sinavApi } from '@/lib/api';
+import { paketApi } from '@/lib/api';
 import { useAuthStore } from '@/store/auth.store';
-import { useSinavSepetStore, sepetToplamTutar, type SepetSinav } from '@/store/sinav-sepet.store';
-import { kademeliSepetToplamHesapla, type SinavSepetFiyatAyarlari } from '@/lib/sinavFiyatKademe';
+import { kademeliSepetToplamHesapla, kademeEtiketi, type SinavSepetFiyatAyarlari } from '@/lib/sinavFiyatKademe';
 import {
   Check,
   Loader2,
@@ -20,14 +19,18 @@ import {
   ShoppingCart,
   ShoppingBag,
   CheckCircle2,
-  Plus,
   ChevronLeft,
   ChevronRight,
   ChevronDown,
 } from 'lucide-react';
 import { MarketingShell } from '@/components/layout/MarketingShell';
+import { IyzicoCheckoutModal } from '@/components/payment/IyzicoCheckoutModal';
+import { iyzicoOdemeBaslat } from '@/lib/iyzicoCheckout';
 import { paketKategoriEtiket, paketKategoriRenk } from '@/lib/paketKategori';
 import { toast } from '@/store/toast.store';
+import { usePaketSepetStore } from '@/store/paket-sepet.store';
+import { girisUrlWithReturn, kayitUrlWithReturn } from '@/lib/returnUrl';
+import { erisimSonrasiYenile } from '@/lib/erisimYenile';
 
 type PaketSinav = {
   id: string;
@@ -41,6 +44,8 @@ type PaketSinav = {
   soruSayisi?: number;
   durum: string;
   grup?: { ad: string };
+  ucretsiz?: boolean;
+  herkeseAcik?: boolean;
 };
 
 type PaketDetay = {
@@ -54,30 +59,33 @@ type PaketDetay = {
   ozellikler: string[];
   populer: boolean;
   sinavlar?: PaketSinav[];
+  ucretsizSinavlar?: PaketSinav[];
+  kademeliFiyatlandirma?: SinavSepetFiyatAyarlari;
 };
-
-function sinaviSepetUrununeCevir(s: PaketSinav): SepetSinav {
-  return {
-    id: s.id,
-    baslik: s.baslik,
-    tur: s.tur,
-    baslangicZamani: s.baslangicZamani,
-    gosterilenFiyat: s.gosterilenFiyat!,
-  };
-}
 
 const SINAV_LISTE_LIMIT = 8;
 
 export default function PaketDetaySayfasi() {
   const params = useParams<{ id: string }>();
+  const pathname = usePathname();
   const id = params?.id;
   const token = useAuthStore((s) => s.token);
   const queryClient = useQueryClient();
-  const { urunler, ekle, cikar, temizle, sepetteMi } = useSinavSepetStore();
-  const [seciliIds, setSeciliIds] = useState<string[]>([]);
+  const { paketId: sepetPaketId, seciliSinavIds: sepetIds, kaydet: sepetKaydet, temizle: sepetTemizle } =
+    usePaketSepetStore();
+  const sepetToastGosterildi = useRef(false);
+  const [sepetHydrate, setSepetHydrate] = useState(false);
+
+  /** Bu paket sayfası için seçili denemeler — tek kaynak: zustand sepet store */
+  const seciliIds = useMemo(() => {
+    if (!id || sepetPaketId !== id) return [];
+    return sepetIds;
+  }, [id, sepetPaketId, sepetIds]);
   const [takvimAy, setTakvimAy] = useState(new Date());
   const [ozelliklerAcik, setOzelliklerAcik] = useState(false);
   const [sinavListesiGenis, setSinavListesiGenis] = useState(false);
+  const [checkoutForm, setCheckoutForm] = useState<string | null>(null);
+  const [checkoutAltBaslik, setCheckoutAltBaslik] = useState<string | undefined>();
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['paket-detay', id],
@@ -86,14 +94,12 @@ export default function PaketDetaySayfasi() {
     retry: false,
   });
 
-  const { data: fiyatKademeRes } = useQuery({
-    queryKey: ['sinav-fiyat-kademeleri'],
-    queryFn: () => sinavApi.fiyatKademeleri(),
-  });
-  const fiyatAyarlari = fiyatKademeRes?.data?.veri as SinavSepetFiyatAyarlari | undefined;
-
   const paket: PaketDetay | null = data?.data?.veri || null;
   const sinavlar = paket?.sinavlar || [];
+  const ucretsizSinavlar = paket?.ucretsizSinavlar || [];
+  const paketUcretsiz = paket
+    ? (paket.indirimliFiyat != null && paket.indirimliFiyat > 0 ? paket.indirimliFiyat : paket.fiyat) <= 0
+    : false;
 
   const ozelliklerKatlanabilir = useMemo(() => {
     if (!paket?.ozellikler?.length) return false;
@@ -180,13 +186,65 @@ export default function PaketDetaySayfasi() {
     setSinavListesiGenis(false);
   }, [takvimAy]);
 
+  const geriDonusYolu = id ? `/paket/${id}` : pathname || '/paketler';
+
+  useEffect(() => {
+    if (usePaketSepetStore.persist.hasHydrated()) {
+      setSepetHydrate(true);
+      return;
+    }
+    return usePaketSepetStore.persist.onFinishHydration(() => setSepetHydrate(true));
+  }, []);
+
+  // Giriş/kayıt sonrası kayıtlı sepet bildirimi (bir kez)
+  useEffect(() => {
+    if (!sepetHydrate || sepetToastGosterildi.current || !id) return;
+    if (sepetPaketId === id && sepetIds.length > 0) {
+      sepetToastGosterildi.current = true;
+      toast.basarili(
+        'Sepetiniz yüklendi',
+        `${sepetIds.length} deneme seçiminiz korundu. Satın almaya devam edebilirsiniz.`
+      );
+    }
+  }, [sepetHydrate, id, sepetPaketId, sepetIds.length]);
+
+  // Paket adı yüklendiğinde sepet meta güncelle
+  useEffect(() => {
+    if (!id || !paket?.ad) return;
+    const state = usePaketSepetStore.getState();
+    if (state.paketId !== id || state.seciliSinavIds.length === 0) return;
+    if (state.paketAd !== paket.ad) {
+      sepetKaydet(id, state.seciliSinavIds, paket.ad);
+    }
+  }, [id, paket?.ad, sepetKaydet]);
+
   const satinAlMutation = useMutation({
-    mutationFn: (sinavIds: string[]) => sinavApi.sepetSatinAl({ sinavIds }),
+    mutationFn: (sinavIds: string[]) =>
+      paketApi.seciliSinavlariSatinAl(id!, { sinavIds, odemeYontemi: 'KREDI_KARTI' }),
     onSuccess: (res) => {
+      const data = res?.data?.veri;
+      const adet = data?.adet ?? seciliIds.length;
+      setCheckoutAltBaslik(
+        adet > 1 ? `${paket?.ad} · ${adet} deneme` : `${paket?.ad} · 1 deneme`
+      );
+      const acildi = iyzicoOdemeBaslat(data, setCheckoutForm);
+      if (acildi) {
+        sepetTemizle();
+        queryClient.invalidateQueries({ queryKey: ['paket-detay', id] });
+        return;
+      }
       queryClient.invalidateQueries({ queryKey: ['paket-detay', id] });
-      const adet = res?.data?.veri?.adet ?? seciliIds.length;
-      temizle();
-      setSeciliIds([]);
+      sepetTemizle();
+      // Ücretsiz denemeler backend'de otomatik tanımlandı (ödeme yok).
+      if (data?.ucretsiz || data?.toplamTutar === 0) {
+        erisimSonrasiYenile(queryClient);
+        toast.basarili(
+          adet > 1
+            ? `${adet} ücretsiz deneme hesabınıza tanımlandı. Hemen çözebilirsiniz.`
+            : 'Ücretsiz deneme hesabınıza tanımlandı. Hemen çözebilirsiniz.'
+        );
+        return;
+      }
       toast.basarili(
         adet > 1
           ? `${adet} deneme için siparişiniz alındı. Ödeme onayından sonra erişebilirsiniz.`
@@ -204,19 +262,28 @@ export default function PaketDetaySayfasi() {
   const paketSatinAlMutation = useMutation({
     mutationFn: () => paketApi.satinAl({ paketId: id!, odemeYontemi: 'KREDI_KARTI' }),
     onSuccess: (response) => {
-      const checkout = response.data.veri?.checkoutFormContent;
-      if (checkout) {
-        const container = document.getElementById('iyzico-form-container');
-        if (container) {
-          container.innerHTML = checkout;
-          const form = container.querySelector('form');
-          form?.submit();
+      const data = response.data.veri;
+      setCheckoutAltBaslik(paket?.ad);
+      const acildi = iyzicoOdemeBaslat(data, setCheckoutForm);
+      if (!acildi) {
+        if (data?.ucretsiz) {
+          queryClient.invalidateQueries({ queryKey: ['paket-detay', id] });
+          erisimSonrasiYenile(queryClient);
+          sepetTemizle();
+          toast.basarili('Ücretsiz paket hesabınıza tanımlandı. Denemelere hemen erişebilirsiniz.');
+          return;
         }
-      } else {
         toast.basarili('Siparişiniz oluşturuldu.');
+      } else {
+        sepetTemizle();
       }
     },
-    onError: () => toast.hata('Paket satın alma başarısız'),
+    onError: (err: unknown) => {
+      const mesaj =
+        (err as { response?: { data?: { mesaj?: string } } })?.response?.data?.mesaj ||
+        'Paket satın alma başarısız';
+      toast.hata(String(mesaj));
+    },
   });
 
   const seciliSinavlar = useMemo(
@@ -224,44 +291,42 @@ export default function PaketDetaySayfasi() {
     [sinavlar, seciliIds]
   );
 
-  const sepetUrunleri: SepetSinav[] = useMemo(() => {
-    const fromSecim = seciliSinavlar.map(sinaviSepetUrununeCevir);
-    if (fromSecim.length > 0) return fromSecim;
-    return urunler.filter((u) => sinavlar.some((s) => s.id === u.id));
-  }, [seciliSinavlar, urunler, sinavlar]);
-
-  const listeToplam = sepetToplamTutar(sepetUrunleri);
+  const listeToplam = useMemo(
+    () => seciliSinavlar.reduce((toplam, sinav) => toplam + (sinav.gosterilenFiyat || 0), 0),
+    [seciliSinavlar]
+  );
   const kademeSonuc = useMemo(
-    () => kademeliSepetToplamHesapla(sepetUrunleri.length, listeToplam, fiyatAyarlari),
-    [sepetUrunleri.length, listeToplam, fiyatAyarlari]
+    () => kademeliSepetToplamHesapla(seciliSinavlar.length, listeToplam, paket?.kademeliFiyatlandirma),
+    [seciliSinavlar.length, listeToplam, paket?.kademeliFiyatlandirma]
   );
 
+  const secimGuncelle = (yeniIds: string[]) => {
+    if (!id) return;
+    sepetKaydet(id, yeniIds, paket?.ad);
+  };
+
   const toggleSecim = (s: PaketSinav) => {
-    if (!s.gosterilenFiyat || s.satinAlinabilir === false) return;
-    setSeciliIds((prev) =>
-      prev.includes(s.id) ? prev.filter((x) => x !== s.id) : [...prev, s.id]
-    );
+    if (s.gosterilenFiyat == null || s.satinAlinabilir === false) return;
+    const mevcut = sepetPaketId === id ? sepetIds : [];
+    const yeni = mevcut.includes(s.id) ? mevcut.filter((x) => x !== s.id) : [...mevcut, s.id];
+    secimGuncelle(yeni);
   };
 
   const tumunuSec = () => {
     const ids = aylikSinavlar
       .filter((s) => s.gosterilenFiyat != null && s.satinAlinabilir !== false)
       .map((s) => s.id);
-    setSeciliIds(ids);
+    secimGuncelle(ids);
   };
 
-  const sepeteEkle = (s: PaketSinav) => {
-    if (!s.gosterilenFiyat) return;
-    ekle(sinaviSepetUrununeCevir(s));
-    toast.basarili(`«${s.baslik}» sepete eklendi`);
-  };
+  const satinAlIds = seciliIds;
 
-  const satinAlIds =
-    seciliIds.length > 0 ? seciliIds : sepetUrunleri.map((u) => u.id);
+  const sepetiTemizle = () => {
+    sepetTemizle();
+  };
 
   const sinavSatiri = (s: PaketSinav) => {
     const secili = seciliIds.includes(s.id);
-    const sepette = sepetteMi(s.id);
     const fiyatYok = s.gosterilenFiyat == null;
     const satinAlinamaz = s.satinAlinabilir === false;
     const devreDisi = fiyatYok || satinAlinamaz;
@@ -294,11 +359,6 @@ export default function PaketDetaySayfasi() {
                   Yakında
                 </span>
               )}
-              {sepette && (
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-violet-500/20 text-violet-200">
-                  Sepette
-                </span>
-              )}
             </div>
             <p className="text-white font-bold mt-0.5">{s.baslik}</p>
             <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-400 mt-1.5">
@@ -318,20 +378,13 @@ export default function PaketDetaySayfasi() {
               <span className="text-xs text-slate-500">Fiyat yok</span>
             ) : satinAlinamaz ? (
               <span className="text-xs text-slate-500">Satış kapalı</span>
+            ) : s.gosterilenFiyat === 0 ? (
+              <p className="text-lg font-black text-emerald-400">Ücretsiz</p>
             ) : (
               <>
                 <p className="text-lg font-black text-emerald-400">
                   {s.gosterilenFiyat!.toLocaleString('tr-TR')} ₺
                 </p>
-                {!sepette && (
-                  <button
-                    type="button"
-                    onClick={() => sepeteEkle(s)}
-                    className="mt-1 text-[10px] font-bold text-indigo-300 hover:text-white inline-flex items-center gap-1"
-                  >
-                    <Plus className="w-3 h-3" /> Sepete
-                  </button>
-                )}
               </>
             )}
           </div>
@@ -339,6 +392,37 @@ export default function PaketDetaySayfasi() {
       </div>
     );
   };
+
+  const ucretsizSinavKart = (s: PaketSinav) => (
+    <div
+      key={s.id}
+      className="rounded-2xl border border-emerald-400/20 bg-emerald-500/10 p-4"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[10px] font-bold uppercase text-emerald-300">{s.tur}</span>
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-400/20 text-emerald-200">
+              Herkese Acik
+            </span>
+          </div>
+          <p className="text-white font-bold mt-1">{s.baslik}</p>
+          <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-emerald-100/75 mt-1.5">
+            {s.grup?.ad && <span>{s.grup.ad}</span>}
+            <span>{format(new Date(s.baslangicZamani), 'd MMM yyyy HH:mm', { locale: tr })}</span>
+            <span>{s.sureDakika} dk</span>
+            {s.soruSayisi != null && <span>{s.soruSayisi} soru</span>}
+          </div>
+          <p className="text-xs text-emerald-100/80 mt-2">
+            Paket satin almadan gorulebilir. Cozmek icin giris yapmaniz yeterlidir.
+          </p>
+        </div>
+        <div className="text-right shrink-0">
+          <p className="text-lg font-black text-emerald-300">Ucretsiz</p>
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <MarketingShell>
@@ -403,10 +487,29 @@ export default function PaketDetaySayfasi() {
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 {/* Deneme listesi */}
                 <div className="lg:col-span-2 space-y-4">
+                  {ucretsizSinavlar.length > 0 && (
+                    <div className="rounded-3xl border border-emerald-400/20 bg-emerald-500/10 p-5 md:p-6 space-y-4">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                          <h2 className="text-xl font-bold text-white">Herkese acik tanitim sinavlari</h2>
+                          <p className="text-sm text-emerald-100/80 mt-1">
+                            Bu denemelere paket satin almadan ulasilabilir.
+                          </p>
+                        </div>
+                        <span className="text-xs font-bold uppercase tracking-wide text-emerald-200">
+                          {ucretsizSinavlar.length} ucretsiz deneme
+                        </span>
+                      </div>
+                      <div className="space-y-2">
+                        {ucretsizSinavlar.map((sinav) => ucretsizSinavKart(sinav))}
+                      </div>
+                    </div>
+                  )}
+
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <h2 className="text-xl font-bold text-white flex items-center gap-2">
                       <Calendar className="w-5 h-5 text-indigo-400" />
-                      Sınav takvimi
+                      Paket icindeki denemeler
                       {sinavlar.length > 0 && (
                         <span className="text-sm font-normal text-slate-400">
                           ({sinavlar.length} deneme)
@@ -597,15 +700,27 @@ export default function PaketDetaySayfasi() {
                 {/* Satın alma özeti */}
                 <div className="lg:col-span-1">
                   <div className="rounded-3xl border border-indigo-400/30 bg-gradient-to-b from-indigo-600/20 to-violet-600/10 backdrop-blur-sm p-6 lg:sticky lg:top-28 lg:self-start lg:max-h-[calc(100vh-8rem)] lg:overflow-y-auto space-y-5">
-                    <h3 className="text-white font-bold text-lg">Satın alma</h3>
+                    <div className="flex items-center justify-between gap-2">
+                      <h3 className="text-white font-bold text-lg">Satın alma</h3>
+                      {satinAlIds.length > 0 && (
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-indigo-500/30 border border-indigo-400/30 px-2.5 py-1 text-xs font-bold text-indigo-100">
+                          <ShoppingCart className="w-3.5 h-3.5" />
+                          Sepet · {satinAlIds.length}
+                        </span>
+                      )}
+                    </div>
 
-                    {sepetUrunleri.length > 0 ? (
+                    {satinAlIds.length > 0 ? (
                       <>
                         <ul className="space-y-2 max-h-40 overflow-y-auto text-sm">
-                          {sepetUrunleri.map((u) => (
+                          {seciliSinavlar.map((u) => (
                             <li key={u.id} className="flex justify-between gap-2 text-slate-200">
                               <span className="line-clamp-1 flex-1">{u.baslik}</span>
-                              <span className="font-bold shrink-0">{u.gosterilenFiyat.toLocaleString('tr-TR')} ₺</span>
+                              <span className="font-bold shrink-0">
+                                {u.gosterilenFiyat === 0
+                                  ? 'Ücretsiz'
+                                  : `${u.gosterilenFiyat?.toLocaleString('tr-TR')} ₺`}
+                              </span>
                             </li>
                           ))}
                         </ul>
@@ -616,7 +731,9 @@ export default function PaketDetaySayfasi() {
                             </p>
                           )}
                           <p className="text-2xl font-black text-white text-right">
-                            {kademeSonuc.toplam.toLocaleString('tr-TR')} ₺
+                            {kademeSonuc.toplam === 0
+                              ? 'Ücretsiz'
+                              : `${kademeSonuc.toplam.toLocaleString('tr-TR')} ₺`}
                           </p>
                           {kademeSonuc.indirim > 0 && (
                             <p className="text-xs text-emerald-300 text-right mt-1">
@@ -636,24 +753,36 @@ export default function PaketDetaySayfasi() {
                             ) : (
                               <ShoppingCart className="w-4 h-4" />
                             )}
-                            {satinAlIds.length > 1
-                              ? `${satinAlIds.length} Denemeyi Satın Al`
-                              : 'Seçili Denemeyi Satın Al'}
+                            {kademeSonuc.toplam === 0
+                              ? satinAlIds.length > 1
+                                ? `${satinAlIds.length} Ücretsiz Denemeyi Edin`
+                                : 'Ücretsiz Denemeyi Edin'
+                              : satinAlIds.length > 1
+                                ? `${satinAlIds.length} Denemeyi Satın Al · Ödeme`
+                                : 'Seçili Denemeyi Satın Al · Ödeme'}
                           </button>
                         ) : (
-                          <Link
-                            href="/giris"
-                            className="w-full inline-flex items-center justify-center rounded-2xl py-3.5 font-extrabold bg-indigo-600 hover:bg-indigo-500 text-white"
-                          >
-                            Satın almak için giriş yap
-                          </Link>
+                          <div className="space-y-2">
+                            <Link
+                              href={girisUrlWithReturn(geriDonusYolu)}
+                              className="w-full inline-flex items-center justify-center rounded-2xl py-3.5 font-extrabold bg-indigo-600 hover:bg-indigo-500 text-white"
+                            >
+                              Satın almak için giriş yap
+                            </Link>
+                            <Link
+                              href={kayitUrlWithReturn(geriDonusYolu)}
+                              className="w-full inline-flex items-center justify-center rounded-2xl py-3 font-bold bg-white/10 hover:bg-white/15 text-white border border-white/15 text-sm"
+                            >
+                              Hesabınız yok mu? Üye olun
+                            </Link>
+                            <p className="text-[11px] text-center text-slate-400">
+                              Seçtiğiniz {satinAlIds.length} deneme sepetinizde saklanır; girişten sonra buraya dönersiniz.
+                            </p>
+                          </div>
                         )}
                         <button
                           type="button"
-                          onClick={() => {
-                            setSeciliIds([]);
-                            temizle();
-                          }}
+                          onClick={sepetiTemizle}
                           className="w-full text-center text-xs font-bold text-slate-400 hover:text-red-300"
                         >
                           Seçimi temizle
@@ -661,8 +790,35 @@ export default function PaketDetaySayfasi() {
                       </>
                     ) : (
                       <p className="text-indigo-100/80 text-sm">
-                        Listeden deneme seçin veya tek tek sepete ekleyin. Kademeli indirim otomatik uygulanır.
+                        Listeden deneme seçin. Ücretsiz denemeler seçildiğinde ödeme olmadan hesabınıza tanımlanır; ücretli seçimlerde varsa kademeli indirim uygulanır.
                       </p>
+                    )}
+
+                    {paket.kademeliFiyatlandirma?.aktif && (
+                      <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4 space-y-2">
+                        <p className="text-xs text-slate-400 uppercase font-bold tracking-wide">
+                          Paket ici fiyat kurallari
+                        </p>
+                        {paket.kademeliFiyatlandirma.tekDenemeFiyati > 0 && (
+                          <p className="text-sm text-slate-200">
+                            Tekil sinav fiyati: <strong>{paket.kademeliFiyatlandirma.tekDenemeFiyati.toLocaleString('tr-TR')} ₺</strong>
+                          </p>
+                        )}
+                        {paket.kademeliFiyatlandirma.kademeler.length > 0 ? (
+                          <div className="flex flex-wrap gap-2">
+                            {paket.kademeliFiyatlandirma.kademeler.map((kademe) => (
+                              <span
+                                key={`${kademe.minAdet}-${kademe.indirimYuzde}`}
+                                className="rounded-full border border-emerald-400/20 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-bold text-emerald-200"
+                              >
+                                {kademeEtiketi(kademe)}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-sm text-slate-300">Kademe yoksa secilen denemeler liste fiyatindan hesaplanir.</p>
+                        )}
+                      </div>
                     )}
 
                     <div className="border-t border-white/10 pt-4 space-y-3">
@@ -671,9 +827,11 @@ export default function PaketDetaySayfasi() {
                       </p>
                       <div className="flex items-baseline gap-2">
                         <span className="text-2xl font-black text-white">
-                          {(paket.indirimliFiyat ?? paket.fiyat).toLocaleString('tr-TR')} ₺
+                          {paketUcretsiz
+                            ? 'Ücretsiz'
+                            : `${(paket.indirimliFiyat ?? paket.fiyat).toLocaleString('tr-TR')} ₺`}
                         </span>
-                        {paket.indirimliFiyat != null && (
+                        {!paketUcretsiz && paket.indirimliFiyat != null && (
                           <span className="text-slate-500 line-through">{paket.fiyat} ₺</span>
                         )}
                       </div>
@@ -689,15 +847,23 @@ export default function PaketDetaySayfasi() {
                           ) : (
                             <ShoppingBag className="w-4 h-4" />
                           )}
-                          Tüm Paketi Satın Al
+                          {paketUcretsiz ? 'Tüm Paketi Ücretsiz Al' : 'Tüm Paketi Satın Al'}
                         </button>
                       ) : (
-                        <Link
-                          href="/giris"
-                          className="w-full inline-flex items-center justify-center rounded-2xl py-3 font-bold bg-white/10 text-white border border-white/15"
-                        >
-                          Paket için giriş yap
-                        </Link>
+                        <div className="space-y-2">
+                          <Link
+                            href={girisUrlWithReturn(geriDonusYolu)}
+                            className="w-full inline-flex items-center justify-center rounded-2xl py-3 font-bold bg-white/10 text-white border border-white/15"
+                          >
+                            Paket için giriş yap
+                          </Link>
+                          <Link
+                            href={kayitUrlWithReturn(geriDonusYolu)}
+                            className="w-full inline-flex items-center justify-center rounded-2xl py-2.5 text-sm font-semibold text-indigo-300 hover:text-indigo-200"
+                          >
+                            Üye ol
+                          </Link>
+                        </div>
                       )}
                     </div>
                   </div>
@@ -707,7 +873,12 @@ export default function PaketDetaySayfasi() {
           )}
         </div>
       </div>
-      <div id="iyzico-form-container" className="hidden" />
+      <IyzicoCheckoutModal
+        open={Boolean(checkoutForm)}
+        checkoutForm={checkoutForm}
+        subtitle={checkoutAltBaslik ?? paket?.ad}
+        onClose={() => setCheckoutForm(null)}
+      />
     </MarketingShell>
   );
 }

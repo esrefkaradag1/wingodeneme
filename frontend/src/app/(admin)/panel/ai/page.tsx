@@ -95,9 +95,12 @@ interface ReferansAnalizi {
   tam_metin_okundu?: boolean;
 }
 
+type YksMufredatKapsam = 'HEPSI' | 'TYT' | 'AYT' | 'SINIF_11' | 'SINIF_10' | 'SINIF_9';
+type LgsMufredatKapsam = 'LGS' | 'SINIF_7' | 'SINIF_6';
+
 const REFERANS_DERS_SECENEKLERI = [
   'Matematik', 'Geometri', 'Fizik', 'Kimya', 'Biyoloji', 'Türkçe', 'Türk Dili ve Edebiyatı',
-  'Tarih', 'Coğrafya', 'Felsefe', 'Din Kültürü ve Ahlak Bilgisi', 'İngilizce',
+  'Tarih', 'Coğrafya', 'Sosyal Bilgiler', 'Felsefe', 'Din Kültürü ve Ahlak Bilgisi', 'İngilizce',
   'Fen Bilimleri', 'İnkılap Tarihi ve Atatürkçülük',
 ];
 
@@ -110,6 +113,7 @@ function referansKaynakAdindanDersTahmin(kaynak: string): string | null {
     .replace(/[_\s]+/g, '-');
   const kalip: Array<[string, RegExp]> = [
     ['İnkılap Tarihi ve Atatürkçülük', /inkilap|inkılap|ataturkculuk|atatürkçülük/i],
+    ['Sosyal Bilgiler', /sosyal-bilgi|sosyalbilgi/i],
     ['Coğrafya', /cografya|coğrafya|cog-|cogr-/i],
     ['Fen Bilimleri', /fen-bilim|fenbilim|fen-bilimleri|\/fen\//i],
     ['Din Kültürü ve Ahlak Bilgisi', /din-kultur|dinkultur|din-kulturu/i],
@@ -145,6 +149,7 @@ function referansDersTahminEt(analiz: ReferansAnalizi, kaynakAdi?: string): Refe
     ['Coğrafya', /coğrafya|cografya|harita|izohips|nüfus|iklim|yer şekil|enlem|boylam|akarsu|göl|kıta|sanayi|tarım|turizm/i],
     ['Tarih', /tarih|osmanlı|selçuklu|ilkçağ|ortaçağ|soğuk savaş/i],
     ['İnkılap Tarihi ve Atatürkçülük', /inkılap|inkilap|atatürkçülük|atatürk|mondros|sevr|lozan/i],
+    ['Sosyal Bilgiler', /sosyal bilgiler|hak ve sorumluluk|nufus|nüfus|kültür|uretim dagitim|üretim dağıtım|demokrasi/i],
     ['Fen Bilimleri', /fen bilim|fen bilimleri|dna|genetik|mitoz|mayoz|ekosistem|mevsim|iklim|gölge|dünya|güneş|ay|ekvator/i],
     ['Geometri', /geometri|üçgen|ucgen|açı|aci|çember|alan|hacim|şekil|sekil/i],
     ['Matematik', /matematik|türev|integral|fonksiyon|polinom|logaritma|limit|olasılık/i],
@@ -224,7 +229,7 @@ function referansGorselOnerilir(analiz: ReferansAnalizi | null): boolean {
 function bankaKaydiIcinEtkinGrupId(
   konu: KonuItem | undefined,
   gruplar: GrupItem[],
-  yksKapsam: 'HEPSI' | 'TYT' | 'AYT'
+  yksKapsam: 'HEPSI' | 'TYT' | 'AYT' | 'SINIF_11' | 'SINIF_10' | 'SINIF_9'
 ): string | undefined {
   if (!konu?.ogretimTuru) return undefined;
   const uygun = gruplar.filter((g) => grupKonuOgretimTuru(g, g.tamYol) === konu.ogretimTuru);
@@ -329,6 +334,9 @@ export default function AIPaneli() {
   const [kullanilanKaynaklar, setKullanilanKaynaklar] = useState<{ id: string; dokumanId: string; dokumanBaslik: string; benzerlik: number }[]>([]);
   const [acikCozumIdx, setAcikCozumIdx] = useState<number | null>(null);
 
+  // Üretim sonrası otomatik banka kaydı için bayrak (üretilir üretilmez bankaya aktarılır)
+  const otomatikKayitBekliyorRef = useRef(false);
+
   // Referans modu state'leri
   const dosyaInputRef = useRef<HTMLInputElement>(null);
   const [referansDosya, setReferansDosya] = useState<File | null>(null);
@@ -354,8 +362,10 @@ export default function AIPaneli() {
     /** sorulara atanacak toplu kazanım etiketi */
     hedefKazanim: '',
   });
-  const [yksKapsamNormal, setYksKapsamNormal] = useState<'HEPSI' | 'TYT' | 'AYT'>('HEPSI');
-  const [yksKapsamReferans, setYksKapsamReferans] = useState<'HEPSI' | 'TYT' | 'AYT'>('HEPSI');
+  const [yksKapsamNormal, setYksKapsamNormal] = useState<YksMufredatKapsam>('HEPSI');
+  const [yksKapsamReferans, setYksKapsamReferans] = useState<YksMufredatKapsam>('HEPSI');
+  const [lgsKapsamNormal, setLgsKapsamNormal] = useState<LgsMufredatKapsam>('LGS');
+  const [lgsKapsamReferans, setLgsKapsamReferans] = useState<LgsMufredatKapsam>('LGS');
   const [kpssKapsamNormal, setKpssKapsamNormal] = useState<'HEPSI' | 'GY' | 'GK'>('HEPSI');
   const [kpssKapsamReferans, setKpssKapsamReferans] = useState<'HEPSI' | 'GY' | 'GK'>('HEPSI');
   const [kpssKademeNormal, setKpssKademeNormal] = useState<OgretimTuruKpss>('KPSS_LISANS');
@@ -372,9 +382,7 @@ export default function AIPaneli() {
     queryFn: () => adminApi.gruplar(),
   });
   const gruplar: GrupItem[] = useMemo(() => {
-    const raw: GrupItem[] = bagliGruplariFiltrele(gruplarData?.data?.veri || []).filter(
-      (g: GrupItem) => g.aktif !== false
-    );
+    const raw = bagliGruplariFiltrele(gruplarData?.data?.veri || []).filter((g) => g.aktif !== false) as GrupItem[];
     const byId = new Map(raw.map((g) => [g.id, g]));
     const yolAdi = (g: GrupItem): string => {
       const parcalar = [String(g.ad).trim()];
@@ -431,6 +439,8 @@ export default function AIPaneli() {
       referansForm.grupId,
       yksKapsamNormal,
       yksKapsamReferans,
+      lgsKapsamNormal,
+      lgsKapsamReferans,
       kpssKapsamNormal,
       kpssKapsamReferans,
       kpssKademeNormal,
@@ -439,6 +449,7 @@ export default function AIPaneli() {
     queryFn: async () => {
       const gId = aktifSekme === 'referans' ? referansForm.grupId : form.grupId;
       const yks = aktifSekme === 'referans' ? yksKapsamReferans : yksKapsamNormal;
+      const lgs = aktifSekme === 'referans' ? lgsKapsamReferans : lgsKapsamNormal;
       const kpssKap = aktifSekme === 'referans' ? kpssKapsamReferans : kpssKapsamNormal;
       const kpssKademe = aktifSekme === 'referans' ? kpssKademeReferans : kpssKademeNormal;
       const params: Record<string, string> = {};
@@ -446,9 +457,15 @@ export default function AIPaneli() {
       const cozulen = grupKonuOgretimTuru(g, g?.tamYol);
       const konuTuru = cozulen ?? (g?.tur === 'KPSS' ? kpssKademe : undefined);
       if (konuTuru) {
-        params.ogretimTuru = konuTuru;
-        if (konuTuru === 'YKS' && yks !== 'HEPSI') params.yksKapsam = yks;
-        if (kpssOgretimTuruMu(konuTuru) && kpssKap !== 'HEPSI') params.kpssKapsam = kpssKap;
+        if (konuTuru === 'YKS' && (yks === 'SINIF_11' || yks === 'SINIF_10' || yks === 'SINIF_9')) {
+          params.ogretimTuru = yks;
+        } else if (konuTuru === 'LGS' && (lgs === 'SINIF_7' || lgs === 'SINIF_6')) {
+          params.ogretimTuru = lgs;
+        } else {
+          params.ogretimTuru = konuTuru;
+          if (konuTuru === 'YKS' && yks !== 'HEPSI') params.yksKapsam = yks;
+          if (kpssOgretimTuruMu(konuTuru) && kpssKap !== 'HEPSI') params.kpssKapsam = kpssKap;
+        }
       }
       return api.get('/sorular/konular', { params });
     },
@@ -609,6 +626,8 @@ export default function AIPaneli() {
       setKullanilanKaynaklar(Array.isArray(veri?.kullanilanKaynaklar) ? veri.kullanilanKaynaklar : []);
       const mesaj = `${sorularArr.length} soru üretildi!` + (kaynakSayisi > 0 ? ` 📚 ${kaynakSayisi} kaynak kullanıldı.` : '');
       toast.basarili(mesaj);
+      // Üretilen sorular soru bankasına otomatik aktarılsın (state güncellendikten sonra effect tetikler)
+      if (sorularArr.length > 0) otomatikKayitBekliyorRef.current = true;
     },
     onError: (e: unknown) => {
       const ozet = axios422Ozet(e);
@@ -702,13 +721,16 @@ export default function AIPaneli() {
   const kaydetGrupId = aktifSekme === 'normal' ? form.grupId : referansForm.grupId;
   const eksikCozumSiralar = useMemo(() => cozumEksikSiraListesi(uretilmisSorular), [uretilmisSorular]);
   const cozumZorunluSaglandi = eksikCozumSiralar.length === 0;
-  /** API üretim sonrası sorular zaten DB’ye yazılmışsa (sunucu `id` döner); tekrar toplu kayda gerek yok */
+  /**
+   * Sorular gerçekten DB'ye yazılmış mı? Üretim endpoint'i önizleme için `temp-...`
+   * id verir (henüz kayıtlı DEĞİL). Yalnızca gerçek DB id'leri (temp- olmayan) kayıtlı sayılır.
+   */
   const sorularBankayaOtomatikKaydedildi = useMemo(
     () =>
       uretilmisSorular.length > 0 &&
       uretilmisSorular.every((s) => {
         const id = (s as UretilenSoru).id;
-        return typeof id === 'string' && id.trim().length > 0;
+        return typeof id === 'string' && id.trim().length > 0 && !id.startsWith('temp-');
       }),
     [uretilmisSorular]
   );
@@ -722,12 +744,13 @@ export default function AIPaneli() {
   }, [konular, aktifSekme, form.konuIds, referansForm.konuIds]);
 
   const soruBankasinaKaydetMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (opts?: { sorular?: UretilenSoru[]; otomatik?: boolean }) => {
+      const kaynakSorular = opts?.sorular ?? uretilmisSorular;
       if (!kaydetKonuId) {
         throw new Error('Önce ders/konu seçin (üretim formundan veya referansta "Konuya Kaydet").');
       }
-      if (uretilmisSorular.length === 0) return null;
-      const eksik = cozumEksikSiraListesi(uretilmisSorular);
+      if (kaynakSorular.length === 0) return null;
+      const eksik = cozumEksikSiraListesi(kaynakSorular);
       if (eksik.length > 0) {
         throw new Error(`Çözüm Açıklaması zorunlu. Eksik sorular: ${eksik.join(', ')}`);
       }
@@ -747,7 +770,7 @@ export default function AIPaneli() {
         sinavId: sinavTrim || null,
         ...(etkinGrupId ? { grupId: etkinGrupId } : {}),
         aiModeli: modelEtiket,
-        sorular: uretilmisSorular.map((s) => ({
+        sorular: kaynakSorular.map((s) => ({
           metinHtml: buildMetinHtmlFromParts(
             uretilenSoruyuMetinHtml(s),
             '',
@@ -760,25 +783,40 @@ export default function AIPaneli() {
         })),
       });
       return data as {
-        veri?: { kalite?: { onayDurumu?: string } };
+        veri?: { kalite?: { onayDurumu?: string }; soruIdleri?: string[] };
       };
     },
-    onSuccess: (yanit) => {
+    onSuccess: (yanit, degiskenler) => {
       queryClient.invalidateQueries({ queryKey: ['admin-sorular'] });
       queryClient.invalidateQueries({ queryKey: ['admin-sinavlar'] });
       queryClient.invalidateQueries({ queryKey: ['admin-gruplar'] });
-      const onayBekliyor = yanit?.veri?.kalite?.onayDurumu === 'ONAY_BEKLIYOR';
-      const ek =
-        onayBekliyor
-          ? ' Onay bekliyor; öğrenci sınavlarında görünmesi için Sorular sayfasından onaylayın.'
-          : '';
+
+      const idler = yanit?.veri?.soruIdleri;
+      const kaydedilenAdet = degiskenler?.sorular?.length ?? uretilmisSorular.length;
+
+      // Otomatik kayıt: sayfada kal, üretilen soruları gerçek id ile işaretle (çift kayıt önlenir)
+      if (degiskenler?.otomatik) {
+        if (Array.isArray(idler) && idler.length > 0) {
+          setUretilmisSorular((mevcut) =>
+            mevcut.map((s, i) => (idler[i] ? { ...s, id: idler[i] } : s))
+          );
+        }
+        toast.basarili(
+          'Soru bankasına otomatik kaydedildi',
+          `${kaydedilenAdet} soru «${kaydetKonuEtiketi || 'seçili konu'}» altında eklendi. Onay bekliyor — Sorular sayfasından onaylayın.`
+        );
+        return;
+      }
+
       toast.basarili(
         'Soru bankasına kaydedildi',
-        `${uretilmisSorular.length} soru ${kaydetKonuIds.length > 1 ? `${kaydetKonuIds.length} konuda` : `«${kaydetKonuEtiketi || 'seçili konu'}» altında`} listelenecek.${ek}`
+        `${kaydedilenAdet} soru ${kaydetKonuIds.length > 1 ? `${kaydetKonuIds.length} konuda` : `«${kaydetKonuEtiketi || 'seçili konu'}» altında`} listelenecek. Onay bekliyor — Sorular sayfasından onaylayın.`
       );
       router.push('/panel/sorular');
     },
-    onError: (e: unknown) => {
+    onError: (e: unknown, degiskenler) => {
+      // Otomatik kayıt hatası kullanıcıyı rahatsız etmesin; manuel butonla kaydedebilir.
+      if (degiskenler?.otomatik) return;
       const ozet = axios422Ozet(e);
       if (ozet) {
         toast.hata(ozet);
@@ -792,6 +830,19 @@ export default function AIPaneli() {
       toast.hata(msg);
     },
   });
+
+  // Üretim tamamlanınca soruları otomatik olarak soru bankasına aktar (eski davranış).
+  // Bayrak, üretim onSuccess'inde set edilir; burada state güncellendikten sonra tetiklenir.
+  useEffect(() => {
+    if (!otomatikKayitBekliyorRef.current) return;
+    otomatikKayitBekliyorRef.current = false;
+    if (uretilmisSorular.length === 0) return;
+    if (sorularBankayaOtomatikKaydedildi) return; // sunucu zaten id döndürmüş
+    if (!kaydetKonuId) return; // konu yoksa manuel kayda bırak
+    if (cozumEksikSiraListesi(uretilmisSorular).length > 0) return; // eksik çözüm → manuel
+    soruBankasinaKaydetMutation.mutate({ sorular: uretilmisSorular, otomatik: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [uretilmisSorular]);
 
   const referansSoruMutation = useMutation({
     mutationFn: async () => {
@@ -818,8 +869,10 @@ export default function AIPaneli() {
     onSuccess: (veri) => {
       const sorularArr = veri.veri?.sorular || [];
       setUretilmisSorular(sorularArr);
-      setKullanılanModel({ model: 'referans', ad: 'Referans Tabanlı', renk: 'blue', ikon: '📎', aciklama: '' });
+      setKullanılanModel({ id: 'referans', model: 'referans', ad: 'Referans Tabanlı', renk: 'blue', ikon: '📎', aciklama: '' });
       toast.basarili(`${sorularArr.length} özgün soru üretildi!`);
+      // Konu seçiliyse üretilen sorular otomatik bankaya aktarılır (effect tetikler)
+      if (sorularArr.length > 0) otomatikKayitBekliyorRef.current = true;
     },
     onError: (e: unknown) => {
       const ozet = axios422Ozet(e);
@@ -1163,6 +1216,7 @@ export default function AIPaneli() {
                       onChange={(e) => {
                         const grupId = e.target.value;
                         setYksKapsamReferans('HEPSI');
+                          setLgsKapsamReferans('LGS');
                         setKpssKapsamReferans('HEPSI');
                         setReferansForm((prev) => ({
                           ...prev,
@@ -1207,7 +1261,7 @@ export default function AIPaneli() {
                       <select
                         value={yksKapsamReferans}
                         onChange={(e) => {
-                          setYksKapsamReferans(e.target.value as 'HEPSI' | 'TYT' | 'AYT');
+                          setYksKapsamReferans(e.target.value as YksMufredatKapsam);
                           setReferansForm((p) => ({ ...p, konuIds: [] }));
                         }}
                         className="input-field py-2 text-sm"
@@ -1215,6 +1269,26 @@ export default function AIPaneli() {
                         <option value="HEPSI">TYT + AYT (tümü)</option>
                         <option value="TYT">TYT</option>
                         <option value="AYT">AYT</option>
+                        <option value="SINIF_11">11. Sınıf Müfredatı</option>
+                        <option value="SINIF_10">10. Sınıf Müfredatı</option>
+                        <option value="SINIF_9">9. Sınıf Müfredatı</option>
+                      </select>
+                    </div>
+                  )}
+                  {efektifReferansKonuTuru === 'LGS' && (
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">LGS müfredat</label>
+                      <select
+                        value={lgsKapsamReferans}
+                        onChange={(e) => {
+                          setLgsKapsamReferans(e.target.value as LgsMufredatKapsam);
+                          setReferansForm((p) => ({ ...p, konuIds: [] }));
+                        }}
+                        className="input-field py-2 text-sm"
+                      >
+                        <option value="LGS">8. Sınıf / LGS Müfredatı</option>
+                        <option value="SINIF_7">7. Sınıf Müfredatı</option>
+                        <option value="SINIF_6">6. Sınıf Müfredatı</option>
                       </select>
                     </div>
                   )}
@@ -1382,7 +1456,7 @@ export default function AIPaneli() {
               cozumZorunluSaglandi={cozumZorunluSaglandi}
               eksikCozumSiralar={eksikCozumSiralar}
               otomatikBankaKaydi={sorularBankayaOtomatikKaydedildi}
-              onKaydet={() => soruBankasinaKaydetMutation.mutate()}
+              onKaydet={() => soruBankasinaKaydetMutation.mutate(undefined)}
             />
             {uretilmisSorular.length === 0 ? (
               <div className="flex flex-col items-center justify-center flex-1 min-h-64 text-gray-300">
@@ -1420,6 +1494,7 @@ export default function AIPaneli() {
                 onChange={(e) => {
                   const grupId = e.target.value;
                   setYksKapsamNormal('HEPSI');
+                  setLgsKapsamNormal('LGS');
                   setKpssKapsamNormal('HEPSI');
                   setForm((prev) => ({
                     ...prev,
@@ -1471,7 +1546,7 @@ export default function AIPaneli() {
                 <select
                   value={yksKapsamNormal}
                   onChange={(e) => {
-                    setYksKapsamNormal(e.target.value as 'HEPSI' | 'TYT' | 'AYT');
+                    setYksKapsamNormal(e.target.value as YksMufredatKapsam);
                     setForm((f) => ({ ...f, konuIds: [] }));
                   }}
                   className="input-field"
@@ -1479,6 +1554,27 @@ export default function AIPaneli() {
                   <option value="HEPSI">TYT + AYT (tümü)</option>
                   <option value="TYT">TYT</option>
                   <option value="AYT">AYT</option>
+                  <option value="SINIF_11">11. Sınıf Müfredatı</option>
+                  <option value="SINIF_10">10. Sınıf Müfredatı</option>
+                  <option value="SINIF_9">9. Sınıf Müfredatı</option>
+                </select>
+              </div>
+            )}
+
+            {efektifNormalKonuTuru === 'LGS' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">LGS müfredat</label>
+                <select
+                  value={lgsKapsamNormal}
+                  onChange={(e) => {
+                    setLgsKapsamNormal(e.target.value as LgsMufredatKapsam);
+                    setForm((f) => ({ ...f, konuIds: [] }));
+                  }}
+                  className="input-field"
+                >
+                  <option value="LGS">8. Sınıf / LGS Müfredatı</option>
+                  <option value="SINIF_7">7. Sınıf Müfredatı</option>
+                  <option value="SINIF_6">6. Sınıf Müfredatı</option>
                 </select>
               </div>
             )}
@@ -1688,7 +1784,7 @@ export default function AIPaneli() {
               cozumZorunluSaglandi={cozumZorunluSaglandi}
               eksikCozumSiralar={eksikCozumSiralar}
               otomatikBankaKaydi={sorularBankayaOtomatikKaydedildi}
-              onKaydet={() => soruBankasinaKaydetMutation.mutate()}
+              onKaydet={() => soruBankasinaKaydetMutation.mutate(undefined)}
             />
 
             {uretilmisSorular.length === 0 ? (
@@ -1742,7 +1838,7 @@ function SoruBankasiKayitCagrisi({
               <span className="text-gray-500">Konular:</span>{' '}
               <span className="text-indigo-700 font-medium">{konuEtiketi}</span>
               {otomatikBankaKaydi && (
-                <span className="text-emerald-700"> — Üretimle birlikte sunucuda kaydedildi.</span>
+                <span className="text-amber-700"> — Bankaya eklendi; öğretmen onayı bekliyor.</span>
               )}
             </>
           ) : (
@@ -1757,18 +1853,18 @@ function SoruBankasiKayitCagrisi({
           disabled={otomatikBankaKaydi || kayitPending || manuelKayitEngeli}
           className={
             otomatikBankaKaydi
-              ? 'flex items-center gap-2 text-sm py-2 px-4 shrink-0 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-800 font-medium cursor-default'
+              ? 'flex items-center gap-2 text-sm py-2 px-4 shrink-0 rounded-xl border border-amber-200 bg-amber-50 text-amber-800 font-medium cursor-default'
               : 'btn-primary flex items-center gap-2 text-sm py-2 px-4 shrink-0 disabled:opacity-50'
           }
         >
           {kayitPending ? (
             <Loader2 className="w-4 h-4 animate-spin" />
           ) : otomatikBankaKaydi ? (
-            <Check className="w-4 h-4 text-emerald-600" />
+            <Check className="w-4 h-4 text-amber-600" />
           ) : (
             <Save className="w-4 h-4" />
           )}
-          {otomatikBankaKaydi ? 'Kaydedildi' : 'Soru bankasına kaydet'}
+          {otomatikBankaKaydi ? 'Onay bekliyor' : 'Soru bankasına kaydet'}
         </button>
       </div>
 

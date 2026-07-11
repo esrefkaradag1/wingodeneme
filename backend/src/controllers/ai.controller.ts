@@ -11,6 +11,7 @@ import { soruUretimGarantiKatmani } from '../services/soruGarantiKatmani';
 import { validateUretilenSoruListesi } from '../utils/soruUretimDogrulama';
 import { buildMetinHtmlFromParts, cozumMetniniHtmlYap } from '../utils/soruMetinBirlestir';
 import { reqOgretmenKisit, ogretmenDersiUretebilirMi, ogretmenDersiUretebilirMiKademe } from '../services/ogretmenSinirlama';
+import { ogretimTuruIzinUyumlu } from '../utils/grupOgretimTuru';
 import { metinSesUret } from '../services/tts.service';
 import { ogretmenTalimatKirp } from '../constants/ogretmenTalimat';
 import {
@@ -32,7 +33,7 @@ export async function soruUretController(req: AuthRequest, res: Response, next: 
     if (ogrKisit) {
       const turler = ogrKisit.ogretimTurleri?.length ? ogrKisit.ogretimTurleri : [ogrKisit.ogretimTuru];
       if (
-        !turler.includes(konu.ogretimTuru) ||
+        !ogretimTuruIzinUyumlu(konu.ogretimTuru, turler) ||
         !ogretmenDersiUretebilirMiKademe(ogrKisit, konu.ders, konu.ogretimTuru)
       ) {
         res.status(403).json({ basarili: false, mesaj: 'Bu branş veya kademe için soru üretme yetkiniz yok.' });
@@ -89,57 +90,46 @@ export async function soruUretController(req: AuthRequest, res: Response, next: 
     }));
     const kalite = await aiSoruKaliteIsleme(konu.id, konu.ders, kaliteGirdi, garanti.garantiMeta);
 
-    const kaydedilenSorular = await Promise.all(
-      sonSorular.map((d, i) => {
-        const s = sorular[i];
-        const soruGovde = s.svgGorsel
-          ? `${s.metin}<div class="soru-svg-gorsel">${s.svgGorsel}</div>`
-          : s.metin;
-        const cozumHtml = cozumMetniniHtmlYap(String(s.cozumAciklamasi || ''));
-        const metinHtml = buildMetinHtmlFromParts(soruGovde, '', cozumHtml);
-        const aiMetaHam = kalite.sorularMeta[i] as Record<string, unknown> | undefined;
-        const aiMetaBirlesik = {
-          ...(aiMetaHam || {}),
-          ...(s.cozumAciklamasi ? { cozumAciklamasi: s.cozumAciklamasi } : {}),
-        };
+    const zenginSorular = sonSorular.map((d, i) => {
+      const s = sorular[i];
+      const soruGovde = s.svgGorsel
+        ? `${s.metin}<div class="soru-svg-gorsel">${s.svgGorsel}</div>`
+        : s.metin;
+      const cozumHtml = cozumMetniniHtmlYap(String(s.cozumAciklamasi || ''));
+      const metinHtml = buildMetinHtmlFromParts(soruGovde, '', cozumHtml);
+      const aiMetaHam = kalite.sorularMeta[i] as Record<string, unknown> | undefined;
+      const aiMetaBirlesik = {
+        ...(aiMetaHam || {}),
+        ...(s.cozumAciklamasi ? { cozumAciklamasi: s.cozumAciklamasi } : {}),
+      };
 
-        return prisma.soru.create({
-          data: {
-            konuId,
-            sinavId: sinavId || null,
-            siraNo: i + 1,
-            metinHtml,
-            gorselUrl: s.gorselUrl || null,
-            secenekler: d.secenekler as Record<string, string>,
-            dogruCevap: d.dogruCevap,
-            zorluk: zorluk || 'ORTA',
-            kazanim: s.kazanim,
-            aiUretildi: true,
-            aiModeli: kullanılanModel.model,
-            onayDurumu: kalite.onayDurumu,
-            aiMeta: aiMetaBirlesik as Prisma.InputJsonValue,
-            ...(req.kullanici?.userId
-              ? { olusturanId: req.kullanici.userId, duzenleyenId: req.kullanici.userId }
-              : {}),
-          },
-        });
-      })
-    );
+      return {
+        id: `temp-${i}-${Date.now()}`,
+        konuId,
+        sinavId: sinavId || null,
+        siraNo: i + 1,
+        metinHtml,
+        gorselUrl: s.gorselUrl || null,
+        secenekler: d.secenekler as Record<string, string>,
+        dogruCevap: d.dogruCevap,
+        zorluk: zorluk || 'ORTA',
+        kazanim: s.kazanim,
+        aiUretildi: true,
+        aiModeli: kullanılanModel.model,
+        onayDurumu: kalite.onayDurumu,
+        aiMeta: aiMetaBirlesik,
+        metin: s.metin,
+        svgGorsel: s.svgGorsel,
+        cozumAciklamasi: s.cozumAciklamasi,
+      };
+    });
 
-    // Kaydedilen veri + AI'dan gelen ek alanlar (cozumAciklamasi, svgGorsel)
-    const zenginSorular = kaydedilenSorular.map((kayit, i) => ({
-      ...kayit,
-      metin: sorular[i]?.metin,
-      svgGorsel: sorular[i]?.svgGorsel,
-      cozumAciklamasi: sorular[i]?.cozumAciklamasi,
-    }));
-
-    if (req.kullanici?.userId && kaydedilenSorular.length > 0) {
+    if (req.kullanici?.userId && zenginSorular.length > 0) {
       void aktiviteKaydet({
         kullaniciId: req.kullanici.userId,
         tur: KullaniciAktiviteTuru.AI_SORU_URET,
-        aciklama: `${kaydedilenSorular.length} soru AI ile üretildi`,
-        meta: { adet: kaydedilenSorular.length, model: kullanılanModel.model, konuId },
+        aciklama: `${zenginSorular.length} soru AI ile önizlendi`,
+        meta: { adet: zenginSorular.length, model: kullanılanModel.model, konuId },
       });
     }
 

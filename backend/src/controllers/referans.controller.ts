@@ -274,56 +274,35 @@ export async function referansSoruUretController(
       referansVaryasyonu: true,
     });
 
-    // Veritabanına kaydet (konuId varsa)
-    let kaydedilenSorular = null;
-    if (konuId) {
-      kaydedilenSorular = await Promise.all(
-        sonSorular.map((d, i) => {
-          const s = sorular[i];
-          const soruGovde = s.svgGorsel
-            ? `${s.metin}<div class="soru-svg-gorsel">${s.svgGorsel}</div>`
-            : s.metin;
-          const cozumHtml = cozumMetniniHtmlYap(String(s.cozumAciklamasi || ''));
-          const metinHtml = buildMetinHtmlFromParts(soruGovde, '', cozumHtml);
-          const aiMetaHam = kalite.sorularMeta[i] as Record<string, unknown> | undefined;
-          const aiMetaBirlesik = {
-            ...(aiMetaHam || {}),
-            ...(s.cozumAciklamasi ? { cozumAciklamasi: s.cozumAciklamasi } : {}),
-          };
-
-          return prisma.soru.create({
-            data: {
-              konuId,
-              sinavId: hedefSinavId,
-              siraNo: i + 1,
-              metinHtml,
-              secenekler: d.secenekler as Record<string, string>,
-              dogruCevap: d.dogruCevap,
-              zorluk: (zorluk || analizIslenmis.zorlukSeviyesi || 'ORTA') as 'KOLAY' | 'ORTA' | 'ZOR',
-              kazanim: s.kazanim,
-              aiUretildi: true,
-              aiModeli: 'referans-tabanli',
-              onayDurumu: kalite.onayDurumu,
-              aiMeta: aiMetaBirlesik as Prisma.InputJsonValue,
-              ...(req.kullanici?.userId
-                ? { olusturanId: req.kullanici.userId, duzenleyenId: req.kullanici.userId }
-                : {}),
-            },
-          });
-        })
-      );
-    }
-
     const zenginSorular = sonSorular.map((d, i) => {
       const s = sorular[i];
+      const soruGovde = s.svgGorsel
+        ? `${s.metin}<div class="soru-svg-gorsel">${s.svgGorsel}</div>`
+        : s.metin;
+      const cozumHtml = cozumMetniniHtmlYap(String(s.cozumAciklamasi || ''));
+      const metinHtml = buildMetinHtmlFromParts(soruGovde, '', cozumHtml);
+      const aiMetaHam = kalite.sorularMeta[i] as Record<string, unknown> | undefined;
+      const aiMetaBirlesik = {
+        ...(aiMetaHam || {}),
+        ...(s.cozumAciklamasi ? { cozumAciklamasi: s.cozumAciklamasi } : {}),
+      };
+
       return {
-        ...(kaydedilenSorular?.[i] || {}),
-        metin: s.metin,
-        metinHtml: kaydedilenSorular?.[i]?.metinHtml || s.metin,
-        svgGorsel: s.svgGorsel,
-        secenekler: d.secenekler,
+        id: `temp-ref-${i}-${Date.now()}`,
+        konuId,
+        sinavId: hedefSinavId,
+        siraNo: i + 1,
+        metinHtml,
+        secenekler: d.secenekler as Record<string, string>,
         dogruCevap: d.dogruCevap,
+        zorluk: (zorluk || analizIslenmis.zorlukSeviyesi || 'ORTA') as 'KOLAY' | 'ORTA' | 'ZOR',
         kazanim: s.kazanim,
+        aiUretildi: true,
+        aiModeli: 'referans-tabanli',
+        onayDurumu: kalite.onayDurumu,
+        aiMeta: aiMetaBirlesik,
+        metin: s.metin,
+        svgGorsel: s.svgGorsel,
         cozumAciklamasi: s.cozumAciklamasi,
       };
     });

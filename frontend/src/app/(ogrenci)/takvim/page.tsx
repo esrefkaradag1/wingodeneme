@@ -34,6 +34,7 @@ import Link from 'next/link';
 import { toast } from '@/store/toast.store';
 import { useSinavSepetStore, sepetToplamTutar, type SepetSinav } from '@/store/sinav-sepet.store';
 import { kademeliSepetToplamHesapla, type SinavSepetFiyatAyarlari } from '@/lib/sinavFiyatKademe';
+import { erisimSonrasiYenile } from '@/lib/erisimYenile';
 import {
   ShoppingBag,
   Trash2,
@@ -114,6 +115,7 @@ export default function TakvimSayfasi() {
     mutationFn: (sinavIds: string[]) => sinavApi.sepetSatinAl({ sinavIds }),
     onSuccess: (res) => {
       queryClient.invalidateQueries({ queryKey: ['sinavlar-takvim'] });
+      erisimSonrasiYenile(queryClient);
       const veri = res?.data?.veri;
       const adet = veri?.adet ?? urunler.length;
       const hataSayisi = veri?.hatalar?.length ?? 0;
@@ -289,7 +291,9 @@ export default function TakvimSayfasi() {
                       </div>
                     )}
                     {s.gosterilenFiyat != null && (
-                      <span className="text-[9px] font-bold text-emerald-600">{s.gosterilenFiyat.toLocaleString('tr-TR')} ₺</span>
+                      <span className="text-[9px] font-bold text-emerald-600">
+                        {s.gosterilenFiyat > 0 ? `${s.gosterilenFiyat.toLocaleString('tr-TR')} ₺` : 'Ücretsiz'}
+                      </span>
                     )}
                   </div>
                 </button>
@@ -383,11 +387,14 @@ export default function TakvimSayfasi() {
                 <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-100">
                   <p className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider">Ücret</p>
                   <p className="text-2xl font-bold text-emerald-800 mt-1">
-                    {seciliSinav.gosterilenFiyat.toLocaleString('tr-TR')} ₺
+                    {seciliSinav.gosterilenFiyat > 0 ? `${seciliSinav.gosterilenFiyat.toLocaleString('tr-TR')} ₺` : 'Ücretsiz'}
                   </p>
-                  {seciliSinav.indirimliUcret != null && seciliSinav.ucret != null && seciliSinav.indirimliUcret < seciliSinav.ucret && (
-                    <p className="text-xs text-gray-400 line-through mt-1">{seciliSinav.ucret.toLocaleString('tr-TR')} ₺</p>
-                  )}
+                  {seciliSinav.gosterilenFiyat > 0 &&
+                    seciliSinav.indirimliUcret != null &&
+                    seciliSinav.ucret != null &&
+                    seciliSinav.indirimliUcret < seciliSinav.ucret && (
+                      <p className="text-xs text-gray-400 line-through mt-1">{seciliSinav.ucret.toLocaleString('tr-TR')} ₺</p>
+                    )}
                 </div>
               )}
 
@@ -494,7 +501,7 @@ export default function TakvimSayfasi() {
                           {format(new Date(u.baslangicZamani), 'd MMM yyyy HH:mm', { locale: tr })}
                         </p>
                         <p className="text-sm font-black text-emerald-700 mt-2">
-                          {u.gosterilenFiyat.toLocaleString('tr-TR')} ₺
+                          {u.gosterilenFiyat > 0 ? `${u.gosterilenFiyat.toLocaleString('tr-TR')} ₺` : 'Ücretsiz'}
                         </p>
                       </div>
                       <button
@@ -519,7 +526,9 @@ export default function TakvimSayfasi() {
                         {sepetKademe.listeToplam.toLocaleString('tr-TR')} ₺
                       </span>
                     )}
-                    <span className="text-xl font-black text-gray-900">{sepetToplam.toLocaleString('tr-TR')} ₺</span>
+                    <span className="text-xl font-black text-gray-900">
+                      {sepetToplam > 0 ? `${sepetToplam.toLocaleString('tr-TR')} ₺` : 'Ücretsiz'}
+                    </span>
                     {sepetKademe.indirim > 0 && (
                       <span className="text-xs text-emerald-600 font-bold block mt-0.5">
                         {sepetKademe.indirim.toLocaleString('tr-TR')} ₺ tasarruf
@@ -541,7 +550,13 @@ export default function TakvimSayfasi() {
                         ) : (
                           <ShoppingCart className="w-4 h-4" />
                         )}
-                        {urunler.length > 1 ? `${urunler.length} Sınavı Satın Al` : 'Satın Al'}
+                        {sepetToplam <= 0
+                          ? urunler.length > 1
+                            ? `${urunler.length} Sınavı Ücretsiz Al`
+                            : 'Ücretsiz Al'
+                          : urunler.length > 1
+                            ? `${urunler.length} Sınavı Satın Al`
+                            : 'Satın Al'}
                       </button>
                     ) : (
                       <Link href="/giris" className="btn-primary w-full inline-flex items-center justify-center gap-2 py-3">

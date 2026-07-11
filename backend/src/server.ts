@@ -1,9 +1,17 @@
 import path from 'path';
 import dotenv from 'dotenv';
 
-// .env her zaman backend/ kökünden yüklensin (nodemon cwd farklı olsa bile)
-dotenv.config({ path: path.resolve(__dirname, '../.env') });
-dotenv.config({ path: path.resolve(process.cwd(), '.env') });
+// .env her zaman backend/ kökünden yüklensin; build çıktısı `dist/src` altına taşınsa da çalışsın.
+const envYollari = [
+  path.resolve(__dirname, '../.env'),
+  path.resolve(__dirname, '../../.env'),
+  path.resolve(process.cwd(), '.env'),
+  path.resolve(process.cwd(), 'backend/.env'),
+];
+
+for (const envYolu of envYollari) {
+  dotenv.config({ path: envYolu });
+}
 
 import express from 'express';
 import http from 'http';
@@ -14,10 +22,14 @@ import morgan from 'morgan';
 import { Server as SocketIO } from 'socket.io';
 import rateLimit from 'express-rate-limit';
 
-import { baglantiKontrol } from './config/database';
+import { baglantiKontrol, prisma } from './config/database';
 import { redis } from './config/redis';
 import { logger } from './utils/logger';
 import { hataYonetici, bulunamadi } from './middlewares/hata.middleware';
+import { platformFiltresi } from './middlewares/platform.middleware';
+import { KPSS_KONU_AGACI } from '../prisma/data/kpssKonuAgaci';
+
+
 
 // Rotalar
 import authRotalar from './routes/auth.routes';
@@ -45,6 +57,7 @@ import { socketYonetici } from './utils/socket';
 
 const uygulama = express();
 const sunucu = http.createServer(uygulama);
+uygulama.set('etag', false);
 
 // Vercel/cPanel reverse proxy arkasında express-rate-limit'in gerçek IP'yi doğru okuması için.
 uygulama.set('trust proxy', 1);
@@ -53,9 +66,11 @@ const varsayilanIzinliOriginler = [
   'http://localhost:3000',
   'http://localhost:3001',
   'http://localhost:3002',
+  'http://localhost:3005',
   'http://127.0.0.1:3000',
   'http://127.0.0.1:3001',
   'http://127.0.0.1:3002',
+  'http://127.0.0.1:3005',
   process.env.CLIENT_URL,
   process.env.APP_URL,
 ].filter(Boolean) as string[];
@@ -76,6 +91,8 @@ function originIzinliMi(origin?: string): boolean {
     return (
       hostname.endsWith('.vercel.app') ||
       hostname.endsWith('.lim10.net.tr') ||
+      hostname.endsWith('.iyzipay.com') ||
+      hostname === 'iyzipay.com' ||
       hostname === 'wingodeneme.com' ||
       hostname.endsWith('.wingodeneme.com') ||
       hostname === 'wingosinav.com' ||
@@ -88,6 +105,11 @@ function originIzinliMi(origin?: string): boolean {
   }
 }
 
+/** iyzico ödeme callback istekleri tarayıcı/iframe üzerinden gelir; CORS'u esnet. */
+function iyzicoCallbackYoluMu(path: string): boolean {
+  return path.includes('/iyzico/callback') || path.endsWith('/odeme/callback');
+}
+
 const corsAyarlari: cors.CorsOptions = {
   origin(origin, callback) {
     if (originIzinliMi(origin)) {
@@ -98,7 +120,15 @@ const corsAyarlari: cors.CorsOptions = {
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'X-Platform-Mode', 'x-platform-mode'],
+  optionsSuccessStatus: 204,
+};
+
+const corsIyzicoCallback: cors.CorsOptions = {
+  origin: true,
+  credentials: false,
+  methods: ['POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Accept'],
   optionsSuccessStatus: 204,
 };
 
@@ -110,9 +140,28 @@ export const io = new SocketIO(sunucu, {
   transports: ['websocket', 'polling'],
 });
 
+// Aynı API URL'si farklı originlerden çağrıldığında tarayıcı/CDN varyantlarını ayır.
+uygulama.use((_req, res, next) => {
+  res.vary('Origin');
+  res.vary('Host');
+  res.vary('Authorization');
+  res.vary('X-Platform-Mode');
+  next();
+});
+
 // CORS — En başta olmalı!
-uygulama.use(cors(corsAyarlari));
-uygulama.options('*', cors(corsAyarlari));
+uygulama.use((req, res, next) => {
+  if (iyzicoCallbackYoluMu(req.path)) {
+    return cors(corsIyzicoCallback)(req, res, next);
+  }
+  return cors(corsAyarlari)(req, res, next);
+});
+uygulama.options('*', (req, res, next) => {
+  if (iyzicoCallbackYoluMu(req.path)) {
+    return cors(corsIyzicoCallback)(req, res, next);
+  }
+  return cors(corsAyarlari)(req, res, next);
+});
 
 // Middleware'ler
 uygulama.use(helmet({ contentSecurityPolicy: false }));
@@ -130,6 +179,8 @@ const hizSinirleyici = rateLimit({
   message: { basarili: false, mesaj: 'Çok fazla istek, lütfen birkaç dakika bekleyin' },
 });
 uygulama.use('/api/', hizSinirleyici);
+uygulama.use('/api/', platformFiltresi);
+
 
 // Sağlık kontrolü
 uygulama.get('/health', (_req, res) => {
@@ -179,6 +230,66 @@ async function baslatSunucu(): Promise<void> {
   if (!vercelServerless) {
     sinavZamanlayici();
   }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  // Tek seferlik mevcut KPSS Soru Bankası sınav türlerini düzeltme
+  prisma.sinav.updateMany({
+    where: {
+      baslik: 'Soru Bankası (Grup)',
+      grup: {
+        tur: { in: ['KPSS', 'KPSS_LISANS', 'KPSS_ONLISANS', 'KPSS_ORTAOGRETIM'] }
+      }
+    },
+    data: {
+      tur: 'KPSS'
+    }
+  }).then(res => {
+    if (res.count > 0) {
+      logger.info(`Updated ${res.count} existing group bank exams to KPSS type.`);
+    }
+  }).catch(err => {
+    logger.error('Error updating existing KPSS group bank exams:', err.message);
+  });
+
+  // KPSS konularını veritabanına otomatik olarak yükleme
+  prisma.konu.findFirst({
+    where: { ogretimTuru: { in: ['KPSS_LISANS', 'KPSS_ONLISANS', 'KPSS_ORTAOGRETIM'] } }
+  }).then(async (varMi) => {
+    if (!varMi) {
+      logger.info('KPSS Konuları veritabanında bulunamadı. Otomatik yükleme başlatılıyor...');
+      let eklenen = 0;
+      for (const konu of KPSS_KONU_AGACI) {
+        await prisma.konu.upsert({
+          where: { id: konu.id },
+          update: {
+            ad: konu.ad,
+            ders: konu.ders,
+            ogretimTuru: konu.ogretimTuru,
+            uniteAdi: konu.uniteAdi,
+            yksSegment: konu.yksSegment,
+          },
+          create: { ...konu, kazanimlar: [] }
+        });
+        eklenen++;
+      }
+      logger.info(`KPSS Konuları başarıyla veritabanına yüklendi: ${eklenen} adet konu eklendi.`);
+    }
+  }).catch(err => {
+    logger.error('Error loading KPSS topics:', err.message);
+  });
+
 
   // Vercel serverless ortamda listen() çağrılmaz
   if (process.env.NODE_ENV !== 'production' || process.env.STANDALONE === 'true') {

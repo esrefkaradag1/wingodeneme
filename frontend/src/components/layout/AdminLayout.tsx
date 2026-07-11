@@ -26,6 +26,7 @@ import {
   Activity,
   Calendar,
   Lightbulb,
+  ArrowLeftRight,
   type LucideIcon,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
@@ -36,6 +37,10 @@ import { useRouter } from 'next/navigation';
 import { useSiteIcerik } from '@/contexts/SiteIcerikContext';
 import { api } from '@/lib/api';
 import { OgretmenOneriModal } from '@/components/admin/OgretmenOneriModal';
+import { AdminPageHelp } from '@/components/admin/AdminPageHelp';
+import { isKpssMode } from '@/lib/platform';
+import { cn } from '@/lib/utils';
+
 
 export type AdminNavItem = {
   href: string;
@@ -181,6 +186,12 @@ function NavLink({
 export function AdminLayout({ children }: { children: React.ReactNode }) {
   const [mobilAcik, setMobilAcik] = useState(false);
   const [oneriModalAcik, setOneriModalAcik] = useState(false);
+  const [kpssModu, setKpssModu] = useState(false);
+
+  useEffect(() => {
+    setKpssModu(isKpssMode());
+  }, []);
+
   const pathname = usePathname();
   const { kullanici, cikisYap, token } = useAuthStore();
   const router = useRouter();
@@ -240,6 +251,29 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
       .filter((grup) => grup.ogeler.length > 0);
   }, [yoneticiMi, izinli]);
 
+  const platformDegistir = () => {
+    if (typeof window === 'undefined') return;
+    const { protocol, hostname, port, pathname, search } = window.location;
+
+    // Yerel geliştirme ortamı (port bazlı geçiş)
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      const yeniPort = kpssModu ? '3001' : '3002';
+      window.location.href = `${protocol}//${hostname}:${yeniPort}${pathname}${search}`;
+      return;
+    }
+
+    // Üretim (Production) ortamı (subdomain bazlı geçiş)
+    const anaHost = hostname.replace(/^kpss\./, '');
+    const anaHostWwwsiz = anaHost.replace(/^www\./, '');
+
+    if (hostname.startsWith('kpss.')) {
+      const yeniHost = anaHost.startsWith('www.') ? anaHost : `www.${anaHostWwwsiz}`;
+      window.location.href = `${protocol}//${yeniHost}${pathname}${search}`;
+    } else {
+      window.location.href = `${protocol}//kpss.${anaHostWwwsiz}${pathname}${search}`;
+    }
+  };
+
   const cikis = () => {
     cikisYap();
     router.push('/giris');
@@ -248,18 +282,48 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
   const SidebarIcerik = () => (
     <div className="flex h-full flex-col">
       <div className="relative shrink-0 border-b border-white/[0.06] px-5 py-5">
-        <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-indigo-600/10 via-transparent to-violet-600/5" />
-        <Link href="/panel" className="relative flex items-center gap-3 hover:opacity-90 transition-opacity">
+        <div className={cn(
+          "pointer-events-none absolute inset-0 bg-gradient-to-br via-transparent to-transparent",
+          kpssModu ? "from-teal-600/10" : "from-indigo-600/10 to-violet-600/5"
+        )} />
+        <Link href="/" className="relative flex items-center gap-3 hover:opacity-90 transition-opacity">
           {logoUrl ? (
-            <img src={logoUrl} alt={site.marka.ad} className={logoSt.className} style={logoSt.style} />
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center">
+                <img src={logoUrl} alt={site.marka.ad} className={logoSt.className} style={logoSt.style} />
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-black uppercase tracking-wider text-slate-400 shrink-0">{kpssModu ? 'WingoKPSS' : 'WingoSınav'}</span>
+                <span className={cn(
+                  "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-wider border",
+                  kpssModu 
+                    ? "bg-teal-500/10 text-teal-400 border-teal-500/20" 
+                    : "bg-indigo-500/10 text-indigo-400 border-indigo-500/20"
+                )}>
+                  {kpssModu ? 'KPSS' : 'YKS/LGS'}
+                </span>
+              </div>
+            </div>
           ) : (
             <>
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 shadow-lg shadow-indigo-900/30">
+              <div className={cn(
+                "flex h-10 w-10 items-center justify-center rounded-xl shadow-lg",
+                kpssModu 
+                  ? "bg-gradient-to-br from-teal-500 to-emerald-600 shadow-teal-900/30" 
+                  : "bg-gradient-to-br from-indigo-500 to-violet-600 shadow-indigo-900/30"
+              )}>
                 <span className="text-sm font-bold text-white">{site.marka.kisaLogo}</span>
               </div>
-              <div>
-                <span className="block text-base font-bold leading-tight text-white">{site.marka.ad}</span>
-                <span className="text-[11px] font-medium uppercase tracking-wider text-slate-500">Yönetim</span>
+              <div className="min-w-0">
+                <span className="block text-base font-bold leading-tight text-white truncate">{kpssModu ? 'WingoKPSS' : site.marka.ad}</span>
+                <span className={cn(
+                  "inline-flex items-center gap-1.5 mt-0.5 rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-wider border",
+                  kpssModu 
+                    ? "bg-teal-500/10 text-teal-400 border-teal-500/20" 
+                    : "bg-indigo-500/10 text-indigo-400 border-indigo-500/20"
+                )}>
+                  {kpssModu ? 'KPSS Yönetim' : 'YKS/LGS Yönetim'}
+                </span>
               </div>
             </>
           )}
@@ -289,7 +353,10 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
 
       <div className="shrink-0 border-t border-white/[0.06] p-3">
         <div className="flex items-center gap-3 rounded-xl bg-white/[0.04] p-3 ring-1 ring-white/[0.06]">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 text-xs font-bold text-white">
+          <div className={cn(
+            "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-xs font-bold text-white bg-gradient-to-br",
+            kpssModu ? "from-teal-500 to-emerald-600" : "from-indigo-500 to-violet-600"
+          )}>
             {kullanici?.ad?.charAt(0) || 'A'}
           </div>
           <div className="min-w-0 flex-1">
@@ -313,8 +380,16 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex h-screen bg-slate-100">
-      <aside className="relative hidden w-[17.5rem] shrink-0 flex-col border-r border-slate-800/50 bg-[#0c1222] lg:flex">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-indigo-900/20 via-transparent to-transparent" />
+      <aside className={cn(
+        "relative hidden w-[17.5rem] shrink-0 flex-col border-r border-slate-800/50 lg:flex transition-colors duration-300",
+        kpssModu ? "bg-[#081a17]" : "bg-[#0c1222]"
+      )}>
+        <div className={cn(
+          "pointer-events-none absolute inset-0",
+          kpssModu 
+            ? "bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-teal-900/10 via-transparent to-transparent" 
+            : "bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-indigo-900/20 via-transparent to-transparent"
+        )} />
         <div className="relative flex h-full flex-col">
           <SidebarIcerik />
         </div>
@@ -327,7 +402,10 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
             onClick={() => setMobilAcik(false)}
             role="presentation"
           />
-          <aside className="absolute bottom-0 left-0 top-0 flex w-[min(100vw-3rem,18rem)] flex-col border-r border-slate-800/50 bg-[#0c1222] shadow-2xl">
+          <aside className={cn(
+            "absolute bottom-0 left-0 top-0 flex w-[min(100vw-3rem,18rem)] flex-col border-r border-slate-800/50 shadow-2xl transition-colors duration-300",
+            kpssModu ? "bg-[#081a17]" : "bg-[#0c1222]"
+          )}>
             <button
               type="button"
               className="absolute right-3 top-3 z-10 rounded-lg p-2 text-slate-400 hover:bg-white/10 hover:text-white"
@@ -352,6 +430,21 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
             <Menu className="h-5 w-5" />
           </button>
           <div className="flex-1" />
+          <AdminPageHelp pathname={pathname} />
+          <button
+            type="button"
+            onClick={platformDegistir}
+            className={cn(
+              "inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold transition shadow-sm",
+              kpssModu 
+                ? "border-teal-200 bg-teal-50 text-teal-800 hover:bg-teal-100" 
+                : "border-indigo-200 bg-indigo-50 text-indigo-800 hover:bg-indigo-100"
+            )}
+          >
+            <ArrowLeftRight className="h-4 w-4" />
+            <span className="hidden md:inline">{kpssModu ? 'YKS Paneline Geç' : 'KPSS Paneline Geç'}</span>
+            <span className="md:hidden">{kpssModu ? 'YKS' : 'KPSS'}</span>
+          </button>
           <button
             type="button"
             onClick={() => setOneriModalAcik(true)}

@@ -8,6 +8,7 @@ import { cache } from '../config/redis';
 import { aiSoruKaliteIsleme } from '../services/soruAiKalite';
 import { soruUretimGarantiKatmani } from '../services/soruGarantiKatmani';
 import { ensureGrupBankaSinavi } from '../utils/grupBankaSinavi';
+import { platformOgretimTuruUyumlu } from '../utils/paketPlatformFiltre';
 import { validateUretilenSoruListesi } from '../utils/soruUretimDogrulama';
 import { ogretmenIcinGrupTurlari, reqOgretmenKisit, ogretmenBransKayitNormalize, ogretmenBranslarByTurNormalize, ogretmenSoruIslemIzni, ogretmenSoruIdsIslemIzni, ogretmenKendiSorulariWhere } from '../services/ogretmenSinirlama';
 import { grupOgretmenFiltreyeUygun } from '../utils/grupOgretimTuru';
@@ -168,9 +169,18 @@ function flatKonuDagilimSatirlari(raw: unknown): Array<{ konuId: string; adet: n
 export async function sinavlarListesiController(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   try {
     const ogrKisit = await reqOgretmenKisit(req);
-    const where = ogrKisit ? { grup: { tur: ogrKisit.ogretimTuru } } : {};
+    const platformTurleri = (req as any).platformTurleri;
+    const isKpss = (req as any).isKpssPlatform;
 
-    const cacheKey = `admin:sinavlar:${ogrKisit?.ogretimTuru || 'ALL'}`;
+    const where: any = {};
+    if (ogrKisit) {
+      where.grup = { tur: ogrKisit.ogretimTuru };
+    } else if (platformTurleri) {
+      where.grup = { tur: { in: platformTurleri } };
+    }
+
+    const platformKey = isKpss ? 'KPSS' : 'YKS_LGS';
+    const cacheKey = `admin:sinavlar:${ogrKisit?.ogretimTuru || platformKey}`;
     const cached = await cache.al<any[]>(cacheKey);
     if (cached) {
       res.json({ basarili: true, veri: cached });
@@ -275,7 +285,7 @@ export async function sinavSorulariAdminController(req: Request, res: Response, 
   } catch (err) { next(err); }
 }
 
-export async function sinavOlusturController(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function sinavOlusturController(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   try {
     const {
       baslik, aciklama, tur, grupId, baslangicZamani, bitisZamani, sureDakika,
@@ -288,6 +298,15 @@ export async function sinavOlusturController(req: Request, res: Response, next: 
     }
     if (!grupId || typeof grupId !== 'string' || !grupId.trim()) {
       res.status(400).json({ basarili: false, mesaj: 'Grup seçimi gerekli' });
+      return;
+    }
+    const hedefGrup = await prisma.grup.findUnique({ where: { id: grupId.trim() }, select: { tur: true } });
+    if (!hedefGrup) {
+      res.status(404).json({ basarili: false, mesaj: 'Grup bulunamadı' });
+      return;
+    }
+    if (!platformOgretimTuruUyumlu(String(hedefGrup.tur), req.platformTurleri)) {
+      res.status(403).json({ basarili: false, mesaj: 'Bu gruba bu platformdan sınav eklenemez' });
       return;
     }
 
@@ -566,6 +585,8 @@ export async function soruBankaTopluController(req: AuthRequest, res: Response, 
       dogruCevap: d.dogruCevap,
     }));
     const kalite = await aiSoruKaliteIsleme(primaryKonuId, konu.ders, kaliteGirdi, garanti.garantiMeta);
+    // Panel/AI'dan üretilen sorular bankaya aktarılır; öğretmen onayı bekler.
+    const kayitOnayDurumu = SoruOnayDurumu.ONAY_BEKLIYOR;
 
     const z = parseZorluk(zorluk);
     let rawSinav: string | null = bodySinavId === undefined || bodySinavId === null || bodySinavId === '' || bodySinavId === 'pool'
@@ -643,7 +664,7 @@ export async function soruBankaTopluController(req: AuthRequest, res: Response, 
             zorluk: z,
             kazanim: s.kazanim != null && String(s.kazanim).length > 0 ? String(s.kazanim) : null,
             aiUretildi: true,
-            onayDurumu: kalite.onayDurumu,
+            onayDurumu: kayitOnayDurumu,
             aiMeta: kalite.sorularMeta[i] as Prisma.InputJsonValue,
             ...(modelEtiket ? { aiModeli: modelEtiket } : {}),
             ...(kullaniciId ? { olusturanId: kullaniciId, duzenleyenId: kullaniciId } : {}),
@@ -676,7 +697,7 @@ export async function soruBankaTopluController(req: AuthRequest, res: Response, 
         adet: olusturulan.length,
         soruIdleri: olusturulan.map((x) => x.id),
         konuIds: tumKonuIds,
-        kalite: { onayDurumu: kalite.onayDurumu, sorularMeta: kalite.sorularMeta },
+        kalite: { onayDurumu: kayitOnayDurumu, sorularMeta: kalite.sorularMeta },
       },
     });
   } catch (err) { next(err); }
@@ -802,12 +823,33 @@ export async function kullanicilarListesiController(req: AuthRequest, res: Respo
 
     const rolParam = typeof req.query.rol === 'string' ? req.query.rol.trim() : '';
     const rolFiltre: Rol | null =
-      ['OGRENCI', 'VELI', 'ADMIN', 'SUPER_ADMIN'].includes(rolParam) ? (rolParam as Rol) : null;
+      ['OGRENCI', 'VELI', 'TEACHER', 'ADMIN', 'SUPER_ADMIN'].includes(rolParam) ? (rolParam as Rol) : null;
 
     const qRaw = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+    const platformTurleri = req.platformTurleri || [];
+    const mevcutKullaniciId = req.kullanici?.id || req.kullanici?.userId;
 
     const whereParcalari: Prisma.KullaniciWhereInput[] = [];
     if (rolFiltre) whereParcalari.push({ rol: rolFiltre });
+    if (platformTurleri.length > 0) {
+      whereParcalari.push({
+        OR: [
+          { ogrenciProfil: { is: { ogretimTuru: { in: platformTurleri } } } },
+          { veliProfil: { is: { ogrenciler: { some: { ogretimTuru: { in: platformTurleri } } } } } },
+          {
+            adminProfil: {
+              is: {
+                OR: [
+                  { ogretimTuru: { in: platformTurleri } },
+                  { ogretimTurleri: { hasSome: platformTurleri } },
+                ],
+              },
+            },
+          },
+          ...(mevcutKullaniciId ? [{ id: mevcutKullaniciId }] : []),
+        ],
+      });
+    }
     if (qRaw) {
       const kelimeler = qRaw.split(/\s+/).filter(Boolean);
       if (kelimeler.length >= 2) {
@@ -884,11 +926,31 @@ export async function kullanicilarListesiController(req: AuthRequest, res: Respo
   } catch (err) { next(err); }
 }
 
-export async function genelAnalizController(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function genelAnalizController(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   try {
     const simdiMs = Date.now();
     const gun7 = new Date(simdiMs - 7 * 24 * 60 * 60 * 1000);
     const gun14 = new Date(simdiMs - 14 * 24 * 60 * 60 * 1000);
+
+    const platformTurleri = req.platformTurleri || [];
+
+    const userWhere: any = { rol: 'OGRENCI' };
+    const sinavWhere: any = {};
+    const sinavKatilimWhere: any = {};
+
+    if (platformTurleri.length > 0) {
+      userWhere.ogrenciProfil = {
+        ogretimTuru: { in: platformTurleri }
+      };
+      sinavWhere.grup = {
+        tur: { in: platformTurleri }
+      };
+      sinavKatilimWhere.sinav = {
+        grup: {
+          tur: { in: platformTurleri }
+        }
+      };
+    }
 
     const [
       toplamKullanici,
@@ -899,13 +961,13 @@ export async function genelAnalizController(req: Request, res: Response, next: N
       bekleyenKatilim,
       devamEdenKatilim,
     ] = await Promise.all([
-      prisma.kullanici.count({ where: { rol: 'OGRENCI' } }),
-      prisma.sinav.count(),
-      prisma.sinavKatilim.count({ where: { durum: 'TAMAMLANDI' } }),
-      prisma.sinav.count({ where: { aktif: true } }),
-      prisma.sinavKatilim.count(),
-      prisma.sinavKatilim.count({ where: { durum: 'BEKLIYOR' } }),
-      prisma.sinavKatilim.count({ where: { durum: 'DEVAM_EDIYOR' } }),
+      prisma.kullanici.count({ where: userWhere }),
+      prisma.sinav.count({ where: sinavWhere }),
+      prisma.sinavKatilim.count({ where: { ...sinavKatilimWhere, durum: 'TAMAMLANDI' } }),
+      prisma.sinav.count({ where: { ...sinavWhere, aktif: true } }),
+      prisma.sinavKatilim.count({ where: sinavKatilimWhere }),
+      prisma.sinavKatilim.count({ where: { ...sinavKatilimWhere, durum: 'BEKLIYOR' } }),
+      prisma.sinavKatilim.count({ where: { ...sinavKatilimWhere, durum: 'DEVAM_EDIYOR' } }),
     ]);
 
     const [
@@ -917,23 +979,23 @@ export async function genelAnalizController(req: Request, res: Response, next: N
       yaklasanSinavlar,
     ] = await Promise.all([
       prisma.sinavKatilim.aggregate({
-        where: { durum: 'TAMAMLANDI' },
+        where: { ...sinavKatilimWhere, durum: 'TAMAMLANDI' },
         _avg: { netPuan: true },
       }),
       prisma.sinavKatilim.aggregate({
-        where: { durum: 'TAMAMLANDI' },
+        where: { ...sinavKatilimWhere, durum: 'TAMAMLANDI' },
         _sum: { dogruSayisi: true, yanlisSayisi: true, bosSayisi: true },
       }),
       prisma.sinavKatilim.findMany({
-        where: { durum: 'TAMAMLANDI', guncellendi: { gte: gun7 } },
+        where: { ...sinavKatilimWhere, durum: 'TAMAMLANDI', guncellendi: { gte: gun7 } },
         select: { guncellendi: true },
       }),
       prisma.sinavKatilim.findMany({
-        where: { durum: 'TAMAMLANDI', guncellendi: { gte: gun14 } },
+        where: { ...sinavKatilimWhere, durum: 'TAMAMLANDI', guncellendi: { gte: gun14 } },
         select: { netPuan: true, guncellendi: true },
       }),
       prisma.sinavKatilim.findMany({
-        where: { durum: 'TAMAMLANDI' },
+        where: { ...sinavKatilimWhere, durum: 'TAMAMLANDI' },
         orderBy: { netPuan: 'desc' },
         take: 5,
         select: {
@@ -944,7 +1006,7 @@ export async function genelAnalizController(req: Request, res: Response, next: N
         },
       }),
       prisma.sinav.findMany({
-        where: { yayinlandi: true, bitisZamani: { gte: new Date() } },
+        where: { ...sinavWhere, yayinlandi: true, bitisZamani: { gte: new Date() } },
         orderBy: { baslangicZamani: 'asc' },
         take: 5,
         select: { id: true, baslik: true, baslangicZamani: true, bitisZamani: true, aktif: true },
@@ -1027,15 +1089,24 @@ export async function gruplarController(req: AuthRequest, res: Response, next: N
   try {
     const ogrKisit = await reqOgretmenKisit(req);
     const turFiltre = ogretmenIcinGrupTurlari(ogrKisit);
-    const cacheKey = `admin:gruplar:${turFiltre ? [...turFiltre].sort().join(',') : 'ALL'}`;
+    const platformTurleri = (req as any).platformTurleri;
+    const isKpss = (req as any).isKpssPlatform;
+
+    const platformKey = isKpss ? 'KPSS' : 'YKS_LGS';
+    const cacheKey = `admin:gruplar:${turFiltre ? [...turFiltre].sort().join(',') : platformKey}`;
     const cached = await cache.al<any[]>(cacheKey);
     if (cached) {
       res.json({ basarili: true, veri: cached });
       return;
     }
 
+    const whereClause: any = { aktif: true };
+    if (platformTurleri) {
+      whereClause.tur = { in: platformTurleri };
+    }
+
     const gruplar = await prisma.grup.findMany({
-      where: { aktif: true },
+      where: whereClause,
       select: {
         id: true,
         ad: true,
@@ -1086,25 +1157,24 @@ export async function grupBransSecenekleriController(req: AuthRequest, res: Resp
 
     const gruplar = await prisma.grup.findMany({
       where: { aktif: true },
-      select: { ad: true, tur: true, parentId: true },
+      select: { id: true, ad: true, tur: true, parentId: true },
       orderBy: { ad: 'asc' },
     });
+
+    const parentIdSet = new Set(
+      gruplar.map((g) => g.parentId).filter((id): id is string => typeof id === 'string' && id.length > 0)
+    );
 
     // Grup isimlerini kademeye göre grupla, aynı isimleri deduplicate et
     const harita: Record<string, Set<string>> = {};
 
     for (const g of gruplar) {
-      // Her grubun etkin kademesini belirle
       const tur = g.tur;
       if (!harita[tur]) harita[tur] = new Set();
 
-      // Yalnızca alt grup (leaf) olanları branş olarak ekle;
-      // üst seviye (parent) olan kademe başlıkları zaten tüm alt grupların tur'unu taşır
-      // Bir grubun alt grupları varsa, grubun kendi adı kademe başlığıdır (örn. "YKS", "LGS")
-      // Sadece parent olmayan (leaf) grupların adını branş olarak al
-      // AMA parentId'si olmayan üst seviye gruplar kademe başlığıdır, branş değil
-      // ParentId'si olan her grup bir branştır
-      if (g.parentId) {
+      // Sadece yaprak alt grupları branş olarak ekle.
+      // Ara düğümler (örn. KPSS Lisans -> Genel Yetenek -> Türkçe) branş listesinde tekrar etmesin.
+      if (g.parentId && !parentIdSet.has(g.id)) {
         harita[tur].add(g.ad);
       }
     }
@@ -1120,7 +1190,7 @@ export async function grupBransSecenekleriController(req: AuthRequest, res: Resp
   } catch (err) { next(err); }
 }
 
-export async function grupOlusturController(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function grupOlusturController(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   try {
     const { ad, tur, aciklama, parentId } = req.body;
     if (!ad || !tur) {
@@ -1129,6 +1199,10 @@ export async function grupOlusturController(req: Request, res: Response, next: N
     }
     if (!OGRETIM_DEGERLERI.includes(tur as OgretimTuru)) {
       res.status(400).json({ basarili: false, mesaj: 'Geçersiz öğretim türü' });
+      return;
+    }
+    if (!platformOgretimTuruUyumlu(String(tur), req.platformTurleri)) {
+      res.status(403).json({ basarili: false, mesaj: 'Bu kademe bu platformda oluşturulamaz' });
       return;
     }
     const grup = await prisma.grup.create({ 
@@ -1144,7 +1218,7 @@ export async function grupOlusturController(req: Request, res: Response, next: N
   } catch (err) { next(err); }
 }
 
-export async function grupGuncelleController(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function grupGuncelleController(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   try {
     const { ad, tur, aciklama, aktif, parentId } = req.body;
     const data: Record<string, unknown> = {};
@@ -1155,6 +1229,10 @@ export async function grupGuncelleController(req: Request, res: Response, next: 
     if (tur !== undefined) {
       if (!OGRETIM_DEGERLERI.includes(tur as OgretimTuru)) {
         res.status(400).json({ basarili: false, mesaj: 'Geçersiz öğretim türü' });
+        return;
+      }
+      if (!platformOgretimTuruUyumlu(String(tur), req.platformTurleri)) {
+        res.status(403).json({ basarili: false, mesaj: 'Bu kademe bu platformda düzenlenemez' });
         return;
       }
       data.tur = tur;
@@ -1227,6 +1305,7 @@ const OGRETIM_DEGERLERI: OgretimTuru[] = [
   'KPSS_ONLISANS',
   'SINIF_6',
   'SINIF_7',
+  'SINIF_9',
   'SINIF_10',
   'SINIF_11',
 ];
@@ -2662,5 +2741,112 @@ export async function konuSoruSayilariController(req: AuthRequest, res: Response
       map[row.konuId] = (map[row.konuId] || 0) + row._count._all;
     }
     res.json({ basarili: true, veri: map });
+  } catch (err) { next(err); }
+}
+
+/** KPSS sorusunu YKS/TYT konusu altına kopyalayarak TYT havuzuna gönderir */
+export async function soruKopyalaTytController(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { id } = req.params;
+    const { targetKonuId } = req.body;
+
+    if (!targetKonuId || typeof targetKonuId !== 'string') {
+      res.status(400).json({ basarili: false, mesaj: 'Hedef TYT konusu gerekli' });
+      return;
+    }
+
+    const orijinalSoru = await prisma.soru.findUnique({
+      where: { id },
+    });
+
+    if (!orijinalSoru) {
+      res.status(404).json({ basarili: false, mesaj: 'Soru bulunamadı' });
+      return;
+    }
+
+    const targetKonu = await prisma.konu.findUnique({
+      where: { id: targetKonuId },
+    });
+
+    if (!targetKonu || targetKonu.ogretimTuru !== 'YKS') {
+      res.status(400).json({ basarili: false, mesaj: 'Geçersiz hedef konusu (YKS/TYT konusu olmalıdır)' });
+      return;
+    }
+
+    const yeniSoru = await prisma.soru.create({
+      data: {
+        konuId: targetKonuId,
+        sinavId: null,
+        siraNo: orijinalSoru.siraNo,
+        metinHtml: orijinalSoru.metinHtml,
+        gorselUrl: orijinalSoru.gorselUrl,
+        secenekler: orijinalSoru.secenekler || {},
+        dogruCevap: orijinalSoru.dogruCevap,
+        zorluk: orijinalSoru.zorluk,
+        kazanim: orijinalSoru.kazanim,
+        onayDurumu: 'ONAYLANDI',
+        aiUretildi: orijinalSoru.aiUretildi,
+        aiModeli: orijinalSoru.aiModeli,
+        olusturanId: req.kullanici?.userId || null,
+        duzenleyenId: req.kullanici?.userId || null,
+      },
+    });
+
+    res.status(201).json({ basarili: true, veri: yeniSoru });
+  } catch (err) { next(err); }
+}
+
+/** Seçilen KPSS sorularını toplu olarak YKS/TYT konusu altına kopyalayarak TYT havuzuna gönderir */
+export async function soruTopluKopyalaTytController(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { soruIds, targetKonuId } = req.body;
+
+    if (!Array.isArray(soruIds) || soruIds.length === 0) {
+      res.status(400).json({ basarili: false, mesaj: 'Kopyalanacak soru kimlikleri gerekli' });
+      return;
+    }
+
+    if (!targetKonuId || typeof targetKonuId !== 'string') {
+      res.status(400).json({ basarili: false, mesaj: 'Hedef TYT konusu gerekli' });
+      return;
+    }
+
+    const targetKonu = await prisma.konu.findUnique({
+      where: { id: targetKonuId },
+    });
+
+    if (!targetKonu || targetKonu.ogretimTuru !== 'YKS') {
+      res.status(400).json({ basarili: false, mesaj: 'Geçersiz hedef konusu (YKS/TYT konusu olmalıdır)' });
+      return;
+    }
+
+    const sorular = await prisma.soru.findMany({
+      where: { id: { in: soruIds } },
+    });
+
+    const yeniSorular = await Promise.all(
+      sorular.map((s) =>
+        prisma.soru.create({
+          data: {
+            konuId: targetKonuId,
+            sinavId: null,
+            siraNo: s.siraNo,
+            metinHtml: s.metinHtml,
+            gorselUrl: s.gorselUrl,
+            secenekler: s.secenekler || {},
+            dogruCevap: s.dogruCevap,
+            zorluk: s.zorluk,
+            kazanim: s.kazanim,
+            onayDurumu: 'ONAYLANDI',
+            aiUretildi: s.aiUretildi,
+            aiModeli: s.aiModeli,
+            olusturanId: req.kullanici?.userId || null,
+            duzenleyenId: req.kullanici?.userId || null,
+          },
+        })
+      )
+    );
+
+    res.status(201).json({ basarili: true, veri: { adet: yeniSorular.length } });
   } catch (err) { next(err); }
 }

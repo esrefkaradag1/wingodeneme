@@ -79,6 +79,7 @@ export function ogretimTuruKisaEtiket(tur?: string | null): string {
   if (tur === 'LGS') return 'LGS';
   if (tur === 'SINIF_6') return '6. Sınıf';
   if (tur === 'SINIF_7') return '7. Sınıf';
+  if (tur === 'SINIF_9') return '9. Sınıf';
   if (tur === 'SINIF_10') return '10. Sınıf';
   if (tur === 'SINIF_11') return '11. Sınıf';
   if (tur === 'KPSS') return 'KPSS';

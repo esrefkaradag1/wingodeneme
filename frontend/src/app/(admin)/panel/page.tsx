@@ -48,6 +48,8 @@ import { format } from 'date-fns';
 import { tr } from 'date-fns/locale';
 import { toast } from '@/store/toast.store';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { isKpssMode } from '@/lib/platform';
+
 
 const hizliErisim = [
   {
@@ -192,6 +194,12 @@ type AnalitikVeri = {
 
 function PanelOsymBlok() {
   const qc = useQueryClient();
+  const [kpssModu, setKpssModu] = useState(false);
+
+  useEffect(() => {
+    setKpssModu(isKpssMode());
+  }, []);
+
   const { data, isLoading } = useQuery({
     queryKey: ['admin', 'osym', 'durum'],
     queryFn: () => adminApi.osymDurum(),
@@ -222,9 +230,11 @@ function PanelOsymBlok() {
             <Globe className="h-5 w-5" />
           </div>
           <div>
-            <h2 className="font-semibold text-slate-900">ÖSYM / YKS takip</h2>
+            <h2 className="font-semibold text-slate-900">{kpssModu ? 'ÖSYM / KPSS takip' : 'ÖSYM / YKS takip'}</h2>
             <p className="text-xs text-slate-500 mt-0.5">
-              Kılavuz sayfası hash; anasayfada yeni bağlantılar → isteğe bağlı duyuru.
+              {kpssModu 
+                ? 'Anasayfada yeni bağlantılar → isteğe bağlı duyuru.' 
+                : 'Kılavuz sayfası hash; anasayfada yeni bağlantılar → isteğe bağlı duyuru.'}
             </p>
           </div>
         </div>
@@ -261,31 +271,33 @@ function PanelOsymBlok() {
         </div>
       ) : (
         <div className="mt-4 grid gap-3 sm:grid-cols-2 flex-1">
-          <div className="rounded-xl border border-violet-100 bg-violet-50/40 p-3">
-            <p className="text-[10px] font-bold uppercase tracking-wide text-violet-700">YKS kılavuzu</p>
-            <p className="text-sm text-slate-800 mt-1 line-clamp-2">{yks?.baslik || 'Henüz tarama yok'}</p>
-            <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[10px]">
-              {yks?.degisti ? (
-                <span className="rounded-md bg-amber-100 px-1.5 py-0.5 font-semibold text-amber-900">İçerik farkı olabilir</span>
-              ) : (
-                <span className="rounded-md bg-emerald-100 px-1.5 py-0.5 font-semibold text-emerald-800">Hash uyumu</span>
-              )}
-              {yks?.sonKontrol && (
-                <span className="text-slate-500">{new Date(yks.sonKontrol).toLocaleString('tr-TR')}</span>
+          {!kpssModu && yks && (
+            <div className="rounded-xl border border-violet-100 bg-violet-50/40 p-3">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-violet-700">YKS kılavuzu</p>
+              <p className="text-sm text-slate-800 mt-1 line-clamp-2">{yks?.baslik || 'Henüz tarama yok'}</p>
+              <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[10px]">
+                {yks?.degisti ? (
+                  <span className="rounded-md bg-amber-100 px-1.5 py-0.5 font-semibold text-amber-900">İçerik farkı olabilir</span>
+                ) : (
+                  <span className="rounded-md bg-emerald-100 px-1.5 py-0.5 font-semibold text-emerald-800">Hash uyumu</span>
+                )}
+                {yks?.sonKontrol && (
+                  <span className="text-slate-500">{new Date(yks.sonKontrol).toLocaleString('tr-TR')}</span>
+                )}
+              </div>
+              {yks?.url && (
+                <a
+                  href={yks.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-indigo-600 hover:underline"
+                >
+                  Sayfayı aç <ExternalLink className="h-3 w-3" />
+                </a>
               )}
             </div>
-            {yks?.url && (
-              <a
-                href={yks.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-indigo-600 hover:underline"
-              >
-                Sayfayı aç <ExternalLink className="h-3 w-3" />
-              </a>
-            )}
-          </div>
-          <div className="rounded-xl border border-slate-100 bg-white/80 p-3">
+          )}
+          <div className={cn("rounded-xl border border-slate-100 bg-white/80 p-3", kpssModu ? "sm:col-span-2" : "")}>
             <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500 flex items-center gap-1">
               <Bell className="h-3 w-3" /> Duyurular
             </p>
@@ -333,13 +345,25 @@ type MesajRol = 'user' | 'assistant';
 type SohbetMesaj = { role: MesajRol; content: string };
 
 function PanelYzAsistan() {
-  const [mesajlar, setMesajlar] = useState<SohbetMesaj[]>([
-    {
-      role: 'assistant',
-      content:
-        'YKS, sınav takvimi veya platform işleyişi hakkında sorun. Kesin ÖSYM tarihleri için osym.gov.tr’yi kontrol edin.',
-    },
-  ]);
+  const [kpssModu, setKpssModu] = useState(false);
+
+  useEffect(() => {
+    setKpssModu(isKpssMode());
+  }, []);
+
+  const [mesajlar, setMesajlar] = useState<SohbetMesaj[]>([]);
+
+  useEffect(() => {
+    setMesajlar([
+      {
+        role: 'assistant',
+        content: kpssModu
+          ? 'KPSS, sınav takvimi veya platform işleyişi hakkında sorun. Kesin ÖSYM tarihleri için osym.gov.tr’yi kontrol edin.'
+          : 'YKS, sınav takvimi veya platform işleyişi hakkında sorun. Kesin ÖSYM tarihleri için osym.gov.tr’yi kontrol edin.',
+      }
+    ]);
+  }, [kpssModu]);
+
   const [girdi, setGirdi] = useState('');
   const altRef = useRef<HTMLDivElement>(null);
 
@@ -410,7 +434,7 @@ function PanelYzAsistan() {
         <input
           value={girdi}
           onChange={(e) => setGirdi(e.target.value)}
-          placeholder="Örn: YKS başvurusu ne zaman?"
+          placeholder={kpssModu ? "Örn: KPSS başvurusu ne zaman?" : "Örn: YKS başvurusu ne zaman?"}
           className="input-field flex-1 rounded-xl py-2.5 text-sm"
           disabled={gonder.isPending}
         />
