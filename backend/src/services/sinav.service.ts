@@ -23,6 +23,25 @@ export async function ogrenciSinavErisimiVar(
   return sinavUcretsizHerkeseAcikMi(sinav.id);
 }
 
+/**
+ * Ücretli sınav satın alma bağlamında gerçek sahiplik kontrolü.
+ * Grup üyeliği ödeme yerine geçmez; yalnızca doğrudan atama (tamamlanmış
+ * satın alma / admin ataması) ya da ücretsiz-herkese açık sınav sahiplik sayılır.
+ * Böylece grubun üyesi olan öğrenci, o gruptaki ücretli bir denemeyi
+ * "zaten erişiminiz var" hatası almadan satın alıp ödeme yapabilir.
+ */
+export async function ogrenciSinavSatinAlmaSahipMi(
+  ogrenciId: string,
+  sinav: { id: string; grupId: string }
+): Promise<boolean> {
+  const atama = await prisma.ogrenciSinavAtama.findUnique({
+    where: { ogrenciId_sinavId: { ogrenciId, sinavId: sinav.id } },
+  });
+  if (atama) return true;
+
+  return sinavUcretsizHerkeseAcikMi(sinav.id);
+}
+
 export async function herkeseAcikUcretsizSinavIdleriGetir(): Promise<string[]> {
   const aktifPaketler = await prisma.paket.findMany({
     where: { aktif: true },

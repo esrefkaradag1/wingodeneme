@@ -1,6 +1,6 @@
 import { prisma } from '../config/database';
 import { AppHatasi } from '../middlewares/hata.middleware';
-import { ogrenciSinavErisimiVar } from './sinav.service';
+import { ogrenciSinavErisimiVar, ogrenciSinavSatinAlmaSahipMi } from './sinav.service';
 import { ogrenciBildirimGonder, adminlereSiparisBildirimi } from './bildirim.service';
 import { SinavTuru } from '@prisma/client';
 import {
@@ -300,7 +300,7 @@ async function sinavSatinAlimKaydet(
   }
   const ucretsizMi = fiyat === 0;
 
-  const erisimVar = await ogrenciSinavErisimiVar(ogrenci.id, { id: sinav.id, grupId: sinav.grupId });
+  const erisimVar = await ogrenciSinavSatinAlmaSahipMi(ogrenci.id, { id: sinav.id, grupId: sinav.grupId });
   if (erisimVar) throw new AppHatasi(`«${sinav.baslik}» sınavına zaten erişiminiz var`, 400);
 
   const mevcutBekleyen = await prisma.satinAlim.findFirst({
@@ -392,7 +392,7 @@ export async function sinavSepetSatinAlimOlustur(
       hatalar.push({ sinavId, mesaj: 'Bu sınav için fiyat tanımlı değil' });
       continue;
     }
-    const erisimVar = await ogrenciSinavErisimiVar(ogrenci.id, { id: sinav.id, grupId: sinav.grupId });
+    const erisimVar = await ogrenciSinavSatinAlmaSahipMi(ogrenci.id, { id: sinav.id, grupId: sinav.grupId });
     if (erisimVar) {
       hatalar.push({ sinavId, mesaj: `«${sinav.baslik}» sınavına zaten erişiminiz var` });
       continue;
@@ -536,7 +536,7 @@ export async function paketIciSinavSepetSatinAlimOlustur(
       hatalar.push({ sinavId, mesaj: 'Bu sınav için fiyat tanımlı değil' });
       continue;
     }
-    const erisimVar = await ogrenciSinavErisimiVar(ogrenci.id, { id: sinav.id, grupId: sinav.grupId });
+    const erisimVar = await ogrenciSinavSatinAlmaSahipMi(ogrenci.id, { id: sinav.id, grupId: sinav.grupId });
     if (erisimVar) {
       hatalar.push({ sinavId, mesaj: `«${sinav.baslik}» sınavına zaten erişiminiz var` });
       continue;
@@ -570,7 +570,9 @@ export async function paketIciSinavSepetSatinAlimOlustur(
         listeFiyat,
         paketId: paket.id,
         notEtiketi: `Paket içi deneme satın alma (${paket.ad})`,
-        bekleyenSiparisiYenidenKullan: false,
+        // Ödemesi yarım kalan (BEKLEMEDE) sipariş varsa yenisini oluşturmak
+        // yerine onu yeniden kullan; kullanıcı ödemeyi tamamlayabilsin.
+        bekleyenSiparisiYenidenKullan: true,
       });
       olusturulan.push(kayit);
     } catch (e) {
