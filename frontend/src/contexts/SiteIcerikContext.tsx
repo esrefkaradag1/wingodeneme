@@ -8,7 +8,13 @@ import { FaviconUygulayici } from '@/components/FaviconUygulayici';
 
 const SiteIcerikContext = createContext<SiteGenelIcerik>(VARSAYILAN_SITE_ICERIK);
 
-export function SiteIcerikProvider({ children }: { children: ReactNode }) {
+export function SiteIcerikProvider({
+  children,
+  initialIcerik,
+}: {
+  children: ReactNode;
+  initialIcerik?: SiteGenelIcerik;
+}) {
   const { data } = useQuery({
     queryKey: ['public-site-icerik'],
     queryFn: async () => {
@@ -17,11 +23,13 @@ export function SiteIcerikProvider({ children }: { children: ReactNode }) {
     },
     staleTime: 5 * 60 * 1000,
     retry: 1,
+    // SSR'de çekilen içerik varsa flicker olmadan doğrudan onunla başla.
+    initialData: initialIcerik,
   });
 
   const value = useMemo(
-    () => (data ? (data as SiteGenelIcerik) : VARSAYILAN_SITE_ICERIK),
-    [data]
+    () => (data ? (data as SiteGenelIcerik) : initialIcerik ?? VARSAYILAN_SITE_ICERIK),
+    [data, initialIcerik]
   );
 
   return (

@@ -1,8 +1,16 @@
 export const IYZICO_CONTAINER_ID = 'iyzico-form-container';
 
+/** iyzico bundle'ının formu inline basmak için aradığı hedef elemanın id'si */
+const IYZICO_FORM_TARGET_ID = 'iyzipay-checkout-form';
+
 const INJECTED_SCRIPT_ATTR = 'data-iyzico-injected';
 
-/** innerHTML ile eklenen script etiketlerini çalıştırır (iyzico checkout formu için gerekli). */
+/**
+ * checkoutFormContent'i modal içine basar ve script'leri çalıştırır.
+ * iyzico bundle'ı `#iyzipay-checkout-form` elemanını arar; sınıfı `responsive`
+ * ise formu inline basar, aksi halde (bulamazsa) body'ye yüzen "Ödeme Formunu Aç"
+ * butonuyla popup moduna düşer. Bu yüzden hedef div'i responsive olarak garanti ederiz.
+ */
 export function injectIyzicoCheckoutForm(
   html: string,
   containerId = IYZICO_CONTAINER_ID
@@ -15,6 +23,17 @@ export function injectIyzicoCheckoutForm(
 
   const wrapper = document.createElement('div');
   wrapper.innerHTML = html;
+
+  // Hedef formu inline (responsive) moda zorla — yoksa oluştur.
+  let hedef = wrapper.querySelector<HTMLElement>(`#${IYZICO_FORM_TARGET_ID}`);
+  if (!hedef) {
+    hedef = document.createElement('div');
+    hedef.id = IYZICO_FORM_TARGET_ID;
+    wrapper.insertBefore(hedef, wrapper.firstChild);
+  }
+  hedef.classList.remove('popup');
+  hedef.classList.add('responsive');
+
   container.appendChild(wrapper);
 
   const scripts = wrapper.getElementsByTagName('script');
@@ -38,6 +57,12 @@ export function injectIyzicoCheckoutForm(
 
 export function cleanupIyzicoCheckoutScripts(): void {
   document.querySelectorAll(`script[${INJECTED_SCRIPT_ATTR}]`).forEach((el) => el.remove());
+  // iyzico bundle'ı popup modunda body'ye yüzen buton/overlay bırakabiliyor; onları da temizle.
+  document
+    .querySelectorAll(
+      `body > #${IYZICO_FORM_TARGET_ID}, body > [id^="iyzipay"], body > .iyzico-overlay, body > [class*="iyzipay"]`
+    )
+    .forEach((el) => el.remove());
 }
 
 export type IyzicoCheckoutPayload = {

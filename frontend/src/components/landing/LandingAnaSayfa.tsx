@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { ArrowRight, Sparkles, Zap } from 'lucide-react';
 import { SiteIcerikProvider, useSiteIcerik } from '@/contexts/SiteIcerikContext';
+import type { SiteGenelIcerik } from '@/lib/site-icerik-defaults';
 import { LandingHero } from '@/components/landing/LandingHero';
 import { Ozellikler } from '@/components/landing/Ozellikler';
 import { Istatistikler } from '@/components/landing/Istatistikler';
@@ -130,9 +131,9 @@ function LandingIcerik() {
   );
 }
 
-export function LandingAnaSayfa() {
+export function LandingAnaSayfa({ initialIcerik }: { initialIcerik?: SiteGenelIcerik }) {
   return (
-    <SiteIcerikProvider>
+    <SiteIcerikProvider initialIcerik={initialIcerik}>
       <LandingIcerik />
     </SiteIcerikProvider>
   );

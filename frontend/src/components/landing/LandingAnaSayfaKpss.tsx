@@ -24,6 +24,7 @@ import {
   Loader2
 } from 'lucide-react';
 import { SiteIcerikProvider, useSiteIcerik } from '@/contexts/SiteIcerikContext';
+import type { SiteGenelIcerik } from '@/lib/site-icerik-defaults';
 import { api } from '@/lib/api';
 import { OdemeGuvenRozetleri } from '@/components/landing/OdemeGuvenRozetleri';
 import { PaketSatisKarti } from '@/components/landing/PaketSatisKarti';
@@ -744,9 +745,9 @@ function LandingIcerikKpss() {
   );
 }
 
-export function LandingAnaSayfaKpss() {
+export function LandingAnaSayfaKpss({ initialIcerik }: { initialIcerik?: SiteGenelIcerik }) {
   return (
-    <SiteIcerikProvider>
+    <SiteIcerikProvider initialIcerik={initialIcerik}>
       <LandingIcerikKpss />
     </SiteIcerikProvider>
   );

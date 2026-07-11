@@ -4,6 +4,7 @@ import { LandingAnaSayfa } from '@/components/landing/LandingAnaSayfa';
 import { LandingAnaSayfaKpss } from '@/components/landing/LandingAnaSayfaKpss';
 import { SeoAnaSayfaEk } from '@/components/seo/SeoAnaSayfaEk';
 import { anaSayfaMetadata, anaSayfaMetadataKpss } from '@/lib/seo';
+import { siteIcerikGetirSSR } from '@/lib/site-icerik-server';
 
 // Sunucu tarafında platformun KPSS olup olmadığını algılayan yardımcı fonksiyon
 async function checkIsKpss(): Promise<boolean> {
@@ -28,19 +29,19 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function Home() {
-  const isKpss = await checkIsKpss();
+  const [isKpss, siteIcerik] = await Promise.all([checkIsKpss(), siteIcerikGetirSSR()]);
 
   if (isKpss) {
     return (
       <>
-        <LandingAnaSayfaKpss />
+        <LandingAnaSayfaKpss initialIcerik={siteIcerik} />
       </>
     );
   }
 
   return (
     <>
-      <LandingAnaSayfa />
+      <LandingAnaSayfa initialIcerik={siteIcerik} />
       <SeoAnaSayfaEk />
     </>
   );
