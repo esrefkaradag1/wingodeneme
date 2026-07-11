@@ -299,8 +299,11 @@ export default function PaketDetaySayfasi() {
   });
 
   const seciliSinavlar = useMemo(
-    () => sinavlar.filter((s) => satinAlIds.includes(s.id) && s.gosterilenFiyat != null),
-    [sinavlar, satinAlIds]
+    () =>
+      sinavlar.filter(
+        (s) => seciliIds.includes(s.id) && !sahipSet.has(s.id) && s.gosterilenFiyat != null
+      ),
+    [sinavlar, seciliIds, sahipSet]
   );
 
   const listeToplam = useMemo(
