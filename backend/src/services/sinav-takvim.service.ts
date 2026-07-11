@@ -207,7 +207,12 @@ export async function ogrenciSinavTakvimListele(ogrenciId: string, kullaniciId: 
     sinavlar.map(async (s) => {
       const grupErisim = atamaSet.has(s.id)
         ? true
-        : await ogrenciSinavErisimiVar(ogrenciId, { id: s.id, grupId: s.grupId });
+        : await ogrenciSinavErisimiVar(ogrenciId, {
+            id: s.id,
+            grupId: s.grupId,
+            satinAlinabilir: s.satinAlinabilir,
+            ucret: s.ucret,
+          });
 
       return {
         id: s.id,

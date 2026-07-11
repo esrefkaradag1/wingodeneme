@@ -5,22 +5,45 @@ import { analizHesapla } from './analiz.service';
 import { KatilimDurumu, CevapYontemi, SoruOnayDurumu } from '@prisma/client';
 import { parseKayitliOturumlar } from '../utils/sinavOturum';
 
-/** Grup üyeliği veya doğrudan sınav ataması (paket / admin) */
+/**
+ * Öğrencinin bir sınava erişimi var mı?
+ *
+ * Kural:
+ *  1. Ücretsiz bir paketin "ücretsiz" listesine eklenen sınav → herkes erişebilir
+ *     (ücretli bir sınav olsa bile, ücretsiz pakete konulduysa parasız görünür).
+ *  2. Doğrudan atama (tamamlanmış satın alma / admin ataması) → erişim var.
+ *  3. Ücretli satışta olan sınav → salt grup üyeliği erişim SAĞLAMAZ; ödeme/atama gerekir.
+ *  4. Ücretsiz (satışta olmayan) grup sınavı → grup üyeliği erişim sağlar.
+ */
 export async function ogrenciSinavErisimiVar(
   ogrenciId: string,
-  sinav: { id: string; grupId: string }
+  sinav: { id: string; grupId: string; satinAlinabilir?: boolean; ucret?: number | null }
 ): Promise<boolean> {
-  const uyelik = await prisma.grupUyelik.findFirst({
-    where: { ogrenciId, grupId: sinav.grupId },
-  });
-  if (uyelik) return true;
+  // 1. Ücretsiz listeye eklenmiş / herkese açık sınav
+  if (await sinavUcretsizHerkeseAcikMi(sinav.id)) return true;
 
+  // 2. Doğrudan atama
   const atama = await prisma.ogrenciSinavAtama.findUnique({
     where: { ogrenciId_sinavId: { ogrenciId, sinavId: sinav.id } },
   });
   if (atama) return true;
 
-  return sinavUcretsizHerkeseAcikMi(sinav.id);
+  // 3. Ücretli satıştaki sınav: grup üyeliği yeterli değil, ödeme/atama şart
+  let ucretliSatista = sinav.satinAlinabilir === true && (sinav.ucret ?? 0) > 0;
+  if (sinav.satinAlinabilir === undefined) {
+    const s = await prisma.sinav.findUnique({
+      where: { id: sinav.id },
+      select: { satinAlinabilir: true, ucret: true },
+    });
+    ucretliSatista = s?.satinAlinabilir === true && (s.ucret ?? 0) > 0;
+  }
+  if (ucretliSatista) return false;
+
+  // 4. Ücretsiz grup sınavı: grup üyeliği erişim sağlar
+  const uyelik = await prisma.grupUyelik.findFirst({
+    where: { ogrenciId, grupId: sinav.grupId },
+  });
+  return !!uyelik;
 }
 
 /**
