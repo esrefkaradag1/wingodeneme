@@ -4,6 +4,7 @@ import { prisma } from '../config/database';
 import type { AuthRequest } from '../middlewares/auth.middleware';
 import { bildirimGonder } from '../services/bildirim.service';
 import { satinAlimPaketHaklariniUygula } from '../services/paket-erisim.service';
+import { bekleyenSinavSepetiYenidenFiyatla } from '../services/sinav-takvim.service';
 import { iyzicoService } from '../services/iyzico.service';
 import { publicApiBaseUrl } from '../utils/apiBaseUrl';
 import {
@@ -325,7 +326,7 @@ export async function siparisManuelOlusturController(req: AuthRequest, res: Resp
 
 const ogrenciSiparisInclude = {
   paket: { select: { id: true, ad: true, sinavSayisi: true } },
-  sinav: { select: { id: true, baslik: true, tur: true } },
+  sinav: { select: { id: true, baslik: true, tur: true, baslangicZamani: true } },
 };
 
 /** Giriş yapmış öğrencinin kendi siparişleri */
@@ -361,6 +362,72 @@ export async function ogrenciSiparislerController(req: AuthRequest, res: Respons
       veri: kayitlar,
       meta: { sayfa, sayfaBoyutu, toplam, toplamSayfa: Math.ceil(toplam / sayfaBoyutu) || 1 },
     });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * Öğrenci, ödeme bekleyen (ödenmemiş) ve günü henüz gelmemiş bir deneme siparişini iptal eder.
+ * İptal sonrası aynı sepetteki kalan denemeler yeni adede göre yeniden fiyatlanır
+ * (adet indirim kademesinin altına düşerse fiyatlar normale yaklaşır).
+ */
+export async function ogrenciSiparisIptalController(
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const uid = req.kullanici?.id;
+    if (!uid) {
+      res.status(401).json({ basarili: false, mesaj: 'Oturum gerekli' });
+      return;
+    }
+
+    const { id } = req.params;
+    const siparis = await prisma.satinAlim.findFirst({
+      where: { id, kullaniciId: uid },
+      include: { sinav: { select: { id: true, baslik: true, baslangicZamani: true } } },
+    });
+
+    if (!siparis) {
+      res.status(404).json({ basarili: false, mesaj: 'Sipariş bulunamadı' });
+      return;
+    }
+    if (siparis.durum !== 'BEKLEMEDE') {
+      res.status(400).json({ basarili: false, mesaj: 'Yalnızca ödeme bekleyen siparişler iptal edilebilir' });
+      return;
+    }
+    if (!siparis.sinavId || !siparis.sinav) {
+      res.status(400).json({ basarili: false, mesaj: 'Yalnızca deneme siparişleri buradan iptal edilebilir' });
+      return;
+    }
+    if (new Date(siparis.sinav.baslangicZamani).getTime() <= Date.now()) {
+      res.status(400).json({ basarili: false, mesaj: 'Günü gelmiş veya başlamış sınavlar iptal edilemez' });
+      return;
+    }
+
+    const mevcutNot = siparis.notlar?.trim() || '';
+    await prisma.satinAlim.update({
+      where: { id: siparis.id },
+      data: {
+        durum: 'IPTAL_EDILDI',
+        notlar: mevcutNot ? `${mevcutNot} | Öğrenci tarafından iptal edildi` : 'Öğrenci tarafından iptal edildi',
+      },
+    });
+
+    // Kalan sepet denemelerini yeni adede göre yeniden fiyatla
+    await bekleyenSinavSepetiYenidenFiyatla(uid, siparis.paketId ?? null);
+
+    await bildirimGonder({
+      kullaniciId: uid,
+      baslik: 'Sipariş iptal edildi',
+      mesaj: `«${siparis.sinav.baslik}» için ödeme bekleyen siparişiniz iptal edildi.`,
+      tur: 'siparis_iptal',
+      veriJson: { siparisId: siparis.id, durum: 'IPTAL_EDILDI' },
+    });
+
+    res.json({ basarili: true, mesaj: 'Sipariş iptal edildi' });
   } catch (err) {
     next(err);
   }

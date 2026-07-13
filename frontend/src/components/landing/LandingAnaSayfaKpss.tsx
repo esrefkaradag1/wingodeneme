@@ -21,7 +21,8 @@ import {
   Mail,
   Phone,
   MapPin,
-  Loader2
+  Loader2,
+  ArrowLeftRight
 } from 'lucide-react';
 import { SiteIcerikProvider, useSiteIcerik } from '@/contexts/SiteIcerikContext';
 import type { SiteGenelIcerik } from '@/lib/site-icerik-defaults';
@@ -84,6 +85,20 @@ function LandingIcerikKpss() {
   const kullanici = useAuthStore((s) => s.kullanici);
   const oturumAcik = Boolean(mounted && token && kullanici);
   const logoSt = siteLogoGorunum(site.marka);
+
+  // KPSS tarafından YKS/LGS tarafına geçiş (üretimde apex: wingodeneme.com)
+  const yksTarafinaGec = () => {
+    if (typeof window === 'undefined') return;
+    const { protocol, hostname, pathname, search } = window.location;
+
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      window.location.href = `${protocol}//${hostname}:3001${pathname}${search}`;
+      return;
+    }
+
+    const apex = hostname.replace(/^www\./, '').replace(/^kpss\./, '');
+    window.location.href = `${protocol}//${apex}${pathname}${search}`;
+  };
 
   useEffect(() => {
     setMounted(true);
@@ -213,7 +228,16 @@ function LandingIcerikKpss() {
             </a>
           </div>
 
-          <div className="hidden lg:flex items-center gap-6">
+          <div className="hidden lg:flex items-center gap-4">
+            <button
+              type="button"
+              onClick={yksTarafinaGec}
+              title="WingoSınav (YKS/LGS) tarafına geç"
+              className="group inline-flex items-center gap-2 rounded-xl border border-indigo-400/30 bg-indigo-500/10 px-3.5 py-2.5 text-sm font-bold text-indigo-200 transition-all duration-300 hover:bg-indigo-500/20 hover:border-indigo-400/50"
+            >
+              <ArrowLeftRight className="w-4 h-4 transition-transform duration-300 group-hover:rotate-180" />
+              WingoYKS
+            </button>
             {oturumAcik ? (
               <LandingKullaniciMenu variant="kpss" />
             ) : (
@@ -277,6 +301,17 @@ function LandingIcerikKpss() {
               Paketler
             </a>
             <hr className="border-white/[0.06]" />
+            <button
+              type="button"
+              onClick={() => {
+                setMobilMenu(false);
+                yksTarafinaGec();
+              }}
+              className="flex items-center justify-center gap-2 rounded-xl border border-indigo-400/30 bg-indigo-500/10 py-3 font-bold text-indigo-200 transition-all hover:bg-indigo-500/20"
+            >
+              <ArrowLeftRight className="w-4 h-4" />
+              WingoYKS tarafına geç
+            </button>
             {oturumAcik ? (
               <LandingKullaniciMenu mobil variant="kpss" onNavigate={() => setMobilMenu(false)} />
             ) : (

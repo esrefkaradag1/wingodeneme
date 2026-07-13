@@ -8,7 +8,11 @@ import {
   studyGorevDurumGuncelleController,
   navSayaclariController,
 } from '../controllers/kullanici.controller';
-import { ogrenciSiparislerController, ogrenciSiparisOdemeBaslatController } from '../controllers/siparis.controller';
+import {
+  ogrenciSiparislerController,
+  ogrenciSiparisOdemeBaslatController,
+  ogrenciSiparisIptalController,
+} from '../controllers/siparis.controller';
 
 const router = Router();
 router.use(kimlikDogrula);
@@ -21,5 +25,6 @@ router.patch('/study-planlar/gorev/:gorevId', studyGorevDurumGuncelleController)
 router.get('/nav-sayaclari', navSayaclariController);
 router.get('/siparisler', ogrenciSiparislerController);
 router.post('/siparisler/:id/odeme-baslat', ogrenciSiparisOdemeBaslatController);
+router.post('/siparisler/:id/iptal', ogrenciSiparisIptalController);
 
 export default router;

@@ -3,7 +3,7 @@ import { KullaniciAktiviteTuru, Prisma } from '@prisma/client';
 import { aktiviteKaydet } from '../services/kullaniciAktivite.service';
 import { AuthRequest } from '../middlewares/auth.middleware';
 import { prisma } from '../config/database';
-import { soruUret, ogrenciAnalizOlustur, studyPlanOlustur, studyPlanNormalize, soruDuzeltKomutu, openrouterChat, modelSec } from '../services/ai.service';
+import { soruUret, ogrenciAnalizOlustur, studyPlanOlustur, studyPlanNormalize, soruDuzeltKomutu, openrouterChat, modelSec, soruGorselUretVeYukle } from '../services/ai.service';
 import { hataAciklaUret } from '../services/hataAcikla.service';
 import { ogrenciAnalizGetir } from '../services/analiz.service';
 import { aiSoruKaliteIsleme } from '../services/soruAiKalite';
@@ -181,6 +181,30 @@ export async function soruAiYardimController(req: AuthRequest, res: Response, ne
       hedefKazanim: hedefKazanim ? String(hedefKazanim) : undefined,
     });
 
+    res.json({ basarili: true, veri: sonuc });
+  } catch (err) { next(err); }
+}
+
+/** POST /ai/gorsel-uret — öğretmen promptundan soru görseli üretir (DALL·E-3 + kalıcı depolama) */
+export async function soruGorselUretController(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { prompt, ders, konu, kalite } = req.body || {};
+    if (!prompt || String(prompt).trim().length < 3) {
+      res.status(400).json({ basarili: false, mesaj: 'Görsel için en az birkaç kelimelik bir açıklama yazın.' });
+      return;
+    }
+    const sonuc = await soruGorselUretVeYukle(String(prompt), {
+      ders: ders ? String(ders) : undefined,
+      konu: konu ? String(konu) : undefined,
+      kalite: kalite === 'hd' ? 'hd' : 'standard',
+    });
+    if (!sonuc) {
+      res.status(502).json({
+        basarili: false,
+        mesaj: 'Görsel üretilemedi. Görsel üretimi için API anahtarı yapılandırılmamış olabilir; lütfen tekrar deneyin.',
+      });
+      return;
+    }
     res.json({ basarili: true, veri: sonuc });
   } catch (err) { next(err); }
 }

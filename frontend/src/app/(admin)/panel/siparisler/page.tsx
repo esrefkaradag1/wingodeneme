@@ -8,6 +8,7 @@ import {
   Loader2,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   Search,
   Pencil,
   Plus,
@@ -100,6 +101,7 @@ export default function SiparislerSayfasi() {
   const [q, setQ] = useState('');
   const [detayModal, setDetayModal] = useState<SiparisSatir | null>(null);
   const [manuelModal, setManuelModal] = useState(false);
+  const [kapaliGruplar, setKapaliGruplar] = useState<Set<string>>(new Set());
 
   const [duzenForm, setDuzenForm] = useState({
     durum: 'BEKLEMEDE',
@@ -136,6 +138,32 @@ export default function SiparislerSayfasi() {
 
   const satirlar: SiparisSatir[] = listeRes?.data?.veri || [];
   const meta = listeRes?.data?.meta || { toplam: 0, toplamSayfa: 1 };
+
+  const musteriGruplari = useMemo(() => {
+    const map = new Map<
+      string,
+      { anahtar: string; kullanici: SiparisSatir['kullanici']; siparisler: SiparisSatir[]; toplamTutar: number }
+    >();
+    for (const s of satirlar) {
+      const anahtar = s.kullanici?.id || s.kullanici?.email || 'bilinmeyen';
+      const mevcut = map.get(anahtar);
+      if (mevcut) {
+        mevcut.siparisler.push(s);
+        mevcut.toplamTutar += s.miktar;
+      } else {
+        map.set(anahtar, { anahtar, kullanici: s.kullanici, siparisler: [s], toplamTutar: s.miktar });
+      }
+    }
+    return [...map.values()];
+  }, [satirlar]);
+
+  const grupKapat = (anahtar: string) =>
+    setKapaliGruplar((prev) => {
+      const yeni = new Set(prev);
+      if (yeni.has(anahtar)) yeni.delete(anahtar);
+      else yeni.add(anahtar);
+      return yeni;
+    });
 
   const { data: paketRes } = useQuery({
     queryKey: ['admin-paketler-siparis'],
@@ -275,58 +303,79 @@ export default function SiparislerSayfasi() {
              <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Veriler yükleniyor...</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="bg-gray-50/50 border-b border-gray-50">
-                  <th className="text-left px-6 py-5 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Sipariş Bilgisi</th>
-                  <th className="text-left px-6 py-5 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Müşteri</th>
-                  <th className="text-left px-6 py-5 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Tutar & Metod</th>
-                  <th className="text-left px-6 py-5 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Durum</th>
-                  <th className="text-right px-6 py-5 text-[10px] font-bold text-gray-400 uppercase tracking-widest">İşlem</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                {satirlar.map(s => (
-                  <tr key={s.id} className="hover:bg-gray-50/50 transition-colors">
-                    <td className="px-6 py-5">
-                       <p className="font-bold text-gray-900">{s.sinav?.baslik ?? s.paket?.ad ?? 'Sipariş'}</p>
-                       <p className="text-[10px] text-gray-400 mt-1 uppercase font-medium">{format(new Date(s.olusturuldu), 'd MMMM yyyy HH:mm', { locale: tr })}</p>
-                    </td>
-                    <td className="px-6 py-5">
-                       <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold text-xs">
-                             {kullaniciAdi(s.kullanici)[0]}
+          <div className="divide-y divide-gray-100">
+            {musteriGruplari.map((grup) => {
+              const kapali = kapaliGruplar.has(grup.anahtar);
+              return (
+                <div key={grup.anahtar}>
+                  {/* Müşteri başlığı */}
+                  <button
+                    type="button"
+                    onClick={() => grupKapat(grup.anahtar)}
+                    className="w-full flex items-center gap-4 px-6 py-4 bg-gray-50/60 hover:bg-gray-100/70 transition-colors text-left"
+                  >
+                    <ChevronDown
+                      className={`w-4 h-4 text-gray-400 shrink-0 transition-transform ${kapali ? '-rotate-90' : ''}`}
+                    />
+                    <div className="w-9 h-9 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-black text-sm shrink-0">
+                      {kullaniciAdi(grup.kullanici)[0]}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-black text-gray-900 truncate">{kullaniciAdi(grup.kullanici)}</p>
+                      <p className="text-xs text-gray-400 lowercase truncate">{grup.kullanici.email}</p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-sm font-black text-gray-900">{grup.toplamTutar.toLocaleString('tr-TR')} ₺</p>
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                        {grup.siparisler.length} sipariş
+                      </p>
+                    </div>
+                  </button>
+
+                  {/* Müşterinin siparişleri */}
+                  {!kapali && (
+                    <div className="divide-y divide-gray-50">
+                      {grup.siparisler.map((s) => (
+                        <div
+                          key={s.id}
+                          className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 pl-6 sm:pl-16 pr-6 py-4 hover:bg-gray-50/50 transition-colors"
+                        >
+                          <div className="flex-1 min-w-0">
+                            <p className="font-bold text-gray-900 truncate">
+                              {s.sinav?.baslik ?? s.paket?.ad ?? 'Sipariş'}
+                            </p>
+                            <p className="text-[10px] text-gray-400 mt-1 uppercase font-medium">
+                              {format(new Date(s.olusturuldu), 'd MMMM yyyy HH:mm', { locale: tr })}
+                            </p>
                           </div>
-                          <div>
-                            <p className="text-sm font-bold text-gray-900">{kullaniciAdi(s.kullanici)}</p>
-                            <p className="text-xs text-gray-400 lowercase">{s.kullanici.email}</p>
+                          <div className="shrink-0 sm:w-40">
+                            <p className="font-black text-gray-900 text-lg">{s.miktar.toLocaleString('tr-TR')} ₺</p>
+                            <span className="text-[10px] font-bold text-indigo-500 uppercase tracking-widest flex items-center gap-1 mt-0.5">
+                              <Wallet className="w-3 h-3" /> {s.odemeMetodu || 'KREDİ KARTI'}
+                            </span>
                           </div>
-                       </div>
-                    </td>
-                    <td className="px-6 py-5">
-                       <p className="font-black text-gray-900 text-lg">{s.miktar.toLocaleString('tr-TR')} ₺</p>
-                       <span className="text-[10px] font-bold text-indigo-500 uppercase tracking-widest flex items-center gap-1 mt-1">
-                          <Wallet className="w-3 h-3" /> {s.odemeMetodu || 'KREDİ KARTI'}
-                       </span>
-                    </td>
-                    <td className="px-6 py-5">
-                       <span className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider ${DURUM_RENK[s.durum] || 'bg-gray-100'}`}>
-                          {DURUM_ETIKET[s.durum] || s.durum}
-                       </span>
-                    </td>
-                    <td className="px-6 py-5 text-right">
-                       <button 
-                         onClick={() => detayAc(s)}
-                         className="p-3 bg-gray-50 text-gray-400 rounded-2xl hover:bg-indigo-50 hover:text-indigo-600 transition-all"
-                       >
-                         <Pencil className="w-4 h-4" />
-                       </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                          <div className="shrink-0 sm:w-36">
+                            <span
+                              className={`inline-block px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider ${DURUM_RENK[s.durum] || 'bg-gray-100'}`}
+                            >
+                              {DURUM_ETIKET[s.durum] || s.durum}
+                            </span>
+                          </div>
+                          <div className="shrink-0 sm:text-right">
+                            <button
+                              onClick={() => detayAc(s)}
+                              className="p-3 bg-gray-50 text-gray-400 rounded-2xl hover:bg-indigo-50 hover:text-indigo-600 transition-all"
+                            >
+                              <Pencil className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
         

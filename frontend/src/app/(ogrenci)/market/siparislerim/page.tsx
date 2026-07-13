@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
@@ -10,6 +10,7 @@ import {
   Loader2,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   Package,
   BookOpen,
   Clock,
@@ -18,11 +19,13 @@ import {
   AlertTriangle,
   ArrowLeft,
   CreditCard,
+  Ban,
 } from 'lucide-react';
 import { kullaniciApi } from '@/lib/api';
 import { IyzicoCheckoutModal } from '@/components/payment/IyzicoCheckoutModal';
 import { iyzicoOdemeBaslat } from '@/lib/iyzicoCheckout';
 import { toast } from '@/store/toast.store';
+import { confirmAsk } from '@/store/confirm-dialog.store';
 
 type Siparis = {
   id: string;
@@ -34,7 +37,7 @@ type Siparis = {
   olusturuldu: string;
   odemeZamani: string | null;
   paket?: { id: string; ad: string; sinavSayisi?: number } | null;
-  sinav?: { id: string; baslik: string; tur?: string } | null;
+  sinav?: { id: string; baslik: string; tur?: string; baslangicZamani?: string } | null;
 };
 
 const DURUM_ETIKET: Record<string, string> = {
@@ -100,6 +103,41 @@ export default function SiparislerimSayfasi() {
 
   const siparisler: Siparis[] = data?.data?.veri || [];
   const meta = data?.data?.meta;
+
+  const [iptalId, setIptalId] = useState<string | null>(null);
+  const [kapaliGunler, setKapaliGunler] = useState<Set<string>>(new Set());
+
+  const gunGruplari = useMemo(() => {
+    const map = new Map<string, { anahtar: string; tarih: Date; siparisler: Siparis[] }>();
+    for (const s of siparisler) {
+      const d = new Date(s.olusturuldu);
+      const anahtar = format(d, 'yyyy-MM-dd');
+      const mevcut = map.get(anahtar);
+      if (mevcut) mevcut.siparisler.push(s);
+      else map.set(anahtar, { anahtar, tarih: d, siparisler: [s] });
+    }
+    return [...map.values()].sort((a, b) => b.tarih.getTime() - a.tarih.getTime());
+  }, [siparisler]);
+
+  const gunKapat = (anahtar: string) =>
+    setKapaliGunler((prev) => {
+      const yeni = new Set(prev);
+      if (yeni.has(anahtar)) yeni.delete(anahtar);
+      else yeni.add(anahtar);
+      return yeni;
+    });
+
+  const iptalMutation = useMutation({
+    mutationFn: (siparisId: string) => kullaniciApi.siparisIptal(siparisId),
+    onSuccess: (res) => {
+      toast.basarili(res?.data?.mesaj || 'Sipariş iptal edildi');
+      queryClient.invalidateQueries({ queryKey: ['ogrenci-siparisler'] });
+    },
+    onError: (err: { response?: { data?: { mesaj?: string } } }) => {
+      toast.hata(err?.response?.data?.mesaj || 'Sipariş iptal edilemedi');
+    },
+    onSettled: () => setIptalId(null),
+  });
 
   const odemeBaslatMutation = useMutation({
     mutationFn: (siparisId: string) => kullaniciApi.siparisOdemeBaslat(siparisId),
@@ -187,15 +225,42 @@ export default function SiparislerimSayfasi() {
           </Link>
         </div>
       ) : (
-        <div className="space-y-3">
-          {siparisler.map((siparis) => {
-            const DurumIkon = DURUM_IKON[siparis.durum] || Clock;
-            const tamamlandi = siparis.durum === 'TAMAMLANDI';
+        <div className="space-y-6">
+          {gunGruplari.map((grup) => {
+            const kapali = kapaliGunler.has(grup.anahtar);
             return (
-              <article
-                key={siparis.id}
-                className="rounded-[24px] border border-gray-100 bg-white p-5 shadow-sm hover:shadow-md transition-shadow"
-              >
+              <section key={grup.anahtar} className="space-y-3">
+                <button
+                  type="button"
+                  onClick={() => gunKapat(grup.anahtar)}
+                  className="w-full flex items-center gap-2 text-left"
+                >
+                  <ChevronDown
+                    className={`w-4 h-4 text-gray-400 transition-transform ${kapali ? '-rotate-90' : ''}`}
+                  />
+                  <span className="text-sm font-black text-gray-700 capitalize">
+                    {format(grup.tarih, 'd MMMM yyyy, EEEE', { locale: tr })}
+                  </span>
+                  <span className="flex-1 h-px bg-gray-100" />
+                  <span className="text-[11px] font-bold text-gray-400 uppercase tracking-widest shrink-0">
+                    {grup.siparisler.length} sipariş
+                  </span>
+                </button>
+
+                {!kapali && (
+                  <div className="space-y-3">
+                    {grup.siparisler.map((siparis) => {
+                      const DurumIkon = DURUM_IKON[siparis.durum] || Clock;
+                      const tamamlandi = siparis.durum === 'TAMAMLANDI';
+                      const iptalEdilebilir =
+                        siparis.durum === 'BEKLEMEDE' &&
+                        !!siparis.sinav?.baslangicZamani &&
+                        new Date(siparis.sinav.baslangicZamani).getTime() > Date.now();
+                      return (
+                        <article
+                          key={siparis.id}
+                          className="rounded-[24px] border border-gray-100 bg-white p-5 shadow-sm hover:shadow-md transition-shadow"
+                        >
                 <div className="flex flex-col sm:flex-row sm:items-start gap-4">
                   <div
                     className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${
@@ -252,44 +317,77 @@ export default function SiparislerimSayfasi() {
                         ) : null}
                       </p>
 
-                      {tamamlandi && siparis.sinav ? (
-                        <Link
-                          href="/sinavlar"
-                          className="text-xs font-bold text-indigo-600 hover:text-indigo-800"
-                        >
-                          Sınavlarıma git →
-                        </Link>
-                      ) : null}
-                      {tamamlandi && siparis.paket && !siparis.sinav ? (
-                        <Link
-                          href={`/paket/${siparis.paket.id}`}
-                          className="text-xs font-bold text-indigo-600 hover:text-indigo-800"
-                        >
-                          Pakete git →
-                        </Link>
-                      ) : null}
-                      {siparis.durum === 'BEKLEMEDE' ? (
-                        <button
-                          type="button"
-                          disabled={odemeBaslatMutation.isPending && odemeSiparisId === siparis.id}
-                          onClick={() => {
-                            setOdemeSiparisId(siparis.id);
-                            odemeBaslatMutation.mutate(siparis.id);
-                          }}
-                          className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-700 hover:text-amber-900 disabled:opacity-50"
-                        >
-                          {odemeBaslatMutation.isPending && odemeSiparisId === siparis.id ? (
-                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          ) : (
-                            <CreditCard className="w-3.5 h-3.5" />
-                          )}
-                          Ödemeyi tamamla →
-                        </button>
-                      ) : null}
+                      <div className="flex flex-wrap items-center gap-4">
+                        {tamamlandi && siparis.sinav ? (
+                          <Link
+                            href="/sinavlar"
+                            className="text-xs font-bold text-indigo-600 hover:text-indigo-800"
+                          >
+                            Sınavlarıma git →
+                          </Link>
+                        ) : null}
+                        {tamamlandi && siparis.paket && !siparis.sinav ? (
+                          <Link
+                            href={`/paket/${siparis.paket.id}`}
+                            className="text-xs font-bold text-indigo-600 hover:text-indigo-800"
+                          >
+                            Pakete git →
+                          </Link>
+                        ) : null}
+                        {siparis.durum === 'BEKLEMEDE' ? (
+                          <button
+                            type="button"
+                            disabled={odemeBaslatMutation.isPending && odemeSiparisId === siparis.id}
+                            onClick={() => {
+                              setOdemeSiparisId(siparis.id);
+                              odemeBaslatMutation.mutate(siparis.id);
+                            }}
+                            className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-700 hover:text-amber-900 disabled:opacity-50"
+                          >
+                            {odemeBaslatMutation.isPending && odemeSiparisId === siparis.id ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <CreditCard className="w-3.5 h-3.5" />
+                            )}
+                            Ödemeyi tamamla →
+                          </button>
+                        ) : null}
+                        {iptalEdilebilir ? (
+                          <button
+                            type="button"
+                            disabled={iptalMutation.isPending && iptalId === siparis.id}
+                            onClick={async () => {
+                              const ok = await confirmAsk({
+                                title: 'Siparişi iptal et',
+                                message: `«${urunBaslik(siparis)}» için ödeme bekleyen siparişiniz iptal edilsin mi? Sepetinizde kalan denemeler varsa indirim, kalan adete göre yeniden hesaplanır.`,
+                                variant: 'destructive',
+                                onayMetni: 'Evet, iptal et',
+                                iptalMetni: 'Vazgeç',
+                              });
+                              if (!ok) return;
+                              setIptalId(siparis.id);
+                              iptalMutation.mutate(siparis.id);
+                            }}
+                            className="inline-flex items-center gap-1.5 text-xs font-bold text-red-600 hover:text-red-800 disabled:opacity-50"
+                          >
+                            {iptalMutation.isPending && iptalId === siparis.id ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <Ban className="w-3.5 h-3.5" />
+                            )}
+                            İptal et
+                          </button>
+                        ) : null}
+                      </div>
                     </div>
                   </div>
                 </div>
-              </article>
+                        </article>
+                      );
+                    })}
+                  </div>
+                )}
+              </section>
             );
           })}
         </div>

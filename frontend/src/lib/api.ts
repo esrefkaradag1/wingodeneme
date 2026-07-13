@@ -352,6 +352,10 @@ export const kullaniciApi = {
     api.post(`/kullanicilar/siparisler/${id}/odeme-baslat`).then((res) => ({
       data: { veri: res.data.veri },
     })),
+  siparisIptal: (id: string) =>
+    api.post(`/kullanicilar/siparisler/${id}/iptal`).then((res) => ({
+      data: { mesaj: res.data.mesaj },
+    })),
 };
 
 export const sosyalApi = {

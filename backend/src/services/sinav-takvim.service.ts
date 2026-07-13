@@ -647,4 +647,55 @@ export async function paketIciSinavSepetSatinAlimOlustur(
   };
 }
 
+/**
+ * Bir sınav iptal edildikten sonra, aynı sepet bağlamındaki (aynı kullanıcı + aynı paket ya da
+ * bağımsız sepet) kalan BEKLEMEDE sınav siparişlerini yeni adede göre yeniden fiyatlar.
+ * Adet, kademeli indirim eşiğinin altına düşerse indirim azalır/kalkar ve fiyatlar normale yaklaşır.
+ */
+export async function bekleyenSinavSepetiYenidenFiyatla(
+  kullaniciId: string,
+  paketId: string | null
+): Promise<void> {
+  const kalanlar = await prisma.satinAlim.findMany({
+    where: {
+      kullaniciId,
+      durum: 'BEKLEMEDE',
+      sinavId: { not: null },
+      paketId: paketId ?? null,
+    },
+    include: { sinav: { select: { ucret: true, indirimliUcret: true } } },
+    orderBy: { olusturuldu: 'asc' },
+  });
+
+  if (kalanlar.length === 0) return;
+
+  const fiyatAyarlari = await sinavSepetFiyatAyarlariGetir();
+  const listeFiyatlar = kalanlar.map(
+    (k) => gosterilenFiyat(k.sinav?.ucret ?? null, k.sinav?.indirimliUcret ?? null) ?? k.miktar
+  );
+  const listeToplam = listeFiyatlar.reduce((t, f) => t + f, 0);
+
+  const kademeSonuc = kademeliSepetToplamHesapla(kalanlar.length, listeToplam, fiyatAyarlari);
+  const yeniMiktarlar = kademeSonuc.kademeAktif
+    ? kademeliMiktarDagit(kademeSonuc.toplam, kalanlar.length)
+    : listeFiyatlar;
+  const yeniIndirimler =
+    kademeSonuc.indirim > 0
+      ? kademeliMiktarDagit(kademeSonuc.indirim, kalanlar.length).map((d) => Math.max(0, d))
+      : kalanlar.map(() => 0);
+
+  await Promise.all(
+    kalanlar.map((k, i) =>
+      prisma.satinAlim.update({
+        where: { id: k.id },
+        data: {
+          miktar: yeniMiktarlar[i],
+          indirimMiktari: yeniIndirimler[i],
+          toplamTutar: yeniMiktarlar[i],
+        },
+      })
+    )
+  );
+}
+
 export { parseFiyat, gosterilenFiyat };

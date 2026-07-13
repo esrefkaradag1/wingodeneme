@@ -49,3 +49,29 @@ export async function supabaseImzaliYuklemeUrlOlustur(
     bucket,
   };
 }
+
+/**
+ * Bir buffer'ı (ör. AI ile üretilmiş görsel) doğrudan Supabase Storage'a yükler
+ * ve kalıcı public URL döndürür. Klasör altında benzersiz bir anahtar oluşturur.
+ */
+export async function supabaseBufferYukle(
+  buffer: Buffer,
+  contentType: string,
+  uzanti = '.png',
+  klasor = 'soru-gorsel',
+): Promise<string> {
+  const admin = getSupabaseAdmin();
+  if (!admin) {
+    throw new Error('SUPABASE_SERVICE_ROLE_KEY tanımlı değil.');
+  }
+  const bucket = egitimStorageBucket();
+  const key = `${klasor}/${Date.now()}-${uuidv4()}${uzanti}`;
+  const { error } = await admin.storage.from(bucket).upload(key, buffer, {
+    contentType: contentType || 'application/octet-stream',
+    upsert: false,
+  });
+  if (error) {
+    throw new Error(error.message || 'Görsel Supabase Storage\'a yüklenemedi.');
+  }
+  return storagePublicUrl(bucket, key);
+}

@@ -14,6 +14,10 @@ import {
   Trash2,
   CheckCircle2,
   CheckCircle,
+  GraduationCap,
+  UserCog,
+  Heart,
+  Shield,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format } from 'date-fns';
@@ -136,6 +140,22 @@ const ROL_ETIKETLERI: Record<string, string> = {
   TEACHER: 'Öğretmen',
   ADMIN: 'Yönetici',
   SUPER_ADMIN: 'Süper Yönetici',
+};
+
+const ROL_SEKMELERI = [
+  { value: 'TUMU', etiket: 'Tümü', ikon: Users, renk: 'indigo' },
+  { value: 'OGRENCI', etiket: 'Öğrenciler', ikon: GraduationCap, renk: 'blue' },
+  { value: 'TEACHER', etiket: 'Öğretmenler', ikon: UserCog, renk: 'amber' },
+  { value: 'VELI', etiket: 'Veliler', ikon: Heart, renk: 'green' },
+  { value: 'ADMIN', etiket: 'Yöneticiler', ikon: Shield, renk: 'purple' },
+] as const;
+
+const SEKME_AKTIF_SINIF: Record<string, string> = {
+  indigo: 'bg-indigo-600 text-white border-indigo-600 shadow-sm',
+  blue: 'bg-blue-600 text-white border-blue-600 shadow-sm',
+  amber: 'bg-amber-500 text-white border-amber-500 shadow-sm',
+  green: 'bg-green-600 text-white border-green-600 shadow-sm',
+  purple: 'bg-purple-600 text-white border-purple-600 shadow-sm',
 };
 
 const KADEME_SECENEKLERI = [
@@ -270,6 +290,7 @@ export default function KullanicilarSayfasi() {
   const benimId = useAuthStore((s) => s.kullanici?.id);
 
   const [sayfa, setSayfa] = useState(1);
+  const [rolFiltre, setRolFiltre] = useState<string>('TUMU');
   const [arama, setArama] = useState('');
   const [debouncedArama, setDebouncedArama] = useState('');
   const [modalAcik, setModalAcik] = useState(false);
@@ -293,8 +314,13 @@ export default function KullanicilarSayfasi() {
   }, [arama]);
 
   const { data, isLoading, isPlaceholderData } = useQuery({
-    queryKey: ['admin-kullanicilar', sayfa, debouncedArama],
-    queryFn: () => adminApi.kullanicilar({ sayfa, q: debouncedArama }),
+    queryKey: ['admin-kullanicilar', sayfa, debouncedArama, rolFiltre],
+    queryFn: () =>
+      adminApi.kullanicilar({
+        sayfa,
+        q: debouncedArama,
+        ...(rolFiltre !== 'TUMU' ? { rol: rolFiltre } : {}),
+      }),
     placeholderData: (prev) => prev,
   });
 
@@ -707,6 +733,37 @@ export default function KullanicilarSayfasi() {
             )}
           </button>
         </form>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        {ROL_SEKMELERI.map((sekme) => {
+          const Ikon = sekme.ikon;
+          const aktif = rolFiltre === sekme.value;
+          return (
+            <button
+              key={sekme.value}
+              type="button"
+              onClick={() => {
+                setRolFiltre(sekme.value);
+                setSayfa(1);
+                setSecilenIds([]);
+              }}
+              className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold border transition-all ${
+                aktif
+                  ? SEKME_AKTIF_SINIF[sekme.renk]
+                  : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+              }`}
+            >
+              <Ikon className="w-4 h-4" />
+              {sekme.etiket}
+              {aktif && (
+                <span className="ml-1 text-xs font-bold bg-white/25 rounded-full px-1.5 py-0.5">
+                  {meta.toplam.toLocaleString('tr-TR')}
+                </span>
+              )}
+            </button>
+          );
+        })}
       </div>
 
       <div className="relative max-w-md">

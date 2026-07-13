@@ -253,7 +253,7 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
 
   const platformDegistir = () => {
     if (typeof window === 'undefined') return;
-    const { protocol, hostname, port, pathname, search } = window.location;
+    const { protocol, hostname, pathname, search } = window.location;
 
     // Yerel geliştirme ortamı (port bazlı geçiş)
     if (hostname === 'localhost' || hostname === '127.0.0.1') {
@@ -262,16 +262,10 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    // Üretim (Production) ortamı (subdomain bazlı geçiş)
-    const anaHost = hostname.replace(/^kpss\./, '');
-    const anaHostWwwsiz = anaHost.replace(/^www\./, '');
-
-    if (hostname.startsWith('kpss.')) {
-      const yeniHost = anaHost.startsWith('www.') ? anaHost : `www.${anaHostWwwsiz}`;
-      window.location.href = `${protocol}//${yeniHost}${pathname}${search}`;
-    } else {
-      window.location.href = `${protocol}//kpss.${anaHostWwwsiz}${pathname}${search}`;
-    }
+    // Üretim ortamı: YKS → apex (wingodeneme.com), KPSS → kpss.apex (kpss.wingodeneme.com)
+    const apex = hostname.replace(/^www\./, '').replace(/^kpss\./, '');
+    const yeniHost = kpssModu ? apex : `kpss.${apex}`;
+    window.location.href = `${protocol}//${yeniHost}${pathname}${search}`;
   };
 
   const cikis = () => {

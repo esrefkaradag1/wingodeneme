@@ -4,6 +4,7 @@ import { oturumAktiviteMiddleware } from '../middlewares/oturumAktivite.middlewa
 import {
   soruUretController, analizYapController, studyPlanOlusturController, oneriGetirController,
   soruAiYardimController,
+  soruGorselUretController,
   hataAciklaController,
   ttsController,
   veoAktifController,
@@ -20,6 +21,8 @@ router.post('/soru-uret', rolKontrol('ADMIN', 'SUPER_ADMIN', 'TEACHER'), soruUre
 router.get('/modeller', rolKontrol('ADMIN', 'SUPER_ADMIN', 'TEACHER'), aiModellerListeleController);
 // Öğretmen AI yardımcısı — soru düzenleme/komut bazlı düzeltme
 router.post('/sorular/:id/yardim', rolKontrol('ADMIN', 'SUPER_ADMIN', 'TEACHER'), soruAiYardimController);
+// Öğretmen promptundan soru görseli üretimi (DALL·E-3)
+router.post('/gorsel-uret', rolKontrol('ADMIN', 'SUPER_ADMIN', 'TEACHER'), soruGorselUretController);
 router.post('/hata-acikla', rolKontrol('OGRENCI', 'ADMIN', 'SUPER_ADMIN'), hataAciklaController);
 router.post('/tts', rolKontrol('OGRENCI', 'ADMIN', 'SUPER_ADMIN', 'TEACHER', 'VELI'), ttsController);
 router.get('/veo-video/aktif', rolKontrol('OGRENCI', 'ADMIN', 'SUPER_ADMIN'), veoAktifController);

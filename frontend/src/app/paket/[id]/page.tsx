@@ -634,16 +634,10 @@ export default function PaketDetaySayfasi() {
                             </>
                           )}
                         </span>
-                        {aylikSinavlar.length > SINAV_LISTE_LIMIT && (
-                          <button
-                            type="button"
-                            onClick={() => setSinavListesiGenis((v) => !v)}
-                            className="font-bold text-indigo-300 hover:text-white transition-colors"
-                          >
-                            {sinavListesiGenis
-                              ? 'Daha az göster'
-                              : `${aylikSinavlar.length - SINAV_LISTE_LIMIT} deneme daha`}
-                          </button>
+                        {aylikSinavlar.length > SINAV_LISTE_LIMIT && !sinavListesiGenis && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-indigo-500/15 border border-indigo-400/25 px-2.5 py-1 font-bold text-indigo-200">
+                            {aylikSinavlar.length - SINAV_LISTE_LIMIT} deneme gizli
+                          </span>
                         )}
                       </div>
 
@@ -671,6 +665,29 @@ export default function PaketDetaySayfasi() {
                           </div>
                         ))}
                       </div>
+
+                      {aylikSinavlar.length > SINAV_LISTE_LIMIT && (
+                        <button
+                          type="button"
+                          onClick={() => setSinavListesiGenis((v) => !v)}
+                          className="group flex w-full items-center justify-center gap-2 rounded-2xl border border-indigo-400/30 bg-indigo-500/10 px-4 py-3.5 text-sm font-bold text-indigo-200 transition-all hover:bg-indigo-500/20 hover:text-white active:scale-[0.99]"
+                        >
+                          {sinavListesiGenis ? (
+                            <>
+                              Daha az göster
+                              <ChevronDown className="w-4 h-4 rotate-180 transition-transform" />
+                            </>
+                          ) : (
+                            <>
+                              Tüm denemeleri göster
+                              <span className="rounded-full bg-indigo-500/30 px-2 py-0.5 text-xs">
+                                +{aylikSinavlar.length - SINAV_LISTE_LIMIT}
+                              </span>
+                              <ChevronDown className="w-4 h-4 transition-transform group-hover:translate-y-0.5" />
+                            </>
+                          )}
+                        </button>
+                      )}
                     </div>
                   )}
 

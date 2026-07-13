@@ -6,6 +6,7 @@ import { adminApi, api } from '@/lib/api';
 import SoruCizimEditoru from '@/components/admin/SoruCizimEditoru';
 import SoruZenginMetinEditoru from '@/components/admin/SoruZenginMetinEditoru';
 import SoruAiSohbet, { AiOneri } from '@/components/admin/SoruAiSohbet';
+import SoruAiGorsel from '@/components/admin/SoruAiGorsel';
 import KonuSecici from '@/components/admin/KonuSecici';
 import { kpssOgretimTuruMu, kpssOgretimTuruEtiket } from '@/lib/grupOgretimTuru';
 import { ALAN_FILTRE_SECENEKLERI, alanFiltreApiParams, alanKonuEtiketi, type AlanTab, getAlanFiltreSecenekleri } from '@/lib/alanFiltre';
@@ -520,6 +521,17 @@ export default function SorularSayfasi() {
       };
     });
     toast.basarili('AI önerisi forma uygulandı. Kaydetmeyi unutmayın.');
+  };
+
+  // AI ile üretilen görseli soru metnine ekler (kalıcı URL ile)
+  const aiGorselEkle = (url: string) => {
+    if (!url) return;
+    setForm((mevcut) => {
+      const blok = `<div class="soru-ai-gorsel" style="margin:12px 0;"><img alt="Soru görseli" src="${url}" style="max-width:100%;height:auto;display:block;margin:0 auto;border-radius:8px;" /></div>`;
+      const metinHtml = mevcut.metinHtml?.trim() ? `${mevcut.metinHtml}\n${blok}` : blok;
+      return { ...mevcut, metinHtml };
+    });
+    toast.basarili('Görsel soru metnine eklendi. Kaydetmeyi unutmayın.');
   };
 
   const annotationMetinHtmlUret = (metinHtml: string, pngDataUrl: string) => {
@@ -1677,7 +1689,12 @@ export default function SorularSayfasi() {
                      )}
 
                      {aktifSekme === 'cizim' && (
-                        <div className="space-y-3">
+                        <div className="space-y-4">
+                           <SoruAiGorsel
+                              ders={formKonular.find((k: any) => k.id === form.konuId)?.ders}
+                              konu={formKonular.find((k: any) => k.id === form.konuId)?.ad}
+                              onEkle={aiGorselEkle}
+                           />
                            <div className="flex items-center justify-between">
                               <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Çizim Editörü</label>
                               {annotationPng

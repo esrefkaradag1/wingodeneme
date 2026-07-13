@@ -20,6 +20,7 @@ import {
   yabanciDilDersiMi,
 } from '../utils/yabanciDilSoru';
 import { parseMetinParcalari } from '../utils/soruMetinBirlestir';
+import { supabaseBufferYukle } from '../utils/supabaseStorage';
 import { asciiHeaderValue, openrouterHttpHeaders } from '../utils/openrouterHeaders';
 import {
   OPENROUTER_YEDEK_MODELLER,
@@ -729,22 +730,29 @@ ${turkceSozelMantikCikarimVurgusu(girdi)
 }
 
 // ── DALL-E 3 görsel üretimi ───────────────────────────────────────
-export async function gorselUret(prompt: string): Promise<string | null> {
+export async function gorselUret(
+  prompt: string,
+  opts?: { kalite?: 'standard' | 'hd'; prefixEkle?: boolean },
+): Promise<string | null> {
   let key: string;
   try {
     key = getOpenRouterApiKey();
   } catch {
     return null;
   }
+  const prefixEkle = opts?.prefixEkle !== false;
+  const tamPrompt = prefixEkle
+    ? `Educational diagram for a Turkish high school exam. ${prompt}. Clean white background, clear labels in Turkish, simple geometric/schematic style, no text clutter, suitable for print.`
+    : prompt;
   try {
     const yanit = await axios.post(
       'https://openrouter.ai/api/v1/images/generations',
       {
         model: 'openai/dall-e-3',
-        prompt: `Educational diagram for Turkish high school math/science exam. ${prompt}. Clean white background, clear labels in Turkish, simple geometric style, no text clutter, suitable for print.`,
+        prompt: tamPrompt,
         n: 1,
         size: '1024x1024',
-        quality: 'standard',
+        quality: opts?.kalite === 'hd' ? 'hd' : 'standard',
       },
       {
         headers: {
@@ -752,14 +760,107 @@ export async function gorselUret(prompt: string): Promise<string | null> {
           'Content-Type': 'application/json',
           ...openrouterHttpHeaders(),
         },
-        timeout: 60000,
+        timeout: 90000,
       }
     );
-    return yanit.data?.data?.[0]?.url || null;
+    const veri = yanit.data?.data?.[0];
+    if (veri?.url) return veri.url as string;
+    // Bazı sağlayıcılar base64 döndürür
+    if (veri?.b64_json) return `data:image/png;base64,${veri.b64_json}`;
+    return null;
   } catch (err: unknown) {
     const hata = err as { message?: string };
     logger.warn(`DALL-E görsel üretimi başarısız: ${hata?.message}`);
     return null;
+  }
+}
+
+/**
+ * Öğretmenin kısa/serbest Türkçe isteğini, DALL·E-3 için net ve ayrıntılı bir
+ * İngilizce "image prompt"a çevirir. Böylece tek satır istekle çok daha
+ * tutarlı ve sınav-uyumlu görseller üretilir.
+ */
+export async function soruGorselPromptGelistir(
+  kullaniciPrompt: string,
+  ders?: string,
+  konu?: string,
+): Promise<string> {
+  const ham = String(kullaniciPrompt || '').trim();
+  if (!ham) return ham;
+  try {
+    const sistem = `Sen bir eğitim materyali görsel yönetmenisin. Öğretmenin Türkçe kısa isteğini, DALL·E-3 için İngilizce, net ve ayrıntılı tek paragraflık bir "image generation prompt"a çevir.
+Kurallar:
+- SADECE İngilizce prompt metnini döndür; başlık, açıklama, tırnak, markdown YOK.
+- Amaç: bir sınav sorusuna eşlik edecek temiz eğitim diyagramı/şeması.
+- Zorunlu stil: white background, clean vector/schematic style, clear thin outlines, minimal color, print-friendly, no watermark, no clutter.
+- Gerekli etiketler kısa ve okunaklı olsun; uzun cümle/paragraf, formül kalabalığı, gereksiz metin ekleme.
+- Fiziksel/geometrik ölçek, açı ve ilişkiler bilimsel olarak doğru olsun.
+- Öğretmen bir örnek/benzetme verdiyse (ör. "şuna benzer") onun kompozisyonunu koru.`;
+    const icerik = await openrouterChat(
+      'openai/gpt-5-mini',
+      [
+        { role: 'system', content: sistem },
+        {
+          role: 'user',
+          content: `Ders: ${ders || '-'} | Konu: ${konu || '-'}\nÖğretmen isteği: ${ham}`,
+        },
+      ],
+      { temperature: 0.4, max_tokens: 400 },
+    );
+    const temiz = String(icerik || '')
+      .replace(/^```[a-z]*\n?|```$/gi, '')
+      .trim();
+    return temiz.length >= 8 ? temiz : ham;
+  } catch {
+    return ham;
+  }
+}
+
+export interface SoruGorselSonucu {
+  url: string;
+  kullanilanPrompt: string;
+  kalici: boolean;
+}
+
+/**
+ * Öğretmen promptundan görsel üretir, Supabase Storage'a yükleyip kalıcı public URL döndürür.
+ * DALL·E/OpenRouter URL'leri geçici olduğu için kalıcı depolamaya taşınır.
+ * Depolama yapılandırılmamışsa geçici URL ile döner (kalici=false).
+ */
+export async function soruGorselUretVeYukle(
+  kullaniciPrompt: string,
+  opts?: { ders?: string; konu?: string; kalite?: 'standard' | 'hd' },
+): Promise<SoruGorselSonucu | null> {
+  const gelistirilmis = await soruGorselPromptGelistir(kullaniciPrompt, opts?.ders, opts?.konu);
+  const gecici = await gorselUret(gelistirilmis, { kalite: opts?.kalite, prefixEkle: true });
+  if (!gecici) return null;
+
+  // data: URL ise doğrudan Supabase'e yaz
+  try {
+    if (gecici.startsWith('data:')) {
+      const eslesme = gecici.match(/^data:(.*?);base64,(.*)$/);
+      if (eslesme) {
+        const buffer = Buffer.from(eslesme[2], 'base64');
+        const kaliciUrl = await supabaseBufferYukle(buffer, eslesme[1] || 'image/png', '.png');
+        return { url: kaliciUrl, kullanilanPrompt: gelistirilmis, kalici: true };
+      }
+    }
+    const img = await axios.get<ArrayBuffer>(gecici, {
+      responseType: 'arraybuffer',
+      timeout: 60000,
+    });
+    const contentType = String(img.headers['content-type'] || 'image/png');
+    const uzanti = contentType.includes('jpeg')
+      ? '.jpg'
+      : contentType.includes('webp')
+        ? '.webp'
+        : '.png';
+    const kaliciUrl = await supabaseBufferYukle(Buffer.from(img.data), contentType, uzanti);
+    return { url: kaliciUrl, kullanilanPrompt: gelistirilmis, kalici: true };
+  } catch (err: unknown) {
+    const hata = err as { message?: string };
+    logger.warn(`Görsel kalıcı depolamaya yüklenemedi, geçici URL dönülüyor: ${hata?.message}`);
+    return { url: gecici, kullanilanPrompt: gelistirilmis, kalici: false };
   }
 }
 

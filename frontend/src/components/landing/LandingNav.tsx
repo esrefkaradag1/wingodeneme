@@ -2,12 +2,13 @@
 
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
-import { Menu, X, Search, User, Zap } from 'lucide-react';
+import { Menu, X, Search, User, Zap, ArrowLeftRight } from 'lucide-react';
 import { useSiteIcerik } from '@/contexts/SiteIcerikContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import { siteLogoGorunum } from '@/lib/site-marka-logo';
 import { resolveMarketingNavHref, navLinkNormalize } from '@/lib/publicPaketlerHref';
 import { useAuthStore } from '@/store/auth.store';
+import { isKpssMode } from '@/lib/platform';
 import { LandingKullaniciMenu } from '@/components/landing/LandingKullaniciMenu';
 
 const navLinkVariants = {
@@ -27,6 +28,25 @@ export function LandingNav() {
   const token = useAuthStore((s) => s.token);
   const kullanici = useAuthStore((s) => s.kullanici);
   const oturumAcik = Boolean(mounted && token && kullanici);
+  const kpssModu = mounted && isKpssMode();
+
+  const platformDegistir = () => {
+    if (typeof window === 'undefined') return;
+    const { protocol, hostname, pathname, search } = window.location;
+
+    // Yerel geliştirme ortamı (port bazlı geçiş)
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      const yeniPort = kpssModu ? '3001' : '3002';
+      window.location.href = `${protocol}//${hostname}:${yeniPort}${pathname}${search}`;
+      return;
+    }
+
+    // Üretim ortamı: YKS → apex (wingodeneme.com), KPSS → kpss.apex (kpss.wingodeneme.com)
+    const apex = hostname.replace(/^www\./, '').replace(/^kpss\./, '');
+    const yeniHost = kpssModu ? apex : `kpss.${apex}`;
+    window.location.href = `${protocol}//${yeniHost}${pathname}${search}`;
+  };
+
   const navLinks = site.nav.navLinks
     .filter(
       (l) => !String(l.href || '').includes('/rehber') && String(l.label || '').toLowerCase() !== 'rehber'
@@ -102,6 +122,21 @@ export function LandingNav() {
 
         {/* Desktop right actions */}
         <div className="hidden lg:flex items-center gap-2.5">
+          {mounted && (
+            <button
+              type="button"
+              onClick={platformDegistir}
+              title={kpssModu ? 'WingoSınav (YKS/LGS) tarafına geç' : 'WingoKPSS tarafına geç'}
+              className={`group inline-flex items-center gap-2 rounded-xl border px-3.5 py-2.5 text-sm font-bold transition-all duration-300 ${
+                kpssModu
+                  ? 'border-indigo-400/30 bg-indigo-500/10 text-indigo-200 hover:bg-indigo-500/20 hover:border-indigo-400/50'
+                  : 'border-teal-400/30 bg-teal-500/10 text-teal-200 hover:bg-teal-500/20 hover:border-teal-400/50'
+              }`}
+            >
+              <ArrowLeftRight className="w-4 h-4 transition-transform duration-300 group-hover:rotate-180" />
+              {kpssModu ? 'WingoYKS' : 'WingoKPSS'}
+            </button>
+          )}
           <button
             className="p-2.5 rounded-xl text-slate-400 hover:text-white hover:bg-white/[0.06] transition-all duration-200"
             aria-label="Ara"
@@ -200,6 +235,23 @@ export function LandingNav() {
                   </motion.div>
                 ))}
                 <div className="h-px bg-white/[0.06] my-2 mx-4" />
+                {mounted && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMobilMenu(false);
+                      platformDegistir();
+                    }}
+                    className={`mx-2 mb-1 flex items-center justify-center gap-2 rounded-xl border px-4 py-3 font-bold transition-all ${
+                      kpssModu
+                        ? 'border-indigo-400/30 bg-indigo-500/10 text-indigo-200 hover:bg-indigo-500/20'
+                        : 'border-teal-400/30 bg-teal-500/10 text-teal-200 hover:bg-teal-500/20'
+                    }`}
+                  >
+                    <ArrowLeftRight className="w-4 h-4" />
+                    {kpssModu ? 'WingoYKS tarafına geç' : 'WingoKPSS tarafına geç'}
+                  </button>
+                )}
                 {oturumAcik ? (
                   <LandingKullaniciMenu mobil onNavigate={() => setMobilMenu(false)} />
                 ) : (
