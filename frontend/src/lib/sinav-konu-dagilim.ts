@@ -108,7 +108,16 @@ const AYT_SOZEL_DERSLER = new Set([
   'Din Kültürü ve Ahlak Bilgisi',
 ]);
 
-const AYT_SAYISAL_DERSLER = new Set(['Matematik', 'Fizik', 'Kimya', 'Biyoloji']);
+const KPSS_ALT_BOLUM_SIRASI = [
+  { anahtar: 'TR', ad: 'TÜRKÇE TESTİ', soruBas: 1, soruBit: 30 },
+  { anahtar: 'MAT', ad: 'MATEMATİK TESTİ', soruBas: 1, soruBit: 30 },
+  { anahtar: 'TAR', ad: 'TARİH TESTİ', soruBas: 1, soruBit: 27 },
+  { anahtar: 'COG', ad: 'COĞRAFYA TESTİ', soruBas: 1, soruBit: 18 },
+  { anahtar: 'VAT', ad: 'VATANDAŞLIK TESTİ', soruBas: 1, soruBit: 9 },
+  { anahtar: 'GUN', ad: 'GÜNCEL BİLGİLER TESTİ', soruBas: 1, soruBit: 6 },
+] as const;
+
+const KPSS_GY_ANAHTARLAR = new Set(['TR', 'MAT']);
 
 function yeniBolumId(): string {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
@@ -173,6 +182,17 @@ function lgsAltBolumAnahtari(ders: string): 'TR' | 'INK' | 'DIN' | 'ING' | 'MAT'
   if (d === 'İngilizce') return 'ING';
   if (d === 'Matematik') return 'MAT';
   if (d === 'Fen Bilimleri') return 'FEN';
+  return 'DIGER';
+}
+
+function kpssAltBolumAnahtari(ders: string): 'TR' | 'MAT' | 'TAR' | 'COG' | 'VAT' | 'GUN' | 'DIGER' {
+  const d = ders.trim();
+  if (d === 'Türkçe') return 'TR';
+  if (d === 'Matematik' || d === 'Geometri') return 'MAT';
+  if (d === 'Tarih') return 'TAR';
+  if (d === 'Coğrafya') return 'COG';
+  if (d === 'Vatandaşlık') return 'VAT';
+  if (d === 'Güncel Bilgiler') return 'GUN';
   return 'DIGER';
 }
 
@@ -336,6 +356,23 @@ function turAnaBolumAltBolumleri(
       LGS_ALT_BOLUM_SIRASI,
       (konuId) => lgsAltBolumAnahtari(konuMeta(konuId, konular).ders),
       (anahtar, ad) => sozelSayisalAltBolumFiltre(anahtar, ad, ['TR', 'INK', 'DIN', 'ING']),
+    );
+  }
+
+  if (tur === 'KPSS') {
+    return anaBolumAltBolumleriOlustur(
+      satirlar,
+      konular,
+      anaBolumAdi,
+      KPSS_ALT_BOLUM_SIRASI,
+      (konuId) => kpssAltBolumAnahtari(konuMeta(konuId, konular).ders),
+      (anahtar, ad) => {
+        const gyMi = ad.includes('Genel Yetenek');
+        const gkMi = ad.includes('Genel Kültür');
+        if (gyMi) return KPSS_GY_ANAHTARLAR.has(anahtar);
+        if (gkMi) return !KPSS_GY_ANAHTARLAR.has(anahtar);
+        return true;
+      },
     );
   }
 
@@ -554,6 +591,13 @@ export function lgsKitapcikBolumAdi(ders: string): 'Sözel Bölüm' | 'Sayısal 
   const d = ders.trim();
   if (d === 'Matematik' || d === 'Fen Bilimleri') return 'Sayısal Bölüm';
   return 'Sözel Bölüm';
+}
+
+/** KPSS: Genel Yetenek (Türkçe + Matematik) / Genel Kültür */
+export function kpssKitapcikBolumAdi(ders: string): 'Genel Yetenek' | 'Genel Kültür' {
+  const d = ders.trim();
+  if (d === 'Türkçe' || d === 'Matematik' || d === 'Geometri') return 'Genel Yetenek';
+  return 'Genel Kültür';
 }
 
 export function satirlariBolumlereAyir(

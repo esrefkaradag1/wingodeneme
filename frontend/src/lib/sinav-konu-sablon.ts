@@ -260,22 +260,46 @@ export function lgsSablonSatirlari(konular: KonuSablonKaynak[]): { konuId: strin
 /** KPSS Genel Yetenek + Genel Kültür — ÖSYM 120 soru dağılımı */
 export const KPSS_OSYM_DERS_ADET: { ders: string; adet: number }[] = [
   { ders: 'Türkçe', adet: 30 },
-  { ders: 'Matematik', adet: 30 },
+  { ders: 'Matematik', adet: 24 },
+  { ders: 'Geometri', adet: 6 },
   { ders: 'Tarih', adet: 27 },
   { ders: 'Coğrafya', adet: 18 },
   { ders: 'Vatandaşlık', adet: 9 },
   { ders: 'Güncel Bilgiler', adet: 6 },
 ];
 
-export function kpssSablonSatirlari(konular: KonuSablonKaynak[]): { konuId: string; adet: number }[] {
-  const kpss = konular.filter(
-    (k) =>
-      k.ogretimTuru === 'KPSS_LISANS' ||
-      k.ogretimTuru === 'KPSS_ONLISANS' ||
-      k.ogretimTuru === 'KPSS_ORTAOGRETIM',
+const KPSS_KADEMELER = ['KPSS_LISANS', 'KPSS_ONLISANS', 'KPSS_ORTAOGRETIM'] as const;
+
+function kpssKonuHavuzu(
+  konular: KonuSablonKaynak[],
+  tercihOgretimTuru?: string,
+): { havuz: KonuSablonKaynak[]; ogretim: string } {
+  const kpssTum = konular.filter((k) =>
+    KPSS_KADEMELER.includes(String(k.ogretimTuru ?? '').toUpperCase() as (typeof KPSS_KADEMELER)[number]),
   );
-  const havuz = kpss.length > 0 ? kpss : konular.filter((k) => ogretimTuruYksMi(k));
-  const ogretim = kpss.length > 0 ? 'KPSS_ONLISANS' : 'YKS';
+  if (kpssTum.length === 0) {
+    return { havuz: konular.filter((k) => ogretimTuruYksMi(k)), ogretim: 'YKS' };
+  }
+
+  const tercih = String(tercihOgretimTuru ?? '').trim().toUpperCase();
+  if (KPSS_KADEMELER.includes(tercih as (typeof KPSS_KADEMELER)[number])) {
+    const spesifik = kpssTum.filter((k) => String(k.ogretimTuru ?? '').toUpperCase() === tercih);
+    if (spesifik.length > 0) return { havuz: spesifik, ogretim: tercih };
+  }
+
+  for (const kademe of KPSS_KADEMELER) {
+    const alt = kpssTum.filter((k) => String(k.ogretimTuru ?? '').toUpperCase() === kademe);
+    if (alt.length > 0) return { havuz: alt, ogretim: kademe };
+  }
+
+  return { havuz: kpssTum, ogretim: 'KPSS_ONLISANS' };
+}
+
+export function kpssSablonSatirlari(
+  konular: KonuSablonKaynak[],
+  tercihOgretimTuru?: string,
+): { konuId: string; adet: number }[] {
+  const { havuz, ogretim } = kpssKonuHavuzu(konular, tercihOgretimTuru);
   const out: { konuId: string; adet: number }[] = [];
   for (const { ders, adet } of KPSS_OSYM_DERS_ADET) {
     out.push(...dersKonularinaEsitDagit(havuz, ders, adet, { ogretimTuru: ogretim }));
