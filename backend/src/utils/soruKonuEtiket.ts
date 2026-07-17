@@ -35,12 +35,25 @@ export async function soruEkKonulariKaydet(
   });
 }
 
-/** Konu filtresi: birincil veya ek etiket */
-export function soruKonuFiltre(konuId: string) {
+/** Konu filtresi: birincil veya ek etiket (KPSS kardeş konu id listesi destekler) */
+export function soruKonuFiltre(konuId: string | string[]) {
+  const ids = (Array.isArray(konuId) ? konuId : [konuId]).map((x) => String(x).trim()).filter(Boolean);
+  if (ids.length === 0) {
+    return { konuId: '__yok__' };
+  }
+  if (ids.length === 1) {
+    const tek = ids[0]!;
+    return {
+      OR: [
+        { konuId: tek },
+        { ekKonular: { some: { konuId: tek } } },
+      ],
+    };
+  }
   return {
     OR: [
-      { konuId },
-      { ekKonular: { some: { konuId } } },
+      { konuId: { in: ids } },
+      { ekKonular: { some: { konuId: { in: ids } } } },
     ],
   };
 }

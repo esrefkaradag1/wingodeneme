@@ -436,8 +436,8 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
             )}
           >
             <ArrowLeftRight className="h-4 w-4" />
-            <span className="hidden md:inline">{kpssModu ? 'YKS Paneline Geç' : 'KPSS Paneline Geç'}</span>
-            <span className="md:hidden">{kpssModu ? 'YKS' : 'KPSS'}</span>
+            <span className="hidden md:inline">{kpssModu ? 'YKS/LGS Paneline Geç' : 'KPSS Paneline Geç'}</span>
+            <span className="md:hidden">{kpssModu ? 'YKS/LGS' : 'KPSS'}</span>
           </button>
           <button
             type="button"

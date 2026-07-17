@@ -11,7 +11,7 @@ import { ensureGrupBankaSinavi } from '../utils/grupBankaSinavi';
 import { platformOgretimTuruUyumlu } from '../utils/paketPlatformFiltre';
 import { validateUretilenSoruListesi } from '../utils/soruUretimDogrulama';
 import { ogretmenIcinGrupTurlari, reqOgretmenKisit, ogretmenBransKayitNormalize, ogretmenBranslarByTurNormalize, ogretmenSoruIslemIzni, ogretmenSoruIdsIslemIzni, ogretmenKendiSorulariWhere } from '../services/ogretmenSinirlama';
-import { grupOgretmenFiltreyeUygun } from '../utils/grupOgretimTuru';
+import { grupOgretmenFiltreyeUygun, ogretimTuruPrismaFiltre } from '../utils/grupOgretimTuru';
 import {
   normalizeSinavOturumlar,
   sinavZamanOzetFromOturumlar,
@@ -29,6 +29,7 @@ import {
   soruUygunGrupInclude,
   uygunGrupIdsNormalize,
 } from '../utils/soruUygunGrup';
+import { kpssKardesKonuIds, kpssKardesSayilariBirlestir } from '../utils/kpssKardesKonu';
 
 const ZORLUK_DEGERLERI: SoruZorlugu[] = ['KOLAY', 'ORTA', 'ZOR'];
 
@@ -810,6 +811,118 @@ export async function soruGrubaTopluAtaController(req: AuthRequest, res: Respons
   } catch (err) { next(err); }
 }
 
+function ogretimTuruEsdegerListesi(tur: OgretimTuru): OgretimTuru[] {
+  const filtre = ogretimTuruPrismaFiltre(tur);
+  return typeof filtre === 'object' && 'in' in filtre ? filtre.in : [filtre];
+}
+
+function kullaniciOgretimTuruEslesmeWhere(
+  esdegerTurler: OgretimTuru[],
+  mevcutKullaniciId?: string,
+): Prisma.KullaniciWhereInput {
+  return {
+    OR: [
+      { ogrenciProfil: { is: { ogretimTuru: { in: esdegerTurler } } } },
+      { veliProfil: { is: { ogrenciler: { some: { ogretimTuru: { in: esdegerTurler } } } } } },
+      {
+        adminProfil: {
+          is: {
+            OR: [
+              { ogretimTuru: { in: esdegerTurler } },
+              { ogretimTurleri: { hasSome: esdegerTurler } },
+            ],
+          },
+        },
+      },
+      ...(mevcutKullaniciId ? [{ id: mevcutKullaniciId }] : []),
+    ],
+  };
+}
+
+function ogretimTuruKademeAnahtari(tur: OgretimTuru): string {
+  if (tur === OgretimTuru.SINIF_9 || tur === OgretimTuru.SINIF_10 || tur === OgretimTuru.SINIF_11) {
+    return OgretimTuru.YKS;
+  }
+  if (tur === OgretimTuru.SINIF_6 || tur === OgretimTuru.SINIF_7) {
+    return OgretimTuru.LGS;
+  }
+  return tur;
+}
+
+export async function kullanicilarOzetController(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  try {
+    if (req.kullanici?.rol === 'TEACHER') {
+      res.status(403).json({ basarili: false, mesaj: 'Kullanıcı özetine erişim yetkiniz yok.' });
+      return;
+    }
+
+    const rolParam = typeof req.query.rol === 'string' ? req.query.rol.trim() : '';
+    const rolFiltre: Rol | null =
+      ['OGRENCI', 'VELI', 'TEACHER', 'ADMIN', 'SUPER_ADMIN'].includes(rolParam) ? (rolParam as Rol) : null;
+
+    const platformTurleri = req.platformTurleri || [];
+    const mevcutKullaniciId = req.kullanici?.id || req.kullanici?.userId;
+
+    const platformWhereParcalari: Prisma.KullaniciWhereInput[] = [];
+    if (platformTurleri.length > 0) {
+      platformWhereParcalari.push(kullaniciOgretimTuruEslesmeWhere(platformTurleri, mevcutKullaniciId));
+    }
+    const platformWhere: Prisma.KullaniciWhereInput =
+      platformWhereParcalari.length === 0
+        ? {}
+        : platformWhereParcalari.length === 1
+          ? platformWhereParcalari[0]!
+          : { AND: platformWhereParcalari };
+
+    const rolGruplari = await prisma.kullanici.groupBy({
+      by: ['rol'],
+      where: platformWhere,
+      _count: { _all: true },
+    });
+
+    const roller: Record<string, number> = {};
+    let toplamKullanici = 0;
+    for (const satir of rolGruplari) {
+      roller[satir.rol] = satir._count._all;
+      toplamKullanici += satir._count._all;
+    }
+
+    const ogrenciKullaniciWhere: Prisma.KullaniciWhereInput = { rol: Rol.OGRENCI };
+    if (platformTurleri.length > 0) {
+      ogrenciKullaniciWhere.AND = [platformWhere];
+    }
+
+    const ogrenciGruplari = await prisma.ogrenciProfil.groupBy({
+      by: ['ogretimTuru'],
+      where: { kullanici: { is: ogrenciKullaniciWhere } },
+      _count: { _all: true },
+    });
+
+    const kademe: Record<string, number> = {};
+    let ogrenciToplam = 0;
+    for (const satir of ogrenciGruplari) {
+      const anahtar = ogretimTuruKademeAnahtari(satir.ogretimTuru);
+      kademe[anahtar] = (kademe[anahtar] || 0) + satir._count._all;
+      ogrenciToplam += satir._count._all;
+    }
+
+    const filtreliToplam = rolFiltre ? (roller[rolFiltre] || 0) : toplamKullanici;
+
+    res.json({
+      basarili: true,
+      veri: {
+        toplamKullanici,
+        filtreliToplam,
+        ogrenciToplam,
+        kademe,
+        roller,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function kullanicilarListesiController(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   try {
     if (req.kullanici?.rol === 'TEACHER') {
@@ -826,29 +939,27 @@ export async function kullanicilarListesiController(req: AuthRequest, res: Respo
       ['OGRENCI', 'VELI', 'TEACHER', 'ADMIN', 'SUPER_ADMIN'].includes(rolParam) ? (rolParam as Rol) : null;
 
     const qRaw = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+    const ogretimTuruParam = typeof req.query.ogretimTuru === 'string' ? req.query.ogretimTuru.trim() : '';
+    const ogretimTuruFiltre: OgretimTuru | null =
+      (Object.values(OgretimTuru) as string[]).includes(ogretimTuruParam) ? (ogretimTuruParam as OgretimTuru) : null;
+
     const platformTurleri = req.platformTurleri || [];
     const mevcutKullaniciId = req.kullanici?.id || req.kullanici?.userId;
 
     const whereParcalari: Prisma.KullaniciWhereInput[] = [];
     if (rolFiltre) whereParcalari.push({ rol: rolFiltre });
     if (platformTurleri.length > 0) {
-      whereParcalari.push({
-        OR: [
-          { ogrenciProfil: { is: { ogretimTuru: { in: platformTurleri } } } },
-          { veliProfil: { is: { ogrenciler: { some: { ogretimTuru: { in: platformTurleri } } } } } },
-          {
-            adminProfil: {
-              is: {
-                OR: [
-                  { ogretimTuru: { in: platformTurleri } },
-                  { ogretimTurleri: { hasSome: platformTurleri } },
-                ],
-              },
-            },
-          },
-          ...(mevcutKullaniciId ? [{ id: mevcutKullaniciId }] : []),
-        ],
-      });
+      whereParcalari.push(kullaniciOgretimTuruEslesmeWhere(platformTurleri, mevcutKullaniciId));
+    }
+    if (ogretimTuruFiltre) {
+      const esdegerTurler = ogretimTuruEsdegerListesi(ogretimTuruFiltre);
+      const platformUyumlu =
+        platformTurleri.length === 0 || esdegerTurler.some((tur) => platformTurleri.includes(tur));
+      if (platformUyumlu) {
+        whereParcalari.push(kullaniciOgretimTuruEslesmeWhere(esdegerTurler, mevcutKullaniciId));
+      } else {
+        whereParcalari.push({ id: { in: [] } });
+      }
     }
     if (qRaw) {
       const kelimeler = qRaw.split(/\s+/).filter(Boolean);
@@ -2522,7 +2633,7 @@ export async function soruGuncelleController(req: AuthRequest, res: Response, ne
 export async function sinavaSoruAtaController(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const { id: sinavId } = req.params;
-    const { soruIds } = req.body as { soruIds?: unknown };
+    const { soruIds, hedefKonuId } = req.body as { soruIds?: unknown; hedefKonuId?: unknown };
 
     if (!Array.isArray(soruIds) || soruIds.length === 0) {
       res.status(400).json({ basarili: false, mesaj: 'soruIds boş olamaz' });
@@ -2536,6 +2647,16 @@ export async function sinavaSoruAtaController(req: Request, res: Response, next:
     }
 
     const ids = [...new Set((soruIds as unknown[]).map((x) => String(x)).filter(Boolean))];
+    const hedefKonu =
+      typeof hedefKonuId === 'string' && hedefKonuId.trim().length > 0 ? hedefKonuId.trim() : null;
+
+    if (hedefKonu) {
+      const konuVar = await prisma.konu.findUnique({ where: { id: hedefKonu }, select: { id: true } });
+      if (!konuVar) {
+        res.status(400).json({ basarili: false, mesaj: 'Hedef konu bulunamadı' });
+        return;
+      }
+    }
 
     const maxSira = await prisma.soru.aggregate({
       where: { sinavId },
@@ -2547,7 +2668,11 @@ export async function sinavaSoruAtaController(req: Request, res: Response, next:
       ids.map((sid) =>
         prisma.soru.update({
           where: { id: sid },
-          data: { sinavId, siraNo: siraNo++ },
+          data: {
+            sinavId,
+            siraNo: siraNo++,
+            ...(hedefKonu ? { konuId: hedefKonu } : {}),
+          },
         })
       )
     );
@@ -2644,16 +2769,16 @@ export async function sinavBankadanOtomatikDoldurController(req: Request, res: R
       const hedefAdet = parseInt(String(d.adet), 10) || 0;
       if (!konuId || hedefAdet <= 0) continue;
 
-      const mevcutAdet = sinav.sorular.filter(s => s.konuId === konuId).length;
-      const gerekenAdet = hedefAdet - mevcutSayiManual(sinav.sorular, konuId); // Helper if needed
+      const kardesIds = await kpssKardesKonuIds(konuId);
+      const gerekenAdet = hedefAdet - mevcutSayiManual(sinav.sorular, kardesIds);
       
       if (gerekenAdet <= 0) continue;
 
-      // Bankadan bu konuya ait soruları çek (zaten bu sınavda olmayanlar)
+      // Bankadan bu konuya (ve KPSS kardeşlerine) ait soruları çek
       const adaylar = await prisma.soru.findMany({
         where: {
           sinavId: bankaId,
-          konuId: konuId,
+          konuId: { in: kardesIds },
           onayDurumu: 'ONAYLANDI'
         },
         take: gerekenAdet,
@@ -2673,7 +2798,8 @@ export async function sinavBankadanOtomatikDoldurController(req: Request, res: R
         await prisma.$transaction(
           adayIdleri.map(aid => prisma.soru.update({
             where: { id: aid },
-            data: { sinavId: sinav.id, siraNo: sira++ }
+            // Hedef kademe konusuna bağla (ortak havuzdan çekilen kardeş sorular için)
+            data: { sinavId: sinav.id, siraNo: sira++, konuId }
           }))
         );
         toplamEklenen += adaylar.length;
@@ -2685,8 +2811,9 @@ export async function sinavBankadanOtomatikDoldurController(req: Request, res: R
   } catch (err) { next(err); }
 }
 
-function mevcutSayiManual(sorular: any[], konuId: string): number {
-  return sorular.filter(s => s.konuId === konuId).length;
+function mevcutSayiManual(sorular: { konuId?: string | null }[], konuId: string | string[]): number {
+  const ids = new Set(Array.isArray(konuId) ? konuId : [konuId]);
+  return sorular.filter((s) => s.konuId && ids.has(s.konuId)).length;
 }
 
 /** Gruptaki soru havuzunun (Soru Bankası) konu bazlı özetini döner */
@@ -2709,7 +2836,8 @@ export async function grupHavuzOzetController(req: Request, res: Response, next:
     for (const row of ozet) {
       map[row.konuId] = row._count._all;
     }
-    res.json({ basarili: true, veri: map });
+    const birlesik = await kpssKardesSayilariBirlestir(map);
+    res.json({ basarili: true, veri: birlesik });
   } catch (err) { next(err); }
 }
 
@@ -2740,7 +2868,9 @@ export async function konuSoruSayilariController(req: AuthRequest, res: Response
     for (const row of etiket) {
       map[row.konuId] = (map[row.konuId] || 0) + row._count._all;
     }
-    res.json({ basarili: true, veri: map });
+    // KPSS ortak havuz: aynı ders+konu adı kademeler arasında birleşik sayı
+    const birlesik = await kpssKardesSayilariBirlestir(map);
+    res.json({ basarili: true, veri: birlesik });
   } catch (err) { next(err); }
 }
 

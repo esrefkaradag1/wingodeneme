@@ -291,6 +291,7 @@ export default function KullanicilarSayfasi() {
 
   const [sayfa, setSayfa] = useState(1);
   const [rolFiltre, setRolFiltre] = useState<string>('TUMU');
+  const [kademeFiltre, setKademeFiltre] = useState<string>('TUMU');
   const [arama, setArama] = useState('');
   const [debouncedArama, setDebouncedArama] = useState('');
   const [modalAcik, setModalAcik] = useState(false);
@@ -305,6 +306,27 @@ export default function KullanicilarSayfasi() {
     setKpssModu(isKpssMode());
   }, []);
 
+  const kademeFiltreSecenekleri = useMemo(
+    () =>
+      kpssModu
+        ? [
+            { value: 'TUMU', label: 'Tümü' },
+            { value: 'KPSS_LISANS', label: 'KPSS Lisans' },
+            { value: 'KPSS_ONLISANS', label: 'KPSS Önlisans' },
+            { value: 'KPSS_ORTAOGRETIM', label: 'KPSS Ortaöğretim' },
+          ]
+        : [
+            { value: 'TUMU', label: 'Tümü' },
+            { value: 'YKS', label: 'YKS' },
+            { value: 'LGS', label: 'LGS' },
+          ],
+    [kpssModu],
+  );
+
+  useEffect(() => {
+    setKademeFiltre('TUMU');
+  }, [kpssModu]);
+
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedArama(arama);
@@ -313,13 +335,21 @@ export default function KullanicilarSayfasi() {
     return () => clearTimeout(timer);
   }, [arama]);
 
+  const { data: ozetData } = useQuery({
+    queryKey: ['admin-kullanicilar-ozet', rolFiltre],
+    queryFn: () =>
+      adminApi.kullanicilarOzet(rolFiltre !== 'TUMU' ? { rol: rolFiltre } : undefined),
+    staleTime: 30_000,
+  });
+
   const { data, isLoading, isPlaceholderData } = useQuery({
-    queryKey: ['admin-kullanicilar', sayfa, debouncedArama, rolFiltre],
+    queryKey: ['admin-kullanicilar', sayfa, debouncedArama, rolFiltre, kademeFiltre],
     queryFn: () =>
       adminApi.kullanicilar({
         sayfa,
         q: debouncedArama,
         ...(rolFiltre !== 'TUMU' ? { rol: rolFiltre } : {}),
+        ...(kademeFiltre !== 'TUMU' ? { ogretimTuru: kademeFiltre } : {}),
       }),
     placeholderData: (prev) => prev,
   });
@@ -375,8 +405,26 @@ export default function KullanicilarSayfasi() {
   const kullanicilar: Kullanici[] = data?.data?.veri || [];
   const veliListesi: Kullanici[] = veliListeData?.data?.veri || [];
   const ogrenciListesi: Kullanici[] = ogrenciListeData?.data?.veri || [];
-  const meta = data?.data?.meta || { toplam: 0, toplamSayfa: 1 };
+  const meta = data?.data?.meta || { toplam: 0, toplamSayfa: 1, sayfa: 1, sayfaBoyutu: 20 };
+  const ozet = ozetData?.data?.veri as
+    | {
+        toplamKullanici?: number;
+        ogrenciToplam?: number;
+        kademe?: Record<string, number>;
+        roller?: Record<string, number>;
+      }
+    | undefined;
   const filtreliKullanicilar = kullanicilar;
+
+  const kademeChipSayisi = (deger: string) => {
+    if (deger === 'TUMU') return ozet?.ogrenciToplam ?? 0;
+    return ozet?.kademe?.[deger] ?? 0;
+  };
+
+  const rolSekmeSayisi = (deger: string) => {
+    if (deger === 'TUMU') return ozet?.toplamKullanici ?? meta.toplam;
+    return ozet?.roller?.[deger] ?? 0;
+  };
 
   const kaydetMutation = useMutation({
     mutationFn: (veri: Record<string, unknown>) =>
@@ -389,6 +437,7 @@ export default function KullanicilarSayfasi() {
       setDuzenlenen(null);
       setForm(bosForm());
       queryClient.invalidateQueries({ queryKey: ['admin-kullanicilar'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-kullanicilar-ozet'] });
     },
     onError: (e: unknown) => {
       if (axios.isAxiosError(e) && e.response?.data?.mesaj) {
@@ -419,6 +468,7 @@ export default function KullanicilarSayfasi() {
     onSuccess: () => {
       toast.basarili('Rol güncellendi');
       queryClient.invalidateQueries({ queryKey: ['admin-kullanicilar'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-kullanicilar-ozet'] });
     },
     onError: (e: unknown) => {
       if (axios.isAxiosError(e) && e.response?.data?.mesaj) {
@@ -437,6 +487,7 @@ export default function KullanicilarSayfasi() {
       setHizliVeliSecim('');
       setHizliOgrenciSecim('');
       queryClient.invalidateQueries({ queryKey: ['admin-kullanicilar'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-kullanicilar-ozet'] });
     },
     onError: (e: unknown) => {
       if (axios.isAxiosError(e) && e.response?.data?.mesaj) {
@@ -453,6 +504,7 @@ export default function KullanicilarSayfasi() {
     onSuccess: () => {
       toast.basarili('Veli bağlantısı kaldırıldı');
       queryClient.invalidateQueries({ queryKey: ['admin-kullanicilar'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-kullanicilar-ozet'] });
       setModalAcik(false);
       setDuzenlenen(null);
     },
@@ -470,6 +522,7 @@ export default function KullanicilarSayfasi() {
     onSuccess: () => {
       toast.basarili('Kullanıcı silindi');
       queryClient.invalidateQueries({ queryKey: ['admin-kullanicilar'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-kullanicilar-ozet'] });
     },
     onError: (e: unknown) => {
       if (axios.isAxiosError(e) && e.response?.data?.mesaj) {
@@ -486,6 +539,7 @@ export default function KullanicilarSayfasi() {
       toast.basarili(res.data.mesaj || 'Kullanıcılar silindi');
       setSecilenIds([]);
       queryClient.invalidateQueries({ queryKey: ['admin-kullanicilar'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-kullanicilar-ozet'] });
     },
     onError: (e: unknown) => {
       if (axios.isAxiosError(e) && e.response?.data?.mesaj) {
@@ -649,7 +703,15 @@ export default function KullanicilarSayfasi() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Kullanıcı Yönetimi</h1>
-          <p className="text-gray-500 mt-1">Toplam {meta.toplam.toLocaleString('tr-TR')} kullanıcı</p>
+          <p className="text-gray-500 mt-1">
+            Toplam {meta.toplam.toLocaleString('tr-TR')} kayıt listeleniyor
+            {ozet?.ogrenciToplam != null ? (
+              <span className="text-gray-400">
+                {' '}
+                · {ozet.ogrenciToplam.toLocaleString('tr-TR')} öğrenci
+              </span>
+            ) : null}
+          </p>
         </div>
         <button type="button" onClick={() => modalAc()} className="btn-primary inline-flex items-center gap-2 shrink-0">
           <Plus className="w-4 h-4" />
@@ -756,14 +818,53 @@ export default function KullanicilarSayfasi() {
             >
               <Ikon className="w-4 h-4" />
               {sekme.etiket}
-              {aktif && (
-                <span className="ml-1 text-xs font-bold bg-white/25 rounded-full px-1.5 py-0.5">
-                  {meta.toplam.toLocaleString('tr-TR')}
-                </span>
-              )}
+              <span
+                className={`ml-1 text-xs font-bold rounded-full px-1.5 py-0.5 ${
+                  aktif ? 'bg-white/25' : 'bg-gray-100 text-gray-600'
+                }`}
+              >
+                {rolSekmeSayisi(sekme.value).toLocaleString('tr-TR')}
+              </span>
             </button>
           );
         })}
+      </div>
+
+      <div className="space-y-2">
+        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Öğrenci kademesi</p>
+        <div className="flex flex-wrap gap-2">
+          {kademeFiltreSecenekleri.map((secenek) => {
+            const aktif = kademeFiltre === secenek.value;
+            const sayi = kademeChipSayisi(secenek.value);
+            return (
+              <button
+                key={secenek.value}
+                type="button"
+                onClick={() => {
+                  setKademeFiltre(secenek.value);
+                  setSayfa(1);
+                  setSecilenIds([]);
+                }}
+                className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-semibold border transition-all ${
+                  aktif
+                    ? kpssModu
+                      ? 'bg-teal-600 text-white border-teal-600 shadow-sm'
+                      : 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                    : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                {secenek.label}
+                <span
+                  className={`text-xs font-bold rounded-full px-1.5 py-0.5 ${
+                    aktif ? 'bg-white/25' : 'bg-gray-100 text-gray-600'
+                  }`}
+                >
+                  {sayi.toLocaleString('tr-TR')}
+                </span>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       <div className="relative max-w-md">
@@ -838,6 +939,7 @@ export default function KullanicilarSayfasi() {
             <table className="w-full min-w-[880px]">
               <thead className="bg-gray-50 border-b border-gray-100">
                 <tr>
+                  <th className="w-12 px-4 py-3 text-xs font-semibold text-gray-500 uppercase">#</th>
                   <th className="w-12 px-6 py-3">
                     <input
                       type="checkbox"
@@ -861,13 +963,16 @@ export default function KullanicilarSayfasi() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {filtreliKullanicilar.map((kullanici) => (
+                {filtreliKullanicilar.map((kullanici, index) => (
                   <tr
                     key={kullanici.id}
                     className={`hover:bg-gray-50 transition-colors ${
                       secilenIds.includes(kullanici.id) ? 'bg-indigo-50/50' : ''
                     }`}
                   >
+                    <td className="px-4 py-4 text-sm font-semibold text-gray-400 tabular-nums">
+                      {((meta.sayfa ?? sayfa) - 1) * (meta.sayfaBoyutu ?? 20) + index + 1}
+                    </td>
                     <td className="px-6 py-4">
                       <input
                         type="checkbox"
@@ -972,6 +1077,7 @@ export default function KullanicilarSayfasi() {
                                   .then(() => {
                                     toast.basarili('Öğretmen onaylandı');
                                     queryClient.invalidateQueries({ queryKey: ['admin-kullanicilar'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-kullanicilar-ozet'] });
                                   })
                                   .catch((err: any) => {
                                     toast.hata(err?.response?.data?.mesaj || 'Onaylama başarısız');

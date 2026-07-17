@@ -134,7 +134,7 @@ export function LandingNav() {
               }`}
             >
               <ArrowLeftRight className="w-4 h-4 transition-transform duration-300 group-hover:rotate-180" />
-              {kpssModu ? 'WingoYKS' : 'WingoKPSS'}
+              {kpssModu ? 'YKS/LGS' : 'WingoKPSS'}
             </button>
           )}
           <button
@@ -249,7 +249,7 @@ export function LandingNav() {
                     }`}
                   >
                     <ArrowLeftRight className="w-4 h-4" />
-                    {kpssModu ? 'WingoYKS tarafına geç' : 'WingoKPSS tarafına geç'}
+                    {kpssModu ? 'YKS/LGS tarafına geç' : 'WingoKPSS tarafına geç'}
                   </button>
                 )}
                 {oturumAcik ? (

@@ -60,7 +60,7 @@ export default function SoruSecimModal({
   const soruAtaMut = useMutation({
     mutationFn: () => {
       const yeniSecimler = seciliSoruIds.filter((soruId) => !sinavdakiKonuSoruIdSet.has(soruId));
-      return adminApi.sinavSoruAta(sinavId, yeniSecimler);
+      return adminApi.sinavSoruAta(sinavId, yeniSecimler, konuId);
     },
     onSuccess: (res: { data?: { basarili?: boolean; veri?: { eklenenAdet?: number } } }) => {
       const eklenen = res?.data?.veri?.eklenenAdet ?? seciliSoruIds.filter((soruId) => !sinavdakiKonuSoruIdSet.has(soruId)).length;

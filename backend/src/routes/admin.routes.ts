@@ -13,6 +13,7 @@ import {
 import {
   sinavOlusturController, sinavGuncelleController, sinavSilController,
   sinavlarListesiController, sinavDetayAdminController, sinavSorulariAdminController, kullanicilarListesiController,
+  kullanicilarOzetController,
   kullaniciOlusturAdminController, kullaniciGuncelleAdminController, kullaniciSilAdminController, kullaniciTopluSilAdminController,
   veliOgrenciEslestirAdminController,
   genelAnalizController, soruEkleController, soruBankaTopluController, soruGrubaTopluAtaController, soruOnayGuncelleController,
@@ -124,6 +125,7 @@ router.get('/sinavlar/:sinavId/ogrenciler', sinavAtananOgrencilerController);
 router.post('/sorular/:id/copy-to-tyt', rolKontrol('ADMIN', 'SUPER_ADMIN'), soruKopyalaTytController);
 router.post('/sorular/toplu-copy-to-tyt', rolKontrol('ADMIN', 'SUPER_ADMIN'), soruTopluKopyalaTytController);
 
+router.get('/kullanicilar/ozet', kullanicilarOzetController);
 router.get('/kullanicilar', kullanicilarListesiController);
 router.post('/kullanicilar/veli-eslestir', veliOgrenciEslestirAdminController);
 router.post('/kullanicilar', kullaniciOlusturAdminController);

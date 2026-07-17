@@ -236,7 +236,7 @@ function LandingIcerikKpss() {
               className="group inline-flex items-center gap-2 rounded-xl border border-indigo-400/30 bg-indigo-500/10 px-3.5 py-2.5 text-sm font-bold text-indigo-200 transition-all duration-300 hover:bg-indigo-500/20 hover:border-indigo-400/50"
             >
               <ArrowLeftRight className="w-4 h-4 transition-transform duration-300 group-hover:rotate-180" />
-              WingoYKS
+              WingoYKS/LGS
             </button>
             {oturumAcik ? (
               <LandingKullaniciMenu variant="kpss" />
@@ -310,7 +310,7 @@ function LandingIcerikKpss() {
               className="flex items-center justify-center gap-2 rounded-xl border border-indigo-400/30 bg-indigo-500/10 py-3 font-bold text-indigo-200 transition-all hover:bg-indigo-500/20"
             >
               <ArrowLeftRight className="w-4 h-4" />
-              WingoYKS tarafına geç
+              YKS/LGS tarafına geç
             </button>
             {oturumAcik ? (
               <LandingKullaniciMenu mobil variant="kpss" onNavigate={() => setMobilMenu(false)} />

@@ -9,6 +9,7 @@ import { soruKullaniciOzetSelect, kullaniciGorunenAd } from '../utils/soruDuzenl
 import { soruKonuFiltre, soruKonuMetaFiltre, alanKonuWhere } from '../utils/soruKonuEtiket';
 import { soruUygunGrupInclude, soruAlanFiltreKosulu } from '../utils/soruUygunGrup';
 import { kpssOgretimTuruMu, ogretimTuruPrismaFiltre, ogretimTuruEsdegerleri } from '../utils/grupOgretimTuru';
+import { kpssKardesKonuIds } from '../utils/kpssKardesKonu';
 import { soruOlusturulduAraligi } from '../utils/tarihAraligi';
 import { oturumAktiviteMiddleware } from '../middlewares/oturumAktivite.middleware';
 
@@ -111,10 +112,16 @@ router.get('/hepsi', async (req: AuthRequest, res: Response, next: NextFunction)
     if (ogretmenSoruKisiti) kosullar.push(ogretmenSoruKisiti);
     if (sinavId) kosullar.push({ sinavId: sinavId as string });
     if (typeof konuId === 'string' && konuId.length > 0) {
-      kosullar.push(soruKonuFiltre(konuId));
+      // KPSS GY+GK: Lisans / Önlisans / Ortaöğretim ortak havuz — kardeş konu id'lerini de dahil et
+      const genisKonuIds = await kpssKardesKonuIds(konuId);
+      kosullar.push(soruKonuFiltre(genisKonuIds));
     }
     if (zorluk) kosullar.push({ zorluk: zorluk as any });
-    if (konuFiltre) kosullar.push(konuFiltre);
+    // Belirli konu seçildiyse (KPSS kardeş genişletmesi dahil) alan/platform filtresi
+    // kardeş kademe sorularını kesmesin.
+    if (konuFiltre && !(typeof konuId === 'string' && konuId.length > 0)) {
+      kosullar.push(konuFiltre);
+    }
     if (onayFiltre) kosullar.push({ onayDurumu: onayFiltre });
     if (
       !ogrKisit &&

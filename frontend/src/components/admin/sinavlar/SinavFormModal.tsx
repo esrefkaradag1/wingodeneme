@@ -53,7 +53,14 @@ import {
   konuSeciciOncelikliKapsam,
   yksAytKonulariBirlestir,
 } from '@/lib/sinav-tur';
-import { grupKonuOgretimTuru, kpssOgretimTuruMu } from '@/lib/grupOgretimTuru';
+import { grupKonuOgretimTuru, kpssOgretimTuruMu, KPSS_KADEME_SECENEKLERI } from '@/lib/grupOgretimTuru';
+import { isKpssMode } from '@/lib/platform';
+
+function grupKpssMi(g: { ad?: string | null; tur?: string | null }): boolean {
+  if (g.tur === 'KPSS' || kpssOgretimTuruMu(g.tur)) return true;
+  const ad = String(g.ad || '').toLocaleLowerCase('tr-TR');
+  return ad.includes('kpss') || ad.includes('kamu personel');
+}
 
 const SoruSecimModalLazy = dynamic(() => import('./SoruSecimModal'), { ssr: false });
 
@@ -124,6 +131,7 @@ export default function SinavFormModal({ id, onClose, gruplar, layout = 'modal' 
   const [form, setForm] = useState(bosForm());
   const [seciliUstGrupId, setSeciliUstGrupId] = useState('');
   const [seciliAltGrupId, setSeciliAltGrupId] = useState('');
+  const [kpssKademeSecimi, setKpssKademeSecimi] = useState<string>('');
   const [mevcutSorular, setMevcutSorular] = useState<any[]>([]);
   const [sablonPanelAcik, setSablonPanelAcik] = useState(false);
   const [manuelSoruSecim, setManuelSoruSecim] = useState<{ konuId: string; konuAd: string } | null>(null);
@@ -134,6 +142,7 @@ export default function SinavFormModal({ id, onClose, gruplar, layout = 'modal' 
   const hydratedSinavIdRef = useRef<string | null>(null);
 
   const effectiveGrupId = seciliAltGrupId || seciliUstGrupId;
+  const kpssPaneli = isKpssMode();
 
   const seciliGrup = useMemo(() => {
     if (!effectiveGrupId) return null;
@@ -142,9 +151,38 @@ export default function SinavFormModal({ id, onClose, gruplar, layout = 'modal' 
 
   const kpssSablonOgretimTuru = useMemo(() => {
     if (form.tur !== 'KPSS') return undefined;
+    const manuel = kpssKademeSecimi?.trim();
+    if (manuel && kpssOgretimTuruMu(manuel)) return manuel;
     const fromGrup = grupKonuOgretimTuru(seciliGrup);
     return fromGrup && kpssOgretimTuruMu(fromGrup) ? fromGrup : undefined;
-  }, [form.tur, seciliGrup]);
+  }, [form.tur, seciliGrup, kpssKademeSecimi]);
+
+  // KPSS panelinde sınav türünü KPSS'e kilitle
+  useEffect(() => {
+    if (!kpssPaneli) return;
+    setForm((f) => (f.tur === 'KPSS' ? f : { ...f, tur: 'KPSS', oturumlar: f.oturumlar.length > 0 ? f.oturumlar : bosKpssOturumlari() }));
+  }, [kpssPaneli]);
+
+  // YKS panelinde KPSS sınav türünü engelle
+  useEffect(() => {
+    if (kpssPaneli) return;
+    setForm((f) => (f.tur === 'KPSS' ? { ...f, tur: 'TYT', oturumlar: [] } : f));
+  }, [kpssPaneli]);
+
+  // KPSS panelinde varsayılan kademe
+  useEffect(() => {
+    if (!kpssPaneli || kpssKademeSecimi) return;
+    setKpssKademeSecimi('KPSS_ONLISANS');
+  }, [kpssPaneli, kpssKademeSecimi]);
+
+  // Grup seçilince kademeyi gruptan al
+  useEffect(() => {
+    if (!kpssPaneli) return;
+    const fromGrup = grupKonuOgretimTuru(seciliGrup);
+    if (fromGrup && kpssOgretimTuruMu(fromGrup)) {
+      setKpssKademeSecimi(fromGrup);
+    }
+  }, [kpssPaneli, seciliGrup]);
 
   const { data: detayRes, isLoading: detayYukleniyor } = useQuery({
     queryKey: ['admin-sinav-detay', id],
@@ -163,11 +201,11 @@ export default function SinavFormModal({ id, onClose, gruplar, layout = 'modal' 
     if (form.tur === 'TYT') return { ogretimTuru: 'YKS' as const, yksKapsam: 'TYT' as const };
     if (isAytSinav(form.tur)) return { ogretimTuru: 'YKS' as const, yksKapsam: 'AYT' as const };
     if (form.tur === 'KPSS') {
-      const kpssTur = grupKonuOgretimTuru(seciliGrup);
+      const kpssTur = kpssSablonOgretimTuru || grupKonuOgretimTuru(seciliGrup);
       return { ogretimTuru: (kpssTur && kpssOgretimTuruMu(kpssTur) ? kpssTur : 'KPSS') as string };
     }
     return { ogretimTuru: 'YKS' as const };
-  }, [form.tur, seciliGrup]);
+  }, [form.tur, seciliGrup, kpssSablonOgretimTuru]);
 
   const { data: konularRes, isLoading: konularYukleniyor } = useQuery({
     queryKey: ['admin-konular-sinav-form', konuQueryParams],
@@ -282,8 +320,13 @@ export default function SinavFormModal({ id, onClose, gruplar, layout = 'modal' 
     }
   }, [id, detayRes?.data?.veri?.grupId, gruplar]);
 
-  const ustGruplar = gruplar.filter((g) => !g.parentId);
-  const altGruplar = gruplar.filter((g) => g.parentId === seciliUstGrupId);
+  const panelGruplar = useMemo(
+    () => gruplar.filter((g) => (kpssPaneli ? grupKpssMi(g) : !grupKpssMi(g))),
+    [gruplar, kpssPaneli],
+  );
+
+  const ustGruplar = panelGruplar.filter((g) => !g.parentId);
+  const altGruplar = panelGruplar.filter((g) => g.parentId === seciliUstGrupId);
 
   const sinavOlustur = useMutation({
     mutationFn: (anlik: { form: SinavFormAnlik; grupId: string }) =>
@@ -680,40 +723,59 @@ export default function SinavFormModal({ id, onClose, gruplar, layout = 'modal' 
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Sınav Türü</label>
-            <select
-              value={form.tur}
-              onChange={(e) => {
-                const tur = e.target.value;
-                setForm((f) => ({
-                  ...f,
-                  tur,
-                  oturumlar:
-                    tur === 'LGS' && f.oturumlar.length === 0
-                      ? bosLgsOturumlari()
-                      : tur === 'LGS'
-                        ? f.oturumlar
-                        : tur === 'KPSS' && f.oturumlar.length === 0
-                          ? bosKpssOturumlari()
-                          : tur === 'KPSS'
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              {kpssPaneli ? 'KPSS Kademesi' : 'Sınav Türü'}
+            </label>
+            {kpssPaneli ? (
+              <>
+                <select
+                  value={kpssKademeSecimi}
+                  onChange={(e) => setKpssKademeSecimi(e.target.value)}
+                  className="input-field"
+                >
+                  <option value="">Kademe seçin…</option>
+                  {KPSS_KADEME_SECENEKLERI.map((k) => (
+                    <option key={k.value} value={k.value}>
+                      {k.label}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1.5 text-xs text-teal-800 leading-relaxed">
+                  KPSS panelinde yalnızca KPSS sınavları oluşturulur. Kademe seçimi konu havuzunu ve şablonu belirler.
+                </p>
+              </>
+            ) : (
+              <>
+                <select
+                  value={form.tur}
+                  onChange={(e) => {
+                    const tur = e.target.value;
+                    setForm((f) => ({
+                      ...f,
+                      tur,
+                      oturumlar:
+                        tur === 'LGS' && f.oturumlar.length === 0
+                          ? bosLgsOturumlari()
+                          : tur === 'LGS'
                             ? f.oturumlar
                             : [],
-                }));
-              }}
-              className="input-field"
-            >
-              <option value="TYT">TYT</option>
-              <option value="AYT">AYT</option>
-              <option value="AYT_TYT">AYT + TYT (TYT soru/konu havuzu dahil)</option>
-              <option value="LGS">LGS</option>
-              <option value="KPSS">KPSS</option>
-            </select>
-            {form.tur === 'AYT_TYT' ? (
-              <p className="mt-1.5 text-xs text-indigo-700 leading-relaxed">
-                TYT konu ve soru bankası bu sınava dahildir; ÖSYM AYT kitapçığına uygun TD+SB-1 soruları için TYT
-                ünitelerinden seçim yapabilirsiniz.
-              </p>
-            ) : null}
+                    }));
+                  }}
+                  className="input-field"
+                >
+                  <option value="TYT">TYT</option>
+                  <option value="AYT">AYT</option>
+                  <option value="AYT_TYT">AYT + TYT (TYT soru/konu havuzu dahil)</option>
+                  <option value="LGS">LGS</option>
+                </select>
+                {form.tur === 'AYT_TYT' ? (
+                  <p className="mt-1.5 text-xs text-indigo-700 leading-relaxed">
+                    TYT konu ve soru bankası bu sınava dahildir; ÖSYM AYT kitapçığına uygun TD+SB-1 soruları için TYT
+                    ünitelerinden seçim yapabilirsiniz.
+                  </p>
+                ) : null}
+              </>
+            )}
           </div>
 
           {form.tur === 'LGS' || form.tur === 'KPSS' ? (
@@ -1001,8 +1063,9 @@ export default function SinavFormModal({ id, onClose, gruplar, layout = 'modal' 
                   ) : form.tur === 'KPSS' ? (
                     <p className="text-xs text-violet-800/90 mt-1 leading-relaxed">
                       <b>KPSS</b>: Genel Yetenek (Türkçe 30, Mat+Geo 30) + Genel Kültür (Tarih 27, Coğrafya 18,
-                      Vatandaşlık 9, Güncel 6) — <b>toplam 120 soru</b>, oturumlar 65+65 dk. Konular seçili
-                      grubun kademesine (Lisans / Önlisans / Ortaöğretim) göre KPSS havuzundan eşleştirilir.
+                      Vatandaşlık 9, Güncel 6) — <b>toplam 120 soru</b>, oturumlar 65+65 dk. Şablon konuları seçilen
+                      kademeye yazılır; soru seçiminde Lisans / Önlisans / Ortaöğretim ortak havuzu (aynı ders ve konu)
+                      kullanılır.
                     </p>
                   ) : (
                     <>

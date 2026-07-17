@@ -409,8 +409,11 @@ export const adminApi = {
   sinavOgrenciAtamaKaldir: (sinavId: string, ogrenciId: string) => api.delete(`/admin/sinavlar/${sinavId}/ogrenci/${ogrenciId}`),
   sinavAtananOgrenciler: (sinavId: string) => api.get(`/admin/sinavlar/${sinavId}/ogrenciler`).then(res => ({ data: { veri: res.data.veri } })),
   sinavBankadanDoldur: (sinavId: string) => api.post(`/admin/sinavlar/${sinavId}/bankadan-doldur`, {}).then(res => ({ data: { veri: res.data.veri } })),
-  sinavSoruAta: (sinavId: string, soruIds: string[]) =>
-    api.post(`/admin/sinavlar/${sinavId}/soru-ata`, { soruIds }).then((res) => ({
+  sinavSoruAta: (sinavId: string, soruIds: string[], hedefKonuId?: string) =>
+    api.post(`/admin/sinavlar/${sinavId}/soru-ata`, {
+      soruIds,
+      ...(hedefKonuId ? { hedefKonuId } : {}),
+    }).then((res) => ({
       data: {
         basarili: res.data?.basarili !== false,
         veri: res.data?.veri,
@@ -433,8 +436,10 @@ export const adminApi = {
   soruKopyalaTyt: (id: string, veri: { targetKonuId: string }) => api.post(`/admin/sorular/${id}/copy-to-tyt`, veri),
   soruTopluKopyalaTyt: (veri: { soruIds: string[]; targetKonuId: string }) => api.post('/admin/sorular/toplu-copy-to-tyt', veri),
   sorularGrubaAta: (veri: any) => api.post('/admin/sorular/gruba-ata', veri),
-  kullanicilar: (params?: { sayfa?: number; boyut?: number; rol?: string; q?: string }) =>
+  kullanicilar: (params?: { sayfa?: number; boyut?: number; rol?: string; q?: string; ogretimTuru?: string }) =>
     api.get('/admin/kullanicilar', { params }).then(res => ({ data: { veri: res.data.veri, meta: res.data.meta } })),
+  kullanicilarOzet: (params?: { rol?: string }) =>
+    api.get('/admin/kullanicilar/ozet', { params }).then((res) => ({ data: { veri: res.data.veri } })),
   kullaniciOlustur: (veri: any) => api.post('/admin/kullanicilar', veri),
   veliOgrenciEslestir: (veri: { veliEmail: string; ogrenciEmail: string }) =>
     api.post('/admin/kullanicilar/veli-eslestir', veri),
