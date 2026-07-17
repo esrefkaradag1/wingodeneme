@@ -1,16 +1,19 @@
 import path from 'path';
 import dotenv from 'dotenv';
 
-// .env her zaman backend/ kökünden yüklensin; build çıktısı `dist/src` altına taşınsa da çalışsın.
-const envYollari = [
-  path.resolve(__dirname, '../.env'),
-  path.resolve(__dirname, '../../.env'),
-  path.resolve(process.cwd(), '.env'),
-  path.resolve(process.cwd(), 'backend/.env'),
-];
+// Vercel'de env proje ayarlarından gelir; yerel .env dosyası aranmaz (EnvFileReadError riski).
+if (process.env.VERCEL !== '1') {
+  // .env her zaman backend/ kökünden yüklensin; build çıktısı `dist/src` altına taşınsa da çalışsın.
+  const envYollari = [
+    path.resolve(__dirname, '../.env'),
+    path.resolve(__dirname, '../../.env'),
+    path.resolve(process.cwd(), '.env'),
+    path.resolve(process.cwd(), 'backend/.env'),
+  ];
 
-for (const envYolu of envYollari) {
-  dotenv.config({ path: envYolu });
+  for (const envYolu of envYollari) {
+    dotenv.config({ path: envYolu });
+  }
 }
 
 import express from 'express';
