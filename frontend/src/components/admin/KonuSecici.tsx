@@ -49,6 +49,33 @@ function segmentEtiketi(seg?: string | null): string | null {
   return seg;
 }
 
+/** KPSS kademe rozeti — Lisans/Önlisans/Ortaöğretim konuları aynı adla geldiği için zorunlu. */
+function kpssKademeEtiketi(tur?: string | null): string | null {
+  switch (tur) {
+    case 'KPSS_LISANS':
+      return 'KPSS LİS';
+    case 'KPSS_ONLISANS':
+      return 'KPSS ÖL';
+    case 'KPSS_ORTAOGRETIM':
+      return 'KPSS OÖ';
+    default:
+      return null;
+  }
+}
+
+function kpssKademeRozetSinif(tur?: string | null): string {
+  switch (tur) {
+    case 'KPSS_LISANS':
+      return 'bg-teal-100 text-teal-800';
+    case 'KPSS_ONLISANS':
+      return 'bg-sky-100 text-sky-800';
+    case 'KPSS_ORTAOGRETIM':
+      return 'bg-cyan-100 text-cyan-800';
+    default:
+      return 'bg-gray-100 text-gray-700';
+  }
+}
+
 /** Ara sınıf konuları (6/7 ve 9/10/11) ünitesiz gelir; kademeden sınıf etiketi türet. */
 function kademeUniteEtiketi(tur?: string): string | null {
   switch (tur) {
@@ -98,14 +125,16 @@ export default function KonuSecici({
     });
   }, [konular, arama]);
 
-  // Ders → ünite → konu gruplaması
+  // Ders → ünite → konu gruplaması (KPSS kademesi üniteye eklenir; aynı adlar karışmasın)
   const dersGruplari = useMemo(() => {
     const map = new Map<string, Map<string, KonuSecimi[]>>();
     for (const k of filtreli) {
       const dersAd = k.ders || 'Diğer';
       if (!map.has(dersAd)) map.set(dersAd, new Map());
       const uniteMap = map.get(dersAd)!;
-      const uniteAd = k.uniteAdi || kademeUniteEtiketi(k.ogretimTuru) || '— Genel —';
+      const kpssEtiket = kpssKademeEtiketi(k.ogretimTuru);
+      const temelUnite = k.uniteAdi || kademeUniteEtiketi(k.ogretimTuru) || '— Genel —';
+      const uniteAd = kpssEtiket ? `${temelUnite} · ${kpssEtiket}` : temelUnite;
       if (!uniteMap.has(uniteAd)) uniteMap.set(uniteAd, []);
       uniteMap.get(uniteAd)!.push(k);
     }
@@ -115,7 +144,15 @@ export default function KonuSecici({
         ders,
         uniteler: Array.from(unMap.entries())
           .sort(([a], [b]) => a.localeCompare(b, 'tr'))
-          .map(([uniteAd, list]) => ({ uniteAd, list: list.sort((a, b) => a.ad.localeCompare(b.ad, 'tr')) })),
+          .map(([uniteAd, list]) => ({
+            uniteAd,
+            list: list.sort((a, b) => {
+              const ka = kpssKademeEtiketi(a.ogretimTuru) || '';
+              const kb = kpssKademeEtiketi(b.ogretimTuru) || '';
+              if (ka !== kb) return ka.localeCompare(kb, 'tr');
+              return a.ad.localeCompare(b.ad, 'tr');
+            }),
+          })),
       }));
   }, [filtreli]);
 
@@ -133,6 +170,11 @@ export default function KonuSecici({
             <>
               <b>{secili.ders}</b>
               {secili.uniteAdi ? ` — ${secili.uniteAdi}` : ''} — {secili.ad}
+              {kpssKademeEtiketi(secili.ogretimTuru) ? (
+                <span className={`ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded ${kpssKademeRozetSinif(secili.ogretimTuru)}`}>
+                  {kpssKademeEtiketi(secili.ogretimTuru)}
+                </span>
+              ) : null}
               <span className="font-normal text-gray-500">
                 {' '}
                 ({havuzSayilari[secili.id] ?? 0} soru)
@@ -189,6 +231,7 @@ export default function KonuSecici({
                       {list.map((k) => {
                         const sayi = havuzSayilari[k.id] ?? 0;
                         const seg = segmentEtiketi(k.yksSegment);
+                        const kpssEtiket = kpssKademeEtiketi(k.ogretimTuru);
                         const onCikar = oncelikliKapsam && seg && seg === oncelikliKapsam;
                         const isimDimm = oncelikliKapsam && seg && seg !== oncelikliKapsam;
                         return (
@@ -208,6 +251,11 @@ export default function KonuSecici({
                                   onCikar ? 'bg-emerald-100 text-emerald-800' :
                                   seg === 'TYT' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'
                                 }`}>{seg}</span>
+                              )}
+                              {kpssEtiket && (
+                                <span className={`shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded ${kpssKademeRozetSinif(k.ogretimTuru)}`}>
+                                  {kpssEtiket}
+                                </span>
                               )}
                             </span>
                             <span

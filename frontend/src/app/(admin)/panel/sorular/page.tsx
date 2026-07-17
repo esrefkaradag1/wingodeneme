@@ -438,7 +438,7 @@ export default function SorularSayfasi() {
   const meta = sorularData?.meta || { toplam: 0, toplamSayfa: 1 };
 
   const handleFormReset = () => {
-    setFormMufredatTuru('HEPSI');
+    setFormMufredatTuru(kpssModu ? (ogretmenKisit && kpssOgretimTuruMu(ogretmenKisit.ogretimTuru) ? ogretmenKisit.ogretimTuru as FormMufredatTuru : 'KPSS_ONLISANS') : 'HEPSI');
     setFormYksKapsam('HEPSI');
     setFormKpssKapsam('HEPSI');
     setForm({
@@ -463,6 +463,15 @@ export default function SorularSayfasi() {
 
   /** Yeni soru modalı: önceki düzenlemeden kalan grup/sınav seçimini temizler */
   const yeniSoruFormunuAc = () => {
+    // KPSS panelinde kademe seçimi zorunlu netlikte başlasın (Tümü → aynı adlı 3 konu karışıyordu)
+    const varsayilanMufredat: FormMufredatTuru = kpssModu
+      ? (ogretmenKisit && kpssOgretimTuruMu(ogretmenKisit.ogretimTuru)
+          ? (ogretmenKisit.ogretimTuru as FormMufredatTuru)
+          : 'KPSS_ONLISANS')
+      : 'HEPSI';
+    setFormMufredatTuru(varsayilanMufredat);
+    setFormYksKapsam('HEPSI');
+    setFormKpssKapsam('HEPSI');
     setForm({
       konuId: '',
       grupId: '',
@@ -1143,7 +1152,10 @@ export default function SorularSayfasi() {
                           <div>
                              <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-widest leading-none mb-1.5">{soru.konu.ders}</p>
                              {(soru.konu.ogretimTuru || soru.konu.yksSegment) && (
-                               <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-teal-50 text-teal-700 border border-teal-100 mb-1 inline-block">
+                               <span
+                                 className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-teal-50 text-teal-700 border border-teal-100 mb-1 inline-block"
+                                 title="Müfredat kademesi (sorunun bağlı olduğu konu). Uygun grup etiketlerinden bağımsızdır."
+                               >
                                  {alanKonuEtiketi(soru.konu.ogretimTuru, soru.konu.yksSegment)}
                                </span>
                              )}
@@ -1278,6 +1290,18 @@ export default function SorularSayfasi() {
                                  formKonular.find(
                                    (k: any) =>
                                      k.ad === soru.konu.ad &&
+                                     String(k.ders || '').trim() === String(soru.konu.ders || '').trim() &&
+                                     String(k.ogretimTuru || '') === String(soru.konu.ogretimTuru || ''),
+                                 ) ||
+                                 konular.find(
+                                   (k: any) =>
+                                     k.ad === soru.konu.ad &&
+                                     String(k.ders || '').trim() === String(soru.konu.ders || '').trim() &&
+                                     String(k.ogretimTuru || '') === String(soru.konu.ogretimTuru || ''),
+                                 ) ||
+                                 formKonular.find(
+                                   (k: any) =>
+                                     k.ad === soru.konu.ad &&
                                      String(k.ders || '').trim() === String(soru.konu.ders || '').trim(),
                                  ) ||
                                  konular.find(
@@ -1285,7 +1309,12 @@ export default function SorularSayfasi() {
                                      k.ad === soru.konu.ad &&
                                      String(k.ders || '').trim() === String(soru.konu.ders || '').trim(),
                                  );
-                               setFormMufredatTuru('HEPSI');
+                               const konuTur = String(soru.konu.ogretimTuru || '').toUpperCase();
+                               const mufredatBaslangic: FormMufredatTuru =
+                                 konuTur === 'YKS' || konuTur === 'LGS' || kpssOgretimTuruMu(konuTur)
+                                   ? (konuTur as FormMufredatTuru)
+                                   : 'HEPSI';
+                               setFormMufredatTuru(mufredatBaslangic);
                                setFormYksKapsam('HEPSI');
                                setFormKpssKapsam('HEPSI');
                                if (findKonu) setForm((prev) => ({ ...prev, konuId: findKonu.id }));
@@ -1514,7 +1543,7 @@ export default function SorularSayfasi() {
                               }}
                               className="w-full px-4 py-2.5 rounded-xl bg-white border border-indigo-100 font-bold text-xs outline-none focus:border-indigo-500"
                             >
-                              <option value="HEPSI">Tümü (TYT + AYT + LGS + KPSS)</option>
+                              <option value="HEPSI">Tümü (dikkat: KPSS kademeleri ayrı konular — rozete bakın)</option>
                               <option value="YKS">YKS</option>
                               <option value="LGS">LGS</option>
                               <option value="KPSS_LISANS">KPSS Lisans</option>
@@ -1560,6 +1589,8 @@ export default function SorularSayfasi() {
                           )}
                         </div>
                         <p className="text-[11px] text-indigo-800/70">
+                          Listedeki mavi/yeşil «KPSS ÖL / LİS / OÖ» rozeti, sorunun bağlandığı müfredat kademesidir.
+                          Sağdaki mor grup etiketleri (uygun gruplar) bundan bağımsızdır — grup seçmek kademe rozetini değiştirmez.
                           AI soru üretimi ile aynı konu havuzu. Liste üstündeki YKS/LGS sekmesi konu seçimini etkilemez.
                           {formKonular.length > 0 ? ` ${formKonular.length} konu listeleniyor.` : ''}
                         </p>
@@ -1596,6 +1627,7 @@ export default function SorularSayfasi() {
                         </label>
                         <p className="text-[11px] text-gray-500 ml-1">
                           Bu sorunun hangi gruplarda kullanılabileceğini işaretleyin (birden fazla seçilebilir).
+                          Bu seçim listedeki «KPSS ÖL / LİS / OÖ» müfredat rozetini değiştirmez; rozet yukarıdaki kademe + konu seçimine bağlıdır.
                         </p>
                         <UygunGrupCheckboxleri
                           gruplar={gruplar}
