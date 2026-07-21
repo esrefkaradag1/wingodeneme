@@ -1,6 +1,7 @@
 import { prisma } from '../config/database';
 import { AppHatasi } from '../middlewares/hata.middleware';
-import { KatilimDurumu } from '@prisma/client';
+import { KatilimDurumu, Prisma } from '@prisma/client';
+import { netHesapla } from '../utils/netHesapla';
 
 type CevapSatir = {
   soruId: string;
@@ -13,10 +14,6 @@ type CevapSatir = {
   dogru: boolean | null;
   sureMs: number | null;
 };
-
-function netHesapla(dogru: number, yanlis: number): number {
-  return parseFloat((dogru - yanlis / 4).toFixed(2));
-}
 
 function basariYuzdesi(dogru: number, toplam: number): number {
   if (toplam <= 0) return 0;
@@ -32,7 +29,7 @@ function siraBul(
   return { sira: idx >= 0 ? idx + 1 : null, toplam: sorted.length };
 }
 
-function dersOzetiOlustur(cevaplar: CevapSatir[]) {
+function dersOzetiOlustur(cevaplar: CevapSatir[], sinavTur: string) {
   const map = new Map<
     string,
     { ders: string; soruSayisi: number; dogru: number; yanlis: number; bos: number }
@@ -50,7 +47,7 @@ function dersOzetiOlustur(cevaplar: CevapSatir[]) {
   return Array.from(map.values())
     .map((d) => ({
       ...d,
-      net: netHesapla(d.dogru, d.yanlis),
+      net: netHesapla(d.dogru, d.yanlis, sinavTur),
       basariYuzdesi: basariYuzdesi(d.dogru, d.soruSayisi),
     }))
     .sort((a, b) => a.ders.localeCompare(b.ders, 'tr'));
@@ -155,7 +152,7 @@ export async function denemeKarnesiGetir(katilimId: string) {
     }))
     .sort((a, b) => a.siraNo - b.siraNo);
 
-  const dersOzeti = dersOzetiOlustur(cevapSatirlari);
+  const dersOzeti = dersOzetiOlustur(cevapSatirlari, katilim.sinav.tur);
   const konuOzeti = konuOzetiOlustur(cevapSatirlari);
 
   const [tumKatilimlar, sinavIstatistik, gecmisSinavlar] = await Promise.all([
@@ -374,3 +371,147 @@ export async function sinavKatilimlariListele(sinavId: string) {
 
   return { sinav, katilimlar, toplam: katilimlar.length };
 }
+
+const canliOgrenciSelect = {
+  id: true,
+  ad: true,
+  soyad: true,
+  sinif: true,
+  okul: true,
+  ogretimTuru: true,
+  kullanici: { select: { email: true } },
+} as const;
+
+/** Tek sınav: canlı (DEVAM_EDIYOR) + tamamlanan sayıları ve giren öğrenci listesi */
+export async function sinavCanliDurumGetir(sinavId: string) {
+  const sinav = await prisma.sinav.findUnique({
+    where: { id: sinavId },
+    select: {
+      id: true,
+      baslik: true,
+      tur: true,
+      sureDakika: true,
+      baslangicZamani: true,
+      bitisZamani: true,
+      yayinlandi: true,
+      grup: { select: { id: true, ad: true, tur: true } },
+    },
+  });
+  if (!sinav) throw new AppHatasi('Sınav bulunamadı', 404);
+
+  const [devamEdenler, devamEden, tamamlanan, atanan] = await Promise.all([
+    prisma.sinavKatilim.findMany({
+      where: { sinavId, durum: KatilimDurumu.DEVAM_EDIYOR },
+      orderBy: { baslangicZamani: 'asc' },
+      select: {
+        id: true,
+        baslangicZamani: true,
+        guncellendi: true,
+        ogrenci: { select: canliOgrenciSelect },
+      },
+    }),
+    prisma.sinavKatilim.count({ where: { sinavId, durum: KatilimDurumu.DEVAM_EDIYOR } }),
+    prisma.sinavKatilim.count({ where: { sinavId, durum: KatilimDurumu.TAMAMLANDI } }),
+    prisma.ogrenciSinavAtama.count({ where: { sinavId } }),
+  ]);
+
+  return {
+    sinav,
+    sayilar: { devamEden, tamamlanan, atanan, girisYapan: devamEden + tamamlanan },
+    devamEdenler,
+  };
+}
+
+/**
+ * Admin canlı özet: şu an sınav penceresi açık olan veya içinde aktif katılımcı bulunan sınavlar.
+ * KPSS platformunda yalnızca KPSS denemeleri.
+ */
+export async function sinavlarCanliOzetGetir(platformTurleri?: string[] | null) {
+  const simdi = new Date();
+  const pencereBas = new Date(simdi.getTime() - 6 * 60 * 60 * 1000);
+  const pencereBit = new Date(simdi.getTime() + 6 * 60 * 60 * 1000);
+
+  const sinavWhere: Prisma.SinavWhereInput = {
+    yayinlandi: true,
+    aktif: true,
+    baslik: { not: 'Soru Bankası (Grup)' },
+    OR: [
+      {
+        AND: [
+          { baslangicZamani: { lte: pencereBit } },
+          { bitisZamani: { gte: pencereBas } },
+        ],
+      },
+      { katilimlar: { some: { durum: KatilimDurumu.DEVAM_EDIYOR } } },
+    ],
+  };
+
+  if (platformTurleri && platformTurleri.length > 0) {
+    sinavWhere.AND = [{ grup: { tur: { in: platformTurleri as never } } }];
+  }
+
+  const sinavlar = await prisma.sinav.findMany({
+    where: sinavWhere,
+    select: {
+      id: true,
+      baslik: true,
+      tur: true,
+      sureDakika: true,
+      baslangicZamani: true,
+      bitisZamani: true,
+      grup: { select: { id: true, ad: true, tur: true } },
+    },
+    orderBy: { baslangicZamani: 'asc' },
+    take: 40,
+  });
+
+  const sonuc = [];
+  let toplamDevam = 0;
+  let toplamTamam = 0;
+
+  for (const sinav of sinavlar) {
+    const [devamEdenler, devamEden, tamamlanan, atanan] = await Promise.all([
+      prisma.sinavKatilim.findMany({
+        where: { sinavId: sinav.id, durum: KatilimDurumu.DEVAM_EDIYOR },
+        orderBy: { baslangicZamani: 'asc' },
+        take: 200,
+        select: {
+          id: true,
+          baslangicZamani: true,
+          guncellendi: true,
+          ogrenci: { select: canliOgrenciSelect },
+        },
+      }),
+      prisma.sinavKatilim.count({ where: { sinavId: sinav.id, durum: KatilimDurumu.DEVAM_EDIYOR } }),
+      prisma.sinavKatilim.count({ where: { sinavId: sinav.id, durum: KatilimDurumu.TAMAMLANDI } }),
+      prisma.ogrenciSinavAtama.count({ where: { sinavId: sinav.id } }),
+    ]);
+
+    // Ne aktif pencere ne de katılımcı yoksa listeye alma
+    const pencereAcik =
+      sinav.baslangicZamani <= simdi &&
+      (!sinav.bitisZamani || sinav.bitisZamani >= simdi);
+    if (!pencereAcik && devamEden === 0 && tamamlanan === 0) continue;
+
+    toplamDevam += devamEden;
+    toplamTamam += tamamlanan;
+    sonuc.push({
+      sinav,
+      sayilar: { devamEden, tamamlanan, atanan, girisYapan: devamEden + tamamlanan },
+      devamEdenler,
+    });
+  }
+
+  // Önce canlısı olanlar, sonra bugünküler
+  sonuc.sort((a, b) => {
+    if (b.sayilar.devamEden !== a.sayilar.devamEden) return b.sayilar.devamEden - a.sayilar.devamEden;
+    return a.sinav.baslangicZamani.getTime() - b.sinav.baslangicZamani.getTime();
+  });
+
+  return {
+    guncellemeZamani: simdi.toISOString(),
+    ozet: { sinavSayisi: sonuc.length, toplamDevamEden: toplamDevam, toplamTamamlanan: toplamTamam },
+    sinavlar: sonuc,
+  };
+}
+

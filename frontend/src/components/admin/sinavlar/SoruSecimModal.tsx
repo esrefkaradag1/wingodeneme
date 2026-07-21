@@ -12,6 +12,8 @@ interface SoruSecimModalProps {
   konuId: string;
   konuAd: string;
   sinavdakiKonuSoruIds?: string[];
+  /** Öğretmen atamasında admin onayı mesajı */
+  adminOnayiGerekli?: boolean;
   onClose: () => void;
 }
 
@@ -31,6 +33,7 @@ export default function SoruSecimModal({
   konuId,
   konuAd,
   sinavdakiKonuSoruIds = [],
+  adminOnayiGerekli = false,
   onClose,
 }: SoruSecimModalProps) {
   const queryClient = useQueryClient();
@@ -62,16 +65,41 @@ export default function SoruSecimModal({
       const yeniSecimler = seciliSoruIds.filter((soruId) => !sinavdakiKonuSoruIdSet.has(soruId));
       return adminApi.sinavSoruAta(sinavId, yeniSecimler, konuId);
     },
-    onSuccess: (res: { data?: { basarili?: boolean; veri?: { eklenenAdet?: number } } }) => {
-      const eklenen = res?.data?.veri?.eklenenAdet ?? seciliSoruIds.filter((soruId) => !sinavdakiKonuSoruIdSet.has(soruId)).length;
-      const mesaj =
-        eklenen <= 0
-          ? 'Yeni soru eklenmedi.'
-          : eklenen <= 1
-            ? 'Seçilen soru sınava eklendi.'
-            : `${eklenen} soru sınava eklendi.`;
+    onSuccess: (res: {
+      data?: {
+        basarili?: boolean;
+        veri?: {
+          eklenenAdet?: number;
+          kopyalananAdet?: number;
+          tasinanAdet?: number;
+          adminOnayiBekliyor?: boolean;
+        };
+      };
+    }) => {
+      const veri = res?.data?.veri;
+      const eklenen = veri?.eklenenAdet ?? seciliSoruIds.filter((soruId) => !sinavdakiKonuSoruIdSet.has(soruId)).length;
+      const kopya = veri?.kopyalananAdet ?? 0;
+      const onayBekliyor = Boolean(veri?.adminOnayiBekliyor ?? adminOnayiGerekli);
+      let mesaj: string;
+      if (eklenen <= 0) {
+        mesaj = 'Yeni soru eklenmedi.';
+      } else if (onayBekliyor) {
+        mesaj =
+          eklenen === 1
+            ? 'Soru sınava eklendi; admin onayından sonra öğrenciye açılır.'
+            : `${eklenen} soru eklendi; admin onayından sonra öğrenciye açılır.`;
+      } else if (kopya > 0 && kopya === eklenen) {
+        mesaj =
+          eklenen === 1
+            ? 'Soru kopyalanarak bu kitapçığa eklendi (önceki denemede kaldı).'
+            : `${eklenen} soru kopyalanarak eklendi (önceki kitapçıklar korundu).`;
+      } else if (kopya > 0) {
+        mesaj = `${eklenen} soru eklendi (${kopya} kopya, önceki kitapçıklar korundu).`;
+      } else {
+        mesaj = eklenen === 1 ? 'Seçilen soru sınava eklendi.' : `${eklenen} soru sınava eklendi.`;
+      }
       if (eklenen > 0) {
-        toast.basarili(mesaj, 'Tamamlandı');
+        toast.basarili(mesaj, onayBekliyor ? 'Onay bekliyor' : 'Tamamlandı');
       } else {
         toast.uyari(mesaj);
       }
@@ -81,7 +109,17 @@ export default function SoruSecimModal({
       queryClient.invalidateQueries({ queryKey: ['admin-konu-sorulari', konuId] });
       onClose();
     },
-    onError: () => toast.hata('Sorular atanamadı.', 'Hata'),
+    onError: (err: unknown) => {
+      const axiosMsg =
+        err &&
+        typeof err === 'object' &&
+        'response' in err &&
+        (err as { response?: { data?: { mesaj?: string } } }).response?.data?.mesaj;
+      toast.hata(
+        typeof axiosMsg === 'string' && axiosMsg.trim() ? axiosMsg : 'Sorular atanamadı.',
+        'Hata',
+      );
+    },
   });
 
   return (

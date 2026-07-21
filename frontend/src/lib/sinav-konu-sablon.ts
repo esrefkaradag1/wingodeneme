@@ -257,11 +257,11 @@ export function lgsSablonSatirlari(konular: KonuSablonKaynak[]): { konuId: strin
   return out;
 }
 
-/** KPSS Genel Yetenek + Genel Kültür — ÖSYM 120 soru dağılımı */
+/** KPSS Genel Yetenek + Genel Kültür — ÖSYM/KitapSec 120 soru (Mat 27 + Geo 3) */
 export const KPSS_OSYM_DERS_ADET: { ders: string; adet: number }[] = [
   { ders: 'Türkçe', adet: 30 },
-  { ders: 'Matematik', adet: 24 },
-  { ders: 'Geometri', adet: 6 },
+  { ders: 'Matematik', adet: 27 },
+  { ders: 'Geometri', adet: 3 },
   { ders: 'Tarih', adet: 27 },
   { ders: 'Coğrafya', adet: 18 },
   { ders: 'Vatandaşlık', adet: 9 },

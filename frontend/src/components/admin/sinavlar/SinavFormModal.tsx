@@ -19,6 +19,8 @@ import {
 } from '@/lib/sinav-oturum';
 import { Loader2, Sparkles, X, ChevronDown, ChevronUp, ArrowLeft } from 'lucide-react';
 import { toast } from '@/store/toast.store';
+import { useAuthStore } from '@/store/auth.store';
+import { bransIcinDersler } from '@/lib/ogretmenSinirlama';
 import SinavBolumEditor, { type SinavdakiSoruOzeti } from '@/components/admin/sinavlar/SinavBolumEditor';
 import KitapcikKapakEditor from '@/components/admin/sinavlar/KitapcikKapakEditor';
 import Link from 'next/link';
@@ -128,6 +130,13 @@ function sinavApiGovdesi(f: SinavFormAnlik, grupId: string) {
 
 export default function SinavFormModal({ id, onClose, gruplar, layout = 'modal' }: SinavFormModalProps) {
   const queryClient = useQueryClient();
+  const kullanici = useAuthStore((s) => s.kullanici);
+  const ogretmenMi = kullanici?.rol === 'TEACHER';
+  const adminMi = kullanici?.rol === 'ADMIN' || kullanici?.rol === 'SUPER_ADMIN';
+  const izinliDersler = useMemo(
+    () => (ogretmenMi && kullanici?.brans ? bransIcinDersler(kullanici.brans) : null),
+    [ogretmenMi, kullanici?.brans],
+  );
   const [form, setForm] = useState(bosForm());
   const [seciliUstGrupId, setSeciliUstGrupId] = useState('');
   const [seciliAltGrupId, setSeciliAltGrupId] = useState('');
@@ -138,6 +147,9 @@ export default function SinavFormModal({ id, onClose, gruplar, layout = 'modal' 
   const [yerelSinavId, setYerelSinavId] = useState<string | null>(null);
   const [soruSecimHazirlaniyor, setSoruSecimHazirlaniyor] = useState(false);
   const [soruKaldiriliyorId, setSoruKaldiriliyorId] = useState<string | null>(null);
+  const [soruOnaylaniyorId, setSoruOnaylaniyorId] = useState<string | null>(null);
+  /** KPSS: işaretliyse GY+GK yerine tek oturum (TYT gibi süre/başlangıç/bitiş) */
+  const [kpssTekOturum, setKpssTekOturum] = useState(false);
   const aktifSinavId = id ?? yerelSinavId;
   const hydratedSinavIdRef = useRef<string | null>(null);
 
@@ -160,7 +172,14 @@ export default function SinavFormModal({ id, onClose, gruplar, layout = 'modal' 
   // KPSS panelinde sınav türünü KPSS'e kilitle
   useEffect(() => {
     if (!kpssPaneli) return;
-    setForm((f) => (f.tur === 'KPSS' ? f : { ...f, tur: 'KPSS', oturumlar: f.oturumlar.length > 0 ? f.oturumlar : bosKpssOturumlari() }));
+    setForm((f) => {
+      if (f.tur === 'KPSS') return f;
+      return {
+        ...f,
+        tur: 'KPSS',
+        oturumlar: f.oturumlar.length > 0 ? f.oturumlar : bosKpssOturumlari(),
+      };
+    });
   }, [kpssPaneli]);
 
   // YKS panelinde KPSS sınav türünü engelle
@@ -271,6 +290,8 @@ export default function SinavFormModal({ id, onClose, gruplar, layout = 'modal' 
       siraNo: Number(soru.siraNo) || 0,
       metinHtml: String(soru.metinHtml ?? ''),
       zorluk: soru.zorluk ? String(soru.zorluk) : undefined,
+      onayDurumu: soru.onayDurumu ? String(soru.onayDurumu) : 'ONAYLANDI',
+      olusturanId: soru.olusturanId ? String(soru.olusturanId) : null,
     }));
   }, [sinavSorularRes?.data?.veri, detayRes?.data?.veri?.sorular, mevcutSorular]);
 
@@ -281,6 +302,14 @@ export default function SinavFormModal({ id, onClose, gruplar, layout = 'modal' 
     if (hydratedSinavIdRef.current === id) return;
     hydratedSinavIdRef.current = id;
     const apiOturumlar = oturumlarApiToForm(s.oturumlar);
+    const kpssCiftOturum =
+      s.tur === 'KPSS' &&
+      Boolean(apiOturumlar?.some((o) => o.kod === 'GY') && apiOturumlar?.some((o) => o.kod === 'GK'));
+    if (s.tur === 'KPSS') {
+      setKpssTekOturum(!kpssCiftOturum);
+    } else {
+      setKpssTekOturum(false);
+    }
     setForm({
       baslik: s.baslik || '',
       tur: s.tur || 'TYT',
@@ -298,9 +327,9 @@ export default function SinavFormModal({ id, onClose, gruplar, layout = 'modal' 
             ? apiOturumlar
             : bosLgsOturumlari()
           : s.tur === 'KPSS'
-            ? apiOturumlar && apiOturumlar.length > 0
-              ? apiOturumlar
-              : bosKpssOturumlari()
+            ? kpssCiftOturum
+              ? apiOturumlar!
+              : []
             : [],
     });
     setMevcutSorular(s.sorular || []);
@@ -408,13 +437,27 @@ export default function SinavFormModal({ id, onClose, gruplar, layout = 'modal' 
       return;
     }
     const bolumler = satirlariBolumlereAyir(satirlar, konular, kpssKitapcikBolumAdi, 'KPSS');
-    const oturumlar = form.oturumlar.length > 0 ? form.oturumlar : bosKpssOturumlari();
-    setForm((prev) => ({
-      ...prev,
-      bolumler,
-      oturumlar,
-      sureDakika: oturumlar.reduce((t, o) => t + o.sureDakika, 0) + KPSS_OTURUM_ARA_DK,
-    }));
+    setForm((prev) => {
+      if (kpssTekOturum) {
+        const sureDakika = prev.sureDakika > 0 ? prev.sureDakika : 130;
+        return {
+          ...prev,
+          bolumler,
+          oturumlar: [],
+          sureDakika,
+          ...(prev.baslangicZamani
+            ? { bitisZamani: datetimeLocalEkleDakika(prev.baslangicZamani, sureDakika) }
+            : {}),
+        };
+      }
+      const oturumlar = prev.oturumlar.length > 0 ? prev.oturumlar : bosKpssOturumlari();
+      return {
+        ...prev,
+        bolumler,
+        oturumlar,
+        sureDakika: oturumlar.reduce((t, o) => t + o.sureDakika, 0) + KPSS_OTURUM_ARA_DK,
+      };
+    });
     toast.basarili(
       `KPSS şablonu uygulandı (${sablonToplamSoru(satirlar)} soru, Genel Yetenek / Genel Kültür bölümlerine ayrıldı).`,
     );
@@ -566,11 +609,48 @@ export default function SinavFormModal({ id, onClose, gruplar, layout = 'modal' 
 
   const oncelikliKapsam = konuSeciciOncelikliKapsam(form.tur);
 
-  const cokluOturumMu = form.tur === 'LGS' || form.tur === 'KPSS';
+  const cokluOturumMu = form.tur === 'LGS' || (form.tur === 'KPSS' && !kpssTekOturum);
   const cokluOturumHazir =
     !cokluOturumMu ||
     (form.oturumlar.length > 0 &&
       form.oturumlar.every((o) => o.baslangicZamani && o.bitisZamani && o.sureDakika > 0));
+
+  const kpssTekOturumToggle = (acik: boolean) => {
+    setKpssTekOturum(acik);
+    setForm((f) => {
+      if (acik) {
+        const sureDakika = f.sureDakika > 0 ? f.sureDakika : 130;
+        const baslangicZamani =
+          f.baslangicZamani ||
+          f.oturumlar.find((o) => o.baslangicZamani)?.baslangicZamani ||
+          '';
+        const bitisZamani = baslangicZamani
+          ? datetimeLocalEkleDakika(baslangicZamani, sureDakika)
+          : f.bitisZamani || '';
+        return { ...f, oturumlar: [], sureDakika, baslangicZamani, bitisZamani };
+      }
+      const cift = bosKpssOturumlari();
+      if (f.baslangicZamani) {
+        const senkron = kpssOturumlariSenkronize(cift, 0, {
+          baslangicZamani: f.baslangicZamani,
+          sureDakika: 65,
+        });
+        const ozet = oturumlardanUstZaman(senkron);
+        return {
+          ...f,
+          oturumlar: senkron,
+          ...(ozet
+            ? {
+                baslangicZamani: ozet.baslangicZamani,
+                bitisZamani: ozet.bitisZamani,
+                sureDakika: ozet.sureDakika,
+              }
+            : {}),
+        };
+      }
+      return { ...f, oturumlar: cift };
+    });
+  };
 
   const kaydetDisabled =
     !form.baslik?.trim() ||
@@ -599,6 +679,10 @@ export default function SinavFormModal({ id, onClose, gruplar, layout = 'modal' 
 
   const sinavKaydiGerekliyseOlustur = async (): Promise<string | null> => {
     if (aktifSinavId) return aktifSinavId;
+    if (ogretmenMi) {
+      toast.uyari('Sınav oluşturma yetkiniz yok. Admin’in açtığı sınavdan soru seçin.');
+      return null;
+    }
 
     const grupId = soruSecimIcinGrupId();
     if (!grupId) {
@@ -666,7 +750,25 @@ export default function SinavFormModal({ id, onClose, gruplar, layout = 'modal' 
     await sinavSoruKaldir.mutateAsync({ sinavId: aktifSinavId, soruId });
   };
 
-  const panelBasligi = id ? 'Sınav Düzenle' : 'Yeni Sınav';
+  const sinavSoruOnayla = async (soruId: string) => {
+    setSoruOnaylaniyorId(soruId);
+    try {
+      await adminApi.soruOnayGuncelle(soruId, { onayDurumu: 'ONAYLANDI' });
+      toast.basarili('Soru ataması onaylandı; öğrenci sınavında görünür.');
+      if (aktifSinavId) {
+        queryClient.invalidateQueries({ queryKey: ['admin-sinav-detay', aktifSinavId] });
+        queryClient.invalidateQueries({ queryKey: ['admin-sinav-sorular', aktifSinavId] });
+      }
+    } catch {
+      toast.hata('Onaylanamadı.');
+    } finally {
+      setSoruOnaylaniyorId(null);
+    }
+  };
+
+  const onayBekleyenAdet = sinavdakiSorular.filter((s) => (s.onayDurumu || 'ONAYLANDI') !== 'ONAYLANDI').length;
+
+  const panelBasligi = id ? (ogretmenMi ? 'Sınava Soru Ata' : 'Sınav Düzenle') : 'Yeni Sınav';
 
   const formIcerik = (
     <>
@@ -676,6 +778,25 @@ export default function SinavFormModal({ id, onClose, gruplar, layout = 'modal' 
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {ogretmenMi && (
+            <div className="col-span-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              Branşınızdaki konulara soru atayabilirsiniz. Atamalar <b>admin onayından</b> sonra öğrenci sınavında
+              görünür
+              {onayBekleyenAdet > 0 ? (
+                <>
+                  {' '}
+                  — şu an <b>{onayBekleyenAdet}</b> soru onay bekliyor
+                </>
+              ) : null}
+              .
+            </div>
+          )}
+          {adminMi && onayBekleyenAdet > 0 && (
+            <div className="col-span-2 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900">
+              <b>{onayBekleyenAdet}</b> soru ataması onay bekliyor. Aşağıdaki listeden &quot;Onayla&quot; ile
+              öğrenciye açabilirsiniz.
+            </div>
+          )}
           <div className="col-span-2">
             <label className="block text-sm font-medium text-gray-700 mb-1">Sınav Başlığı</label>
             <input
@@ -780,11 +901,35 @@ export default function SinavFormModal({ id, onClose, gruplar, layout = 'modal' 
 
           {form.tur === 'LGS' || form.tur === 'KPSS' ? (
             <div className="col-span-2 space-y-4">
+              {form.tur === 'KPSS' && (
+                <label className="flex items-start gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 cursor-pointer hover:border-indigo-200 transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={kpssTekOturum}
+                    onChange={(e) => kpssTekOturumToggle(e.target.checked)}
+                    className="mt-1 h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                  />
+                  <span className="min-w-0">
+                    <span className="block text-sm font-semibold text-gray-900">Tek oturum</span>
+                    <span className="block text-xs text-gray-500 mt-0.5 leading-relaxed">
+                      İşaretlerseniz Genel Yetenek / Genel Kültür ayrımı kalkar; tek süre, başlangıç ve bitiş girilir.
+                    </span>
+                  </span>
+                </label>
+              )}
               <div className="rounded-xl border border-indigo-100 bg-indigo-50/60 px-4 py-3 text-sm text-indigo-950">
                 {form.tur === 'KPSS' ? (
-                  <>
-                    KPSS iki oturumla uygulanır: önce <b>Genel Yetenek</b>, ardından ara verilmeden (0 dakika) <b>Genel Kültür</b> başlar. Her oturum için başlangıç, bitiş ve süreyi girin.
-                  </>
+                  kpssTekOturum ? (
+                    <>
+                      Tek oturumda tüm sorular (Genel Yetenek + Genel Kültür) aynı pencerede çözülür. Süre, başlangıç ve
+                      bitiş saatini aşağıdan girin.
+                    </>
+                  ) : (
+                    <>
+                      KPSS iki oturumla uygulanır: önce <b>Genel Yetenek</b>, ardından ara verilmeden (0 dakika){' '}
+                      <b>Genel Kültür</b> başlar. Her oturum için başlangıç, bitiş ve süreyi girin.
+                    </>
+                  )
                 ) : (
                   <>
                     LGS iki ayrı kitapçıkla uygulanır: önce <b>sözel</b>, ardından yaklaşık{' '}
@@ -793,7 +938,61 @@ export default function SinavFormModal({ id, onClose, gruplar, layout = 'modal' 
                   </>
                 )}
               </div>
-              {form.oturumlar.map((oturum, idx) => (
+              {form.tur === 'KPSS' && kpssTekOturum ? (
+                <div className="rounded-2xl border border-gray-200 bg-white/80 p-4 shadow-sm">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Süre (dk)</label>
+                      <input
+                        type="number"
+                        min={1}
+                        value={form.sureDakika}
+                        onChange={(e) => {
+                          const raw = parseInt(e.target.value, 10);
+                          const sureDakika = Math.max(1, Number.isFinite(raw) && raw > 0 ? raw : 130);
+                          setForm((f) => ({
+                            ...f,
+                            sureDakika,
+                            ...(f.baslangicZamani
+                              ? { bitisZamani: datetimeLocalEkleDakika(f.baslangicZamani, sureDakika) }
+                              : {}),
+                          }));
+                        }}
+                        className="input-field"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Başlangıç</label>
+                      <input
+                        type="datetime-local"
+                        value={form.baslangicZamani}
+                        onChange={(e) => {
+                          const baslangicZamani = e.target.value;
+                          setForm((f) => ({
+                            ...f,
+                            baslangicZamani,
+                            bitisZamani: baslangicZamani
+                              ? datetimeLocalEkleDakika(baslangicZamani, f.sureDakika || 130)
+                              : '',
+                          }));
+                        }}
+                        className="input-field"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Bitiş</label>
+                      <input
+                        type="datetime-local"
+                        value={form.bitisZamani}
+                        onChange={(e) => setForm((f) => ({ ...f, bitisZamani: e.target.value }))}
+                        className="input-field"
+                      />
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {form.oturumlar.map((oturum, idx) => (
                 <div
                   key={oturum.kod}
                   className="rounded-2xl border border-gray-200 bg-white/80 p-4 shadow-sm space-y-4"
@@ -893,7 +1092,9 @@ export default function SinavFormModal({ id, onClose, gruplar, layout = 'modal' 
                     </div>
                   </div>
                 </div>
-              ))}
+                  ))}
+                </>
+              )}
               {form.baslangicZamani && form.bitisZamani ? (
                 <p className="text-xs text-gray-500">
                   Genel sınav penceresi: {form.baslangicZamani.replace('T', ' ')} –{' '}
@@ -1001,11 +1202,16 @@ export default function SinavFormModal({ id, onClose, gruplar, layout = 'modal' 
           <div className="col-span-2 pt-4 border-t border-gray-100 space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <p className="text-sm font-bold text-gray-800">Sınav bölümleri ve müfredat</p>
+                <p className="text-sm font-bold text-gray-800">
+                  {ogretmenMi ? 'Branşınıza soru atayın' : 'Sınav bölümleri ve müfredat'}
+                </p>
                 <p className="text-xs text-gray-500 mt-1">
-                  Kitapçıktaki gibi bölüm ve alt bölüm tanımlayın; her alt bölümde soru aralığı, açıklama ve müfredat satırlarını girin.
+                  {ogretmenMi
+                    ? 'Admin’in tanımladığı konu sırasına göre kendi branşınızın sorularını seçin.'
+                    : 'Kitapçıktaki gibi bölüm ve alt bölüm tanımlayın; her alt bölümde soru aralığı, açıklama ve müfredat satırlarını girin.'}
                 </p>
               </div>
+              {!ogretmenMi && (
               <button
                 type="button"
                 onClick={() => setSablonPanelAcik((v) => !v)}
@@ -1015,6 +1221,7 @@ export default function SinavFormModal({ id, onClose, gruplar, layout = 'modal' 
                 Şablondan doldur
                 {sablonPanelAcik ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
               </button>
+              )}
             </div>
 
             {konularYuku && (
@@ -1062,7 +1269,7 @@ export default function SinavFormModal({ id, onClose, gruplar, layout = 'modal' 
                     </p>
                   ) : form.tur === 'KPSS' ? (
                     <p className="text-xs text-violet-800/90 mt-1 leading-relaxed">
-                      <b>KPSS</b>: Genel Yetenek (Türkçe 30, Mat+Geo 30) + Genel Kültür (Tarih 27, Coğrafya 18,
+                      <b>KPSS</b>: Genel Yetenek (Türkçe 30, Matematik 27, Geometri 3) + Genel Kültür (Tarih 27, Coğrafya 18,
                       Vatandaşlık 9, Güncel 6) — <b>toplam 120 soru</b>, oturumlar 65+65 dk. Şablon konuları seçilen
                       kademeye yazılır; soru seçiminde Lisans / Önlisans / Ortaöğretim ortak havuzu (aynı ders ve konu)
                       kullanılır.
@@ -1147,6 +1354,10 @@ export default function SinavFormModal({ id, onClose, gruplar, layout = 'modal' 
               soruSecimBekleniyor={soruSecimHazirlaniyor}
               sinavdakiSorular={sinavdakiSorular}
               soruKaldiriliyorId={soruKaldiriliyorId}
+              yapiSaltOkunur={ogretmenMi}
+              izinliDersler={izinliDersler}
+              adminOnaylayabilir={adminMi}
+              soruOnaylaniyorId={soruOnaylaniyorId}
               onBolumEkle={bolumEkle}
               onBolumSil={bolumSil}
               onBolumAdGuncelle={bolumAdGuncelle}
@@ -1158,6 +1369,7 @@ export default function SinavFormModal({ id, onClose, gruplar, layout = 'modal' 
               onAltBolumSatirGuncelle={altBolumSatirGuncelle}
               onSoruSec={soruSecimineBasla}
               onSoruKaldir={sinavdanSoruKaldir}
+              onSoruOnayla={sinavSoruOnayla}
             />
           </div>
         </div>
@@ -1165,7 +1377,13 @@ export default function SinavFormModal({ id, onClose, gruplar, layout = 'modal' 
     </>
   );
 
-  const altButonlar = (
+  const altButonlar = ogretmenMi ? (
+    <div className="flex justify-end gap-3 mt-8 pt-6 border-t border-gray-100">
+      <button type="button" onClick={onClose} className="btn-secondary">
+        Kapat
+      </button>
+    </div>
+  ) : (
     <div className="flex justify-end gap-3 mt-8 pt-6 border-t border-gray-100">
       <button type="button" onClick={onClose} className="btn-secondary">
         İptal
@@ -1194,6 +1412,7 @@ export default function SinavFormModal({ id, onClose, gruplar, layout = 'modal' 
         sinavId={aktifSinavId}
         konuId={manuelSoruSecim.konuId}
         konuAd={manuelSoruSecim.konuAd}
+        adminOnayiGerekli={ogretmenMi}
         sinavdakiKonuSoruIds={sinavdakiSorular
           .filter((soru) => soru.konuId === manuelSoruSecim.konuId)
           .map((soru) => soru.id)}

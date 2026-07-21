@@ -14,7 +14,8 @@ const ROLLER: { id: string; ad: string; aciklama: string; renk: string }[] = [
   {
     id: 'TEACHER',
     ad: 'Öğretmen',
-    aciklama: 'Soru üretimi/inceleme yetkisi olan öğretmen rolü.',
+    aciklama:
+      'Soru üretimi, inceleme ve (admin onayıyla) sınava soru atama. Sınav oluşturma/yayınlama admin’de kalır.',
     renk: 'bg-amber-50 border-amber-200',
   },
   {

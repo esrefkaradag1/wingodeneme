@@ -2,8 +2,9 @@ import { prisma } from '../config/database';
 import { cache } from '../config/redis';
 import { AppHatasi } from '../middlewares/hata.middleware';
 import { analizHesapla } from './analiz.service';
-import { KatilimDurumu, CevapYontemi, SoruOnayDurumu } from '@prisma/client';
+import { KatilimDurumu, CevapYontemi, SoruOnayDurumu, SinavTuru } from '@prisma/client';
 import { parseKayitliOturumlar } from '../utils/sinavOturum';
+import { netHesapla, platformSinavTurleri } from '../utils/netHesapla';
 
 /**
  * Öğrencinin bir sınava erişimi var mı?
@@ -93,7 +94,7 @@ export async function sinavUcretsizHerkeseAcikMi(sinavId: string): Promise<boole
   return !!kayit;
 }
 
-export async function sinavListesiGetir(ogrenciId: string) {
+export async function sinavListesiGetir(ogrenciId: string, isKpssPlatform = false) {
   const ogrenci = await prisma.ogrenciProfil.findUnique({
     where: { id: ogrenciId },
     include: { gruplar: { include: { grup: true } } },
@@ -104,11 +105,13 @@ export async function sinavListesiGetir(ogrenciId: string) {
   const grupIdleri = ogrenci.gruplar.map((g) => g.grupId);
   const simdi = new Date();
   const ucretsizSinavIds = await herkeseAcikUcretsizSinavIdleriGetir();
+  const izinliTurler = platformSinavTurleri(isKpssPlatform) as SinavTuru[];
+  const turWhere = { tur: { in: izinliTurler } };
 
   const [grupSinavlari, atamalar, katilimlar] = await Promise.all([
     grupIdleri.length
       ? prisma.sinav.findMany({
-          where: { grupId: { in: grupIdleri }, yayinlandi: true },
+          where: { grupId: { in: grupIdleri }, yayinlandi: true, ...turWhere },
           orderBy: { baslangicZamani: 'desc' },
           include: {
             _count: { select: { sorular: true, katilimlar: true } },
@@ -135,7 +138,7 @@ export async function sinavListesiGetir(ogrenciId: string) {
   const ekSinavlar =
     tumEkIdler.length > 0
       ? await prisma.sinav.findMany({
-          where: { id: { in: tumEkIdler } },
+          where: { id: { in: tumEkIdler }, ...turWhere },
           orderBy: { baslangicZamani: 'desc' },
           include: {
             _count: { select: { sorular: true, katilimlar: true } },
@@ -324,12 +327,63 @@ export async function sinavaKatil(sinavId: string, ogrenciId: string) {
     },
   });
 
+  const kayitliCevaplar = await prisma.ogrenciCevap.findMany({
+    where: { katilimId: katilim.id },
+    select: { soruId: true, secilen: true },
+  });
+
   return {
     katilim,
     sorular,
     sureDakika: sinav.sureDakika,
     sinav: sinavBilgisi,
+    kayitliCevaplar,
   };
+}
+
+/** Sınav devam ederken cevapları ara kaydeder (teslim etmez). */
+export async function cevapTaslakKaydet(
+  katilimId: string,
+  cevaplar: Array<{ soruId: string; secilen: string | null; sureMs?: number | null }>,
+  ogrenciId: string,
+) {
+  const katilim = await prisma.sinavKatilim.findUnique({
+    where: { id: katilimId },
+    include: { sinav: { select: { sorular: { select: { id: true } } } } },
+  });
+
+  if (!katilim) throw new AppHatasi('Katılım bulunamadı', 404);
+  if (katilim.ogrenciId !== ogrenciId) throw new AppHatasi('Yetkisiz erişim', 403);
+  if (katilim.durum === KatilimDurumu.TAMAMLANDI) {
+    throw new AppHatasi('Sınav zaten tamamlandı', 400);
+  }
+
+  const gecerliSoruIds = new Set(katilim.sinav.sorular.map((s) => s.id));
+  const kayitlar = cevaplar.filter((c) => gecerliSoruIds.has(c.soruId));
+  if (kayitlar.length === 0) return { kaydedildi: 0 };
+
+  await prisma.$transaction(
+    kayitlar.map((c) => {
+      const sureMs =
+        typeof c.sureMs === 'number' && c.sureMs >= 0 ? Math.round(c.sureMs) : undefined;
+      return prisma.ogrenciCevap.upsert({
+        where: { katilimId_soruId: { katilimId, soruId: c.soruId } },
+        update: {
+          secilen: c.secilen,
+          ...(sureMs !== undefined ? { sureMs } : {}),
+        },
+        create: {
+          katilimId,
+          soruId: c.soruId,
+          secilen: c.secilen,
+          dogru: null,
+          sureMs: sureMs ?? null,
+        },
+      });
+    }),
+  );
+
+  return { kaydedildi: kayitlar.length };
 }
 
 export async function cevapGonder(
@@ -346,19 +400,41 @@ export async function cevapGonder(
   if (katilim.ogrenciId !== ogrenciId) throw new AppHatasi('Yetkisiz erişim', 403);
   if (katilim.durum === KatilimDurumu.TAMAMLANDI) throw new AppHatasi('Sınav zaten tamamlandı', 400);
 
-  const soruMap = new Map(katilim.sinav.sorular.map((s) => [s.id, s]));
+  const cevapMap = new Map(cevaplar.map((c) => [c.soruId, c]));
+
+  const oneriMs =
+    katilim.sinav.sorular.length > 0
+      ? (katilim.sinav.sureDakika * 60 * 1000) / katilim.sinav.sorular.length
+      : 60_000;
+  const maxSoruSureMs = Math.min(8 * 60 * 1000, Math.max(90_000, Math.round(oneriMs * 3)));
+
+  const mevcutSureler = await prisma.ogrenciCevap.findMany({
+    where: { katilimId },
+    select: { soruId: true, sureMs: true },
+  });
+  const mevcutSureMap = new Map(mevcutSureler.map((c) => [c.soruId, c.sureMs]));
 
   let dogru = 0, yanlis = 0, bos = 0;
   const cevapKayitlari = [];
 
-  for (const cevap of cevaplar) {
-    const soru = soruMap.get(cevap.soruId);
-    if (!soru) continue;
+  // Tüm sınav sorularını dolaş — gönderilmeyen cevaplar boş sayılır (eksik gönderimde net şişmesin)
+  for (const soru of katilim.sinav.sorular) {
+    const cevap = cevapMap.get(soru.id);
+    const secilen = cevap?.secilen ?? null;
+    const sureMsRaw =
+      typeof cevap?.sureMs === 'number' && cevap.sureMs >= 0 ? Math.round(cevap.sureMs) : null;
+    const oncekiSure = mevcutSureMap.get(soru.id);
+    const sureMs =
+      sureMsRaw != null
+        ? Math.min(maxSoruSureMs, sureMsRaw)
+        : oncekiSure != null && oncekiSure > 0
+          ? Math.min(maxSoruSureMs, oncekiSure)
+          : null;
 
     let dogruMu: boolean | null = null;
-    if (!cevap.secilen) {
+    if (!secilen) {
       bos++;
-    } else if (cevap.secilen === soru.dogruCevap) {
+    } else if (secilen === soru.dogruCevap) {
       dogru++;
       dogruMu = true;
     } else {
@@ -368,16 +444,16 @@ export async function cevapGonder(
 
     cevapKayitlari.push({
       katilimId,
-      soruId: cevap.soruId,
-      secilen: cevap.secilen,
+      soruId: soru.id,
+      secilen,
       dogru: dogruMu,
-      sureMs: typeof cevap.sureMs === 'number' && cevap.sureMs >= 0 ? Math.round(cevap.sureMs) : null,
+      sureMs,
     });
   }
 
-  const net = dogru - yanlis / 4;
+  const net = netHesapla(dogru, yanlis, katilim.sinav.tur);
   const toplamSoru = katilim.sinav.sorular.length;
-  const ham = (dogru / toplamSoru) * 100;
+  const ham = toplamSoru > 0 ? (dogru / toplamSoru) * 100 : 0;
 
   await prisma.$transaction([
     prisma.sinavKatilim.update({

@@ -115,9 +115,11 @@ const KPSS_ALT_BOLUM_SIRASI = [
   { anahtar: 'COG', ad: 'COĞRAFYA TESTİ', soruBas: 1, soruBit: 18 },
   { anahtar: 'VAT', ad: 'VATANDAŞLIK TESTİ', soruBas: 1, soruBit: 9 },
   { anahtar: 'GUN', ad: 'GÜNCEL BİLGİLER TESTİ', soruBas: 1, soruBit: 6 },
+  { anahtar: 'DIGER', ad: 'DİĞER', soruBas: 1, soruBit: 0 },
 ] as const;
 
 const KPSS_GY_ANAHTARLAR = new Set(['TR', 'MAT']);
+const KPSS_BOS_ALT_BOLUM_TUT = true;
 
 function yeniBolumId(): string {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
@@ -213,6 +215,7 @@ function anaBolumAltBolumleriOlustur(
   sablonlar: ReadonlyArray<{ anahtar: string; ad: string; soruBas: number; soruBit: number }>,
   anahtarCoz: (konuId: string) => string,
   anaBolumFiltre?: (anahtar: string, anaBolumAdi: string) => boolean,
+  bosAltBolumTut = false,
 ): SinavAltBolumForm[] {
   const gruplar = new Map<string, KonuDagilimSatiri[]>();
 
@@ -226,13 +229,15 @@ function anaBolumAltBolumleriOlustur(
     .filter((row) => (anaBolumFiltre ? anaBolumFiltre(row.anahtar, anaBolumAdi) : true))
     .map((row) => {
       const altSatirlar = gruplar.get(row.anahtar) || [];
-      if (altSatirlar.length === 0) return null;
+      // KPSS: boş TÜRKÇE / MATEMATİK vb. başlıkları da göster — yoksa konu satırı eklenemez
+      if (altSatirlar.length === 0 && !bosAltBolumTut) return null;
+      if (altSatirlar.length === 0 && row.anahtar === 'DIGER') return null;
       return {
         id: yeniAltBolumId(),
         ad: row.ad,
-        aciklama: altBolumDagilimMetni(altSatirlar, konular, row.soruBas),
+        aciklama: altSatirlar.length > 0 ? altBolumDagilimMetni(altSatirlar, konular, row.soruBas) : '',
         soruBas: row.soruBas,
-        soruBit: row.soruBit,
+        soruBit: row.soruBit > 0 ? row.soruBit : null,
         satirlar: altSatirlar,
       } satisfies SinavAltBolumForm;
     })
@@ -369,10 +374,13 @@ function turAnaBolumAltBolumleri(
       (anahtar, ad) => {
         const gyMi = ad.includes('Genel Yetenek');
         const gkMi = ad.includes('Genel Kültür');
+        // DIGER yalnızca GY altında bir kez (eşleşmeyen konular)
+        if (anahtar === 'DIGER') return gyMi;
         if (gyMi) return KPSS_GY_ANAHTARLAR.has(anahtar);
         if (gkMi) return !KPSS_GY_ANAHTARLAR.has(anahtar);
         return true;
       },
+      KPSS_BOS_ALT_BOLUM_TUT,
     );
   }
 

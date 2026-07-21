@@ -18,7 +18,12 @@ import { soruUretimGarantiKatmani } from '../services/soruGarantiKatmani';
 import { logger } from '../utils/logger';
 import { ensureGrupBankaSinavi } from '../utils/grupBankaSinavi';
 import { buildMetinHtmlFromParts, cozumMetniniHtmlYap } from '../utils/soruMetinBirlestir';
-import { reqOgretmenKisit, ogretmenDersiUretebilirMi, OgretmenKisit } from '../services/ogretmenSinirlama';
+import {
+  reqOgretmenKisit,
+  ogretmenDersiUretebilirMi,
+  ogretmenKonuUretebilirMi,
+  OgretmenKisit,
+} from '../services/ogretmenSinirlama';
 import { validateUretilenSoruListesi } from '../utils/soruUretimDogrulama';
 import { urlDenMetinCikar } from '../services/rag.service';
 
@@ -182,7 +187,7 @@ export async function referansSoruUretController(
     const ogrKisit = await reqOgretmenKisit(req);
     if (ogrKisit) {
       if (konu) {
-        if (konu.ogretimTuru !== ogrKisit.ogretimTuru || !ogretmenDersiUretebilirMi(ogrKisit, konu.ders)) {
+        if (!ogretmenKonuUretebilirMi(ogrKisit, konu)) {
           res.status(403).json({ basarili: false, mesaj: 'Bu branş veya kademe için soru üretme yetkiniz yok.' });
           return;
         }

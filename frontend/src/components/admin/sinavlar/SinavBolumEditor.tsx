@@ -1,6 +1,6 @@
 'use client';
 
-import { BookOpen, ListChecks, ListPlus, Loader2, Trash2 } from 'lucide-react';
+import { BookOpen, CheckCircle, ListChecks, ListPlus, Loader2, Trash2 } from 'lucide-react';
 import KonuSecici from '@/components/admin/KonuSecici';
 import { soruListeOnMetin } from '@/lib/soruCozumYardim';
 import { altBolumYerelSiraHaritasi } from '@/lib/kitapcikBolumleri';
@@ -19,6 +19,8 @@ export interface SinavdakiSoruOzeti {
   siraNo: number;
   metinHtml: string;
   zorluk?: string;
+  onayDurumu?: 'ONAY_BEKLIYOR' | 'ONAYLANDI' | 'REDDEDILDI' | string;
+  olusturanId?: string | null;
 }
 
 interface SinavBolumEditorProps {
@@ -29,6 +31,13 @@ interface SinavBolumEditorProps {
   soruSecimBekleniyor: boolean;
   sinavdakiSorular: SinavdakiSoruOzeti[];
   soruKaldiriliyorId: string | null;
+  /** Öğretmen: şablon/bölüm düzeni kilitli; yalnızca soru seçimi */
+  yapiSaltOkunur?: boolean;
+  /** Öğretmen branşına ait dersler — boşsa tüm konular */
+  izinliDersler?: string[] | null;
+  /** Admin: atama bekleyen soruyu onayla */
+  adminOnaylayabilir?: boolean;
+  soruOnaylaniyorId?: string | null;
   onBolumEkle: () => void;
   onBolumSil: (bolumId: string) => void;
   onBolumAdGuncelle: (bolumId: string, ad: string) => void;
@@ -49,6 +58,7 @@ interface SinavBolumEditorProps {
   ) => void;
   onSoruSec: (konuId: string, konuAd: string) => void | Promise<void>;
   onSoruKaldir: (soruId: string) => void | Promise<void>;
+  onSoruOnayla?: (soruId: string) => void | Promise<void>;
 }
 
 function altBolumToplamSoru(altBolum: SinavBolumForm['altBolumler'][number]): number {
@@ -63,6 +73,10 @@ export default function SinavBolumEditor({
   soruSecimBekleniyor,
   sinavdakiSorular,
   soruKaldiriliyorId,
+  yapiSaltOkunur = false,
+  izinliDersler = null,
+  adminOnaylayabilir = false,
+  soruOnaylaniyorId = null,
   onBolumEkle,
   onBolumSil,
   onBolumAdGuncelle,
@@ -74,8 +88,15 @@ export default function SinavBolumEditor({
   onAltBolumSatirGuncelle,
   onSoruSec,
   onSoruKaldir,
+  onSoruOnayla,
 }: SinavBolumEditorProps) {
   const konuAdi = (kid: string) => konular.find((k) => k.id === kid);
+  const dersIzinliMi = (ders?: string | null) => {
+    if (!izinliDersler?.length) return true;
+    if (!ders) return false;
+    const d = ders.toLocaleLowerCase('tr-TR');
+    return izinliDersler.some((x) => x.toLocaleLowerCase('tr-TR') === d);
+  };
 
   return (
     <div className="space-y-4">
@@ -91,8 +112,11 @@ export default function SinavBolumEditor({
                   onChange={(e) => onBolumAdGuncelle(bolum.id, e.target.value)}
                   className="input-field"
                   placeholder="Örn: Sözel Bölüm"
+                  disabled={yapiSaltOkunur}
+                  readOnly={yapiSaltOkunur}
                 />
               </div>
+              {!yapiSaltOkunur && (
               <div className="flex flex-wrap gap-2 shrink-0">
                 <button
                   type="button"
@@ -109,6 +133,7 @@ export default function SinavBolumEditor({
                   Bölümü sil
                 </button>
               </div>
+              )}
             </div>
             <p className="text-[11px] text-gray-500">
               Bu bölümde <b>{bolumToplam}</b> soru planlandı.
@@ -146,6 +171,8 @@ export default function SinavBolumEditor({
                             onChange={(e) => onAltBolumGuncelle(bolum.id, altBolum.id, { ad: e.target.value })}
                             className="input-field"
                             placeholder="Örn: Türkçe Testi"
+                            disabled={yapiSaltOkunur}
+                            readOnly={yapiSaltOkunur}
                           />
                         </div>
                         <div className="grid grid-cols-2 gap-3 w-full lg:w-56">
@@ -166,6 +193,8 @@ export default function SinavBolumEditor({
                               }}
                               className="input-field"
                               placeholder="1"
+                              disabled={yapiSaltOkunur}
+                              readOnly={yapiSaltOkunur}
                             />
                           </div>
                           <div>
@@ -185,9 +214,12 @@ export default function SinavBolumEditor({
                               }}
                               className="input-field"
                               placeholder="40"
+                              disabled={yapiSaltOkunur}
+                              readOnly={yapiSaltOkunur}
                             />
                           </div>
                         </div>
+                        {!yapiSaltOkunur && (
                         <div className="flex flex-wrap gap-2 shrink-0">
                           <button
                             type="button"
@@ -204,6 +236,7 @@ export default function SinavBolumEditor({
                             Alt bölümü sil
                           </button>
                         </div>
+                        )}
                       </div>
 
                       <p className="text-[11px] text-gray-500">
@@ -225,6 +258,8 @@ export default function SinavBolumEditor({
                           onChange={(e) => onAltBolumGuncelle(bolum.id, altBolum.id, { aciklama: e.target.value })}
                           className="input-field min-h-[88px] resize-y"
                           placeholder={onerilenAciklama}
+                          disabled={yapiSaltOkunur}
+                          readOnly={yapiSaltOkunur}
                         />
                         <p className="text-[10px] text-gray-400 mt-1">
                           Kitapçık üst bilgisinde görünür. Boş bırakılırsa müfredat satırlarından otomatik üretilir.
@@ -245,6 +280,7 @@ export default function SinavBolumEditor({
                         <div className="space-y-3">
                           {altBolum.satirlar.map((row, satirIdx) => {
                             const kObj = konuAdi(row.konuId);
+                            const bransUygun = dersIzinliMi(kObj?.ders);
                             const konuSorulari = sinavdakiSorular
                               .filter((soru) => soru.konuId === row.konuId)
                               .sort((a, b) => a.siraNo - b.siraNo);
@@ -255,24 +291,33 @@ export default function SinavBolumEditor({
                             return (
                               <div
                                 key={`${altBolum.id}-${satirIdx}-${row.konuId || 'empty'}`}
-                                className="rounded-xl border border-gray-100 bg-gray-50/50 p-3 space-y-3"
+                                className={`rounded-xl border border-gray-100 bg-gray-50/50 p-3 space-y-3 ${
+                                  !bransUygun ? 'opacity-60' : ''
+                                }`}
                               >
                                 <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-end">
                                   <div className="flex-1 min-w-0">
-                                    <KonuSecici
-                                      konular={konular}
-                                      value={row.konuId}
-                                      onChange={(kid) =>
-                                        onAltBolumSatirGuncelle(bolum.id, altBolum.id, satirIdx, { konuId: kid })
-                                      }
-                                      havuzSayilari={havuzKonuSayilari}
-                                      oncelikliKapsam={oncelikliKapsam}
-                                      placeholder="Konu seçin"
-                                    />
+                                    {yapiSaltOkunur ? (
+                                      <div className="input-field bg-gray-50 text-sm text-gray-700 py-2.5">
+                                        {kObj ? `${kObj.ders} — ${kObj.ad}` : row.konuId || 'Konu seçilmedi'}
+                                      </div>
+                                    ) : (
+                                      <KonuSecici
+                                        konular={konular}
+                                        value={row.konuId}
+                                        onChange={(kid) =>
+                                          onAltBolumSatirGuncelle(bolum.id, altBolum.id, satirIdx, { konuId: kid })
+                                        }
+                                        havuzSayilari={havuzKonuSayilari}
+                                        oncelikliKapsam={oncelikliKapsam}
+                                        placeholder="Konu seçin"
+                                      />
+                                    )}
                                     {kObj && (
                                       <p className="text-[10px] text-gray-400 mt-1 truncate">
                                         {kObj.ders}
                                         {kObj.uniteAdi ? ` · ${kObj.uniteAdi}` : ''}
+                                        {!bransUygun ? ' · branşınız dışı' : ''}
                                       </p>
                                     )}
                                   </div>
@@ -302,21 +347,25 @@ export default function SinavBolumEditor({
                                         }
                                       }}
                                       className="input-field"
+                                      disabled={yapiSaltOkunur}
+                                      readOnly={yapiSaltOkunur}
                                     />
                                   </div>
                                   <div className="flex flex-wrap gap-2 items-end shrink-0">
                                     <button
                                       type="button"
-                                      disabled={!row.konuId || soruSecimBekleniyor}
+                                      disabled={!row.konuId || soruSecimBekleniyor || !bransUygun}
                                       title={
-                                        !row.konuId
-                                          ? 'Önce konu seçin.'
-                                          : soruSecimBekleniyor
-                                            ? 'Sınav hazırlanıyor...'
-                                            : 'Bu konudan soruları tek tek seçerek sınava ekleyin'
+                                        !bransUygun
+                                          ? 'Bu konu branşınızın dışında.'
+                                          : !row.konuId
+                                            ? 'Önce konu seçin.'
+                                            : soruSecimBekleniyor
+                                              ? 'Sınav hazırlanıyor...'
+                                              : 'Bu konudan soruları tek tek seçerek sınava ekleyin'
                                       }
                                       onClick={() => {
-                                        if (!row.konuId || soruSecimBekleniyor) return;
+                                        if (!row.konuId || soruSecimBekleniyor || !bransUygun) return;
                                         void onSoruSec(row.konuId, kObj ? `${kObj.ders} — ${kObj.ad}` : 'Konu');
                                       }}
                                       className="px-3 py-2 rounded-xl border border-indigo-200 bg-white text-indigo-700 hover:bg-indigo-50 text-xs font-bold inline-flex items-center gap-1.5 disabled:opacity-45 disabled:cursor-not-allowed"
@@ -329,6 +378,7 @@ export default function SinavBolumEditor({
                                       Soru seç
                                       {seciliSoruAdedi > 0 ? ` (${seciliSoruAdedi})` : ''}
                                     </button>
+                                    {!yapiSaltOkunur && (
                                     <button
                                       type="button"
                                       onClick={() => onAltBolumSatirSil(bolum.id, altBolum.id, satirIdx)}
@@ -336,6 +386,7 @@ export default function SinavBolumEditor({
                                     >
                                       Sil
                                     </button>
+                                    )}
                                   </div>
                                 </div>
 
@@ -360,10 +411,16 @@ export default function SinavBolumEditor({
                                       <div className="space-y-2">
                                         {konuSorulari.map((soru) => {
                                           const kaldiriliyor = soruKaldiriliyorId === soru.id;
+                                          const onayBekliyor = (soru.onayDurumu || 'ONAYLANDI') !== 'ONAYLANDI';
+                                          const onaylaniyor = soruOnaylaniyorId === soru.id;
                                           return (
                                             <div
                                               key={soru.id}
-                                              className="flex items-start gap-2 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2"
+                                              className={`flex items-start gap-2 rounded-lg border px-3 py-2 ${
+                                                onayBekliyor
+                                                  ? 'border-amber-200 bg-amber-50/80'
+                                                  : 'border-gray-100 bg-gray-50'
+                                              }`}
                                             >
                                               <span className="text-[10px] font-mono text-gray-400 shrink-0 pt-0.5">
                                                 #{yerelSiraHaritasi.get(soru.id) ?? soru.siraNo}
@@ -372,25 +429,51 @@ export default function SinavBolumEditor({
                                                 <p className="text-xs text-gray-800 leading-snug line-clamp-2">
                                                   {soruListeOnMetin(soru.metinHtml, 140)}
                                                 </p>
-                                                {soru.zorluk && (
-                                                  <span className="text-[10px] font-bold text-gray-500 mt-1 inline-block">
-                                                    {soru.zorluk}
-                                                  </span>
+                                                <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                                                  {soru.zorluk && (
+                                                    <span className="text-[10px] font-bold text-gray-500">
+                                                      {soru.zorluk}
+                                                    </span>
+                                                  )}
+                                                  {onayBekliyor && (
+                                                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">
+                                                      Onay bekliyor
+                                                    </span>
+                                                  )}
+                                                </div>
+                                              </div>
+                                              <div className="flex flex-col gap-1 shrink-0">
+                                                {adminOnaylayabilir && onayBekliyor && onSoruOnayla && (
+                                                  <button
+                                                    type="button"
+                                                    disabled={onaylaniyor}
+                                                    onClick={() => void onSoruOnayla(soru.id)}
+                                                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-emerald-700 hover:bg-emerald-50 text-[11px] font-bold disabled:opacity-50"
+                                                  >
+                                                    {onaylaniyor ? (
+                                                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                                    ) : (
+                                                      <CheckCircle className="w-3.5 h-3.5" />
+                                                    )}
+                                                    Onayla
+                                                  </button>
+                                                )}
+                                                {bransUygun && (
+                                                <button
+                                                  type="button"
+                                                  disabled={kaldiriliyor}
+                                                  onClick={() => void onSoruKaldir(soru.id)}
+                                                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-rose-600 hover:bg-rose-50 text-[11px] font-bold disabled:opacity-50"
+                                                >
+                                                  {kaldiriliyor ? (
+                                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                                  ) : (
+                                                    <Trash2 className="w-3.5 h-3.5" />
+                                                  )}
+                                                  Çıkar
+                                                </button>
                                                 )}
                                               </div>
-                                              <button
-                                                type="button"
-                                                disabled={kaldiriliyor}
-                                                onClick={() => void onSoruKaldir(soru.id)}
-                                                className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-rose-600 hover:bg-rose-50 text-[11px] font-bold disabled:opacity-50"
-                                              >
-                                                {kaldiriliyor ? (
-                                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                                ) : (
-                                                  <Trash2 className="w-3.5 h-3.5" />
-                                                )}
-                                                Çıkar
-                                              </button>
                                             </div>
                                           );
                                         })}
@@ -412,9 +495,11 @@ export default function SinavBolumEditor({
         );
       })}
 
+      {!yapiSaltOkunur && (
       <button type="button" onClick={onBolumEkle} className="btn-secondary text-xs inline-flex items-center gap-1">
         <ListPlus className="w-4 h-4" /> Bölüm ekle
       </button>
+      )}
     </div>
   );
 }

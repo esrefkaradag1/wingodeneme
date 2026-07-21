@@ -21,10 +21,15 @@ export function platformFiltresi(req: AuthRequest, _res: Response, next: NextFun
   const origin = ilkHeaderDegeri(req.headers.origin).toLowerCase();
   const platformHeader = ilkHeaderDegeri(req.headers['x-platform-mode']).toLowerCase();
 
+  // Yerel KPSS paneli: localhost:3002 (origin/referer'de "kpss" geçmez)
+  const yerelKpssPort =
+    /:(3002)(?:\/|$)/.test(origin) || /:(3002)(?:\/|$)/.test(referer);
+
   // İstek KPSS platformundan mı geliyor?
-  const isKpss = 
-    origin.includes('kpss') || 
-    referer.includes('kpss') || 
+  const isKpss =
+    origin.includes('kpss') ||
+    referer.includes('kpss') ||
+    yerelKpssPort ||
     platformHeader === 'kpss' ||
     process.env.APP_MODE === 'kpss';
 

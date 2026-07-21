@@ -7,6 +7,11 @@ import axios from 'axios';
 import { sinavApi } from '@/lib/api';
 import { toast } from '@/store/toast.store';
 import { confirmAsk } from '@/store/confirm-dialog.store';
+import {
+  okuSinavCevapYedek,
+  silSinavCevapYedek,
+  yazSinavCevapYedek,
+} from '@/lib/sinavCevapYedek';
 import { SinavSayac } from '@/components/exam/SinavSayac';
 import { SoruSureGostergesi } from '@/components/exam/SoruSureGostergesi';
 import { useSoruSureTakip } from '@/hooks/useSoruSureTakip';
@@ -54,6 +59,9 @@ export default function SinavSayfasi({ params }: { params: { id: string } }) {
   const [cevapAnahtariAcik, setCevapAnahtariAcik] = useState(true);
   const [optikFormAcik, setOptikFormAcik] = useState(false);
   const teslimEdiliyorRef = useRef(false);
+  const cevaplarYuklendiRef = useRef(false);
+  const taslakKayitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sonTaslakRef = useRef<string>('');
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['sinav-katil', params.id],
@@ -70,6 +78,11 @@ export default function SinavSayfasi({ params }: { params: { id: string } }) {
   const { aktifAnlikSaniye, getSureMsMap, soruAktiflestir } = useSoruSureTakip({
     aktifSoruId,
     devreDisi: incelemeModuAktif || !data || !katilimId,
+    /** Öneri/soru × 3 veya en fazla 8 dk — tek soruya tüm sınav süresi yığılmasın */
+    maxSoruSureMs: Math.min(
+      8 * 60 * 1000,
+      Math.max(90_000, ((data?.sureDakika ?? 120) * 60 * 1000) / Math.max(1, data?.sorular?.length ?? 120) * 3),
+    ),
   });
 
   const soruDegistir = useCallback(
@@ -82,19 +95,88 @@ export default function SinavSayfasi({ params }: { params: { id: string } }) {
   );
 
   useEffect(() => {
+    cevaplarYuklendiRef.current = false;
+  }, [params.id]);
+
+  useEffect(() => {
     if (data?.katilim?.id) {
       setKatilimId(data.katilim.id);
     }
   }, [data]);
 
   useEffect(() => {
-    if (!data?.incelemeModu || !data.kayitliCevaplar?.length) return;
-    const kayit: Record<string, string | null> = {};
-    for (const cevap of data.kayitliCevaplar) {
-      kayit[cevap.soruId] = cevap.secilen;
+    if (!data?.katilim?.id || cevaplarYuklendiRef.current) return;
+
+    const sunucu: Record<string, string | null> = {};
+    for (const cevap of data.kayitliCevaplar ?? []) {
+      if (cevap.secilen != null) {
+        sunucu[cevap.soruId] = cevap.secilen;
+      } else if (Object.prototype.hasOwnProperty.call(cevap, 'secilen')) {
+        sunucu[cevap.soruId] = cevap.secilen;
+      }
     }
-    setCevaplar(kayit);
-  }, [data?.incelemeModu, data?.kayitliCevaplar]);
+
+    const yerel = data.incelemeModu ? {} : okuSinavCevapYedek(data.katilim.id);
+    setCevaplar({ ...sunucu, ...yerel });
+    cevaplarYuklendiRef.current = true;
+  }, [data]);
+
+  const taslakKaydet = useCallback(
+    (kayit: Record<string, string | null>, aninda = false) => {
+      if (!katilimId || incelemeModuAktif || !cevaplarYuklendiRef.current) return;
+
+      yazSinavCevapYedek(katilimId, kayit);
+
+      const sureMap = getSureMsMap();
+      const payload = Object.entries(kayit).map(([soruId, secilen]) => ({
+        soruId,
+        secilen,
+        sureMs: sureMap[soruId] ?? null,
+      }));
+      const imza = JSON.stringify(payload.map((p) => [p.soruId, p.secilen]));
+      if (!aninda && imza === sonTaslakRef.current) return;
+      sonTaslakRef.current = imza;
+
+      const gonder = () => {
+        sinavApi.cevapTaslakKaydet(katilimId, payload).catch(() => {
+          /* ağ hatası — localStorage yedekte kalır */
+        });
+      };
+
+      if (aninda) {
+        if (taslakKayitTimerRef.current) clearTimeout(taslakKayitTimerRef.current);
+        gonder();
+        return;
+      }
+
+      if (taslakKayitTimerRef.current) clearTimeout(taslakKayitTimerRef.current);
+      taslakKayitTimerRef.current = setTimeout(gonder, 1200);
+    },
+    [katilimId, incelemeModuAktif, getSureMsMap]
+  );
+
+  useEffect(() => {
+    if (!katilimId || incelemeModuAktif || !cevaplarYuklendiRef.current) return;
+    taslakKaydet(cevaplar);
+  }, [cevaplar, katilimId, incelemeModuAktif, taslakKaydet]);
+
+  useEffect(() => {
+    if (!katilimId || incelemeModuAktif) return;
+
+    const anindaKaydet = () => taslakKaydet(cevaplar, true);
+
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') anindaKaydet();
+    };
+
+    window.addEventListener('beforeunload', anindaKaydet);
+    document.addEventListener('visibilitychange', onVisibility);
+
+    return () => {
+      window.removeEventListener('beforeunload', anindaKaydet);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [cevaplar, katilimId, incelemeModuAktif, taslakKaydet]);
 
   const cevapGonderMutation = useMutation({
     mutationFn: async () => {
@@ -110,6 +192,7 @@ export default function SinavSayfasi({ params }: { params: { id: string } }) {
     },
     onSuccess: (sonuc) => {
       teslimEdiliyorRef.current = false;
+      if (katilimId) silSinavCevapYedek(katilimId);
       toast.basarili(
         'Sınav tamamlandı!',
         `Doğru: ${sonuc.dogru} | Yanlış: ${sonuc.yanlis} | Net: ${sonuc.net.toFixed(2)}`
@@ -142,8 +225,13 @@ export default function SinavSayfasi({ params }: { params: { id: string } }) {
 
   const cevapSec = useCallback((soruId: string, secilen: string | null) => {
     if (data?.incelemeModu) return;
+    const idx = data?.sorular?.findIndex((s) => s.id === soruId) ?? -1;
+    if (idx >= 0) {
+      soruAktiflestir(soruId);
+      setAktifSoruIndex(idx);
+    }
     setCevaplar((onceki) => ({ ...onceki, [soruId]: secilen }));
-  }, [data?.incelemeModu]);
+  }, [data?.incelemeModu, data?.sorular, soruAktiflestir]);
 
   const sinaviTamamla = useCallback(async () => {
     if (data?.incelemeModu || teslimEdiliyorRef.current || cevapGonderMutation.isPending) return;
@@ -365,6 +453,8 @@ export default function SinavSayfasi({ params }: { params: { id: string } }) {
                 sorular={sorular}
                 cevaplar={cevaplar}
                 onCevapSec={cevapSec}
+                aktifSoruIndex={aktifSoruIndex}
+                onSoruDegistir={soruDegistir}
               />
             )}
             {gorununModu === 'soru-soru' && (

@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { supabase } from './supabase';
+import { isKpssMode } from './platform';
 import { useAuthStore, oturumTemizle } from '@/store/auth.store';
-import { kpssOrtami } from './platform';
 
 /** Build anında gömülür; yanlışlıkla /api verilse bile /api/v1'e normalize edilir. */
 function normalizeApiUrl(rawUrl?: string): string {
@@ -131,9 +131,8 @@ function oturumTemizleVeYonlendir(): void {
 api.interceptors.request.use(async (config) => {
   const url = String(config.url || '');
   
-  // Platform modunu header olarak ekle (KPSS alanı veya KPSS öğrencisi)
-  const ogretimTuru = useAuthStore.getState().kullanici?.ogretimTuru;
-  config.headers['x-platform-mode'] = kpssOrtami(ogretimTuru) ? 'kpss' : 'yks_lgs';
+  // Platform modunu panoya göre ekle (KPSS alanı ≠ YKS alanı)
+  config.headers['x-platform-mode'] = isKpssMode() ? 'kpss' : 'yks_lgs';
 
   /** Token yenilemede eski (süresi dolmuş) JWT gönderilmesin */
   if (url.includes('/auth/token-yenile')) {
@@ -271,6 +270,8 @@ export const sinavApi = {
     api.get('/sinavlar/fiyat-kademeleri').then((res) => ({ data: { veri: res.data.veri } })),
   detay: (id: string) => api.get(`/sinavlar/${id}`).then(res => ({ data: { veri: res.data.veri } })),
   katil: (id: string) => api.post(`/sinavlar/${id}/katil`).then(res => ({ data: { veri: res.data.veri } })),
+  cevapTaslakKaydet: (katilimId: string, cevaplar: Array<{ soruId: string; secilen: string | null; sureMs?: number | null }>) =>
+    api.post(`/sinavlar/katilim/${katilimId}/cevaplar/taslak`, { cevaplar }).then((res) => ({ data: { veri: res.data.veri } })),
   cevapGonder: (katilimId: string, cevaplar: any[]) => 
     api.post(`/sinavlar/katilim/${katilimId}/cevaplar`, { cevaplar }).then(res => ({ data: { veri: res.data.veri } })),
   sonuc: (katilimId: string) => api.get(`/sinavlar/katilim/${katilimId}/sonuc`).then(res => ({ data: { veri: res.data.veri } })),
@@ -397,6 +398,10 @@ export const adminApi = {
     api.get(`/admin/sinavlar/${sinavId}/sure-analizi`).then((res) => ({ data: { veri: res.data.veri } })),
   sinavKatilimlar: (sinavId: string) =>
     api.get(`/admin/sinavlar/${sinavId}/katilimlar`).then((res) => ({ data: { veri: res.data.veri } })),
+  sinavlarCanli: () =>
+    api.get('/admin/sinavlar/canli').then((res) => ({ data: { veri: res.data.veri } })),
+  sinavCanli: (sinavId: string) =>
+    api.get(`/admin/sinavlar/${sinavId}/canli`).then((res) => ({ data: { veri: res.data.veri } })),
   denemeKarnesi: (sinavId: string, katilimId: string) =>
     api.get(`/admin/sinavlar/${sinavId}/katilim/${katilimId}/karnesi`).then((res) => ({ data: { veri: res.data.veri } })),
   sinavSorulari: (sinavId: string) => api.get(`/admin/sinavlar/${sinavId}/sorular`).then(res => ({ data: { veri: res.data.veri } })),
@@ -408,6 +413,17 @@ export const adminApi = {
   sinavOgrenciAta: (sinavId: string, veri: any) => api.post(`/admin/sinavlar/${sinavId}/ogrenci-ata`, veri),
   sinavOgrenciAtamaKaldir: (sinavId: string, ogrenciId: string) => api.delete(`/admin/sinavlar/${sinavId}/ogrenci/${ogrenciId}`),
   sinavAtananOgrenciler: (sinavId: string) => api.get(`/admin/sinavlar/${sinavId}/ogrenciler`).then(res => ({ data: { veri: res.data.veri } })),
+  kpssKademeOtomatikAta: () =>
+    api.post('/admin/sinavlar/kademe-otomatik-ata').then((res) => ({
+      data: {
+        basarili: res.data?.basarili !== false,
+        mesaj: res.data?.mesaj as string | undefined,
+        veri: res.data?.veri as {
+          yeniAtama: number;
+          sinavSayisi: number;
+        } | undefined,
+      },
+    })),
   sinavBankadanDoldur: (sinavId: string) => api.post(`/admin/sinavlar/${sinavId}/bankadan-doldur`, {}).then(res => ({ data: { veri: res.data.veri } })),
   sinavSoruAta: (sinavId: string, soruIds: string[], hedefKonuId?: string) =>
     api.post(`/admin/sinavlar/${sinavId}/soru-ata`, {

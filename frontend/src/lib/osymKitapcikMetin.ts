@@ -9,6 +9,10 @@ export const TUR_BILGI: Record<string, { ust: string; alt: string; kod: string }
   AYT: { ust: 'YÜKSEKÖĞRETİM KURUMLARI SINAVI', alt: 'ALAN YETERLİLİK TESTİ', kod: 'AYT' },
   AYT_TYT: { ust: 'YÜKSEKÖĞRETİM KURUMLARI SINAVI', alt: 'ALAN YETERLİLİK TESTİ', kod: 'AYT' },
   LGS: { ust: 'MİLLÎ EĞİTİM BAKANLIĞI', alt: 'LİSEYE GEÇİŞ SINAVI', kod: 'LGS' },
+  KPSS: { ust: 'KAMU PERSONEL SEÇME SINAVI', alt: 'GENEL YETENEK VE GENEL KÜLTÜR', kod: 'KPSS' },
+  KPSS_LISANS: { ust: 'KAMU PERSONEL SEÇME SINAVI', alt: 'LİSANS', kod: 'KPSS' },
+  KPSS_ONLISANS: { ust: 'KAMU PERSONEL SEÇME SINAVI', alt: 'ÖNLİSANS', kod: 'KPSS' },
+  KPSS_ORTAOGRETIM: { ust: 'KAMU PERSONEL SEÇME SINAVI', alt: 'ORTAÖĞRETİM', kod: 'KPSS' },
 };
 
 export function tarihMetniUret(baslangicIso: string, ozel?: string | null): string {

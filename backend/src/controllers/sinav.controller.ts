@@ -2,17 +2,19 @@ import { Response, NextFunction } from 'express';
 import { AuthRequest } from '../middlewares/auth.middleware';
 import {
   sinavListesiGetir, sinavDetayGetir, sinavaKatil,
-  cevapGonder, optikFormYukle
+  cevapGonder, cevapTaslakKaydet, optikFormYukle
 } from '../services/sinav.service';
 import { prisma } from '../config/database';
 import { s3DosyaYukle } from '../utils/s3';
 import { denemeKarnesiGetir } from '../services/deneme-karnesi.service';
+import { KatilimDurumu } from '@prisma/client';
+import { SIRALAMA_HAVUZ_BOYUTU, tahminiSiralamaHesapla } from '../utils/tahminiSiralama';
 
 export async function sinavListesiController(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   try {
     const ogrenciProfil = await prisma.ogrenciProfil.findUnique({ where: { kullaniciId: req.kullanici!.userId } });
     if (!ogrenciProfil) { res.status(404).json({ basarili: false, mesaj: 'Öğrenci profili bulunamadı' }); return; }
-    const sinavlar = await sinavListesiGetir(ogrenciProfil.id);
+    const sinavlar = await sinavListesiGetir(ogrenciProfil.id, req.isKpssPlatform === true);
     res.json({ basarili: true, veri: sinavlar });
   } catch (err) { next(err); }
 }
@@ -41,6 +43,21 @@ export async function cevapGonderController(req: AuthRequest, res: Response, nex
     const sonuc = await cevapGonder(req.params.katilimId, req.body.cevaplar, ogrenciProfil.id);
     res.json({ basarili: true, veri: sonuc });
   } catch (err) { next(err); }
+}
+
+export async function cevapTaslakKaydetController(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const ogrenciProfil = await prisma.ogrenciProfil.findUnique({ where: { kullaniciId: req.kullanici!.userId } });
+    if (!ogrenciProfil) {
+      res.status(404).json({ basarili: false, mesaj: 'Öğrenci profili bulunamadı' });
+      return;
+    }
+    const cevaplar = Array.isArray(req.body?.cevaplar) ? req.body.cevaplar : [];
+    const sonuc = await cevapTaslakKaydet(req.params.katilimId, cevaplar, ogrenciProfil.id);
+    res.json({ basarili: true, veri: sonuc });
+  } catch (err) {
+    next(err);
+  }
 }
 
 export async function optikFormYukleController(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
@@ -162,7 +179,88 @@ export async function sinavSonucController(req: AuthRequest, res: Response, next
       soruSureleri: soruSureleri.sort((a, b) => a.siraNo - b.siraNo),
     };
 
-    res.json({ basarili: true, veri: { ...katilim, kazanimAnalizi, zamanAnalizi } });
+    // Bu denemeye ait konu özeti (kazanım boş olsa bile görünür)
+    const konuMap = new Map<
+      string,
+      { ders: string; konu: string; toplam: number; dogru: number; yanlis: number; bos: number }
+    >();
+    for (const c of katilim.cevaplar) {
+      const key = `${c.soru.konu.ders}::${c.soru.konu.ad}`;
+      const mevcut = konuMap.get(key) || {
+        ders: c.soru.konu.ders,
+        konu: c.soru.konu.ad,
+        toplam: 0,
+        dogru: 0,
+        yanlis: 0,
+        bos: 0,
+      };
+      mevcut.toplam += 1;
+      if (c.dogru === true) mevcut.dogru += 1;
+      else if (c.dogru === false) mevcut.yanlis += 1;
+      else mevcut.bos += 1;
+      konuMap.set(key, mevcut);
+    }
+    const konuAnalizi = Array.from(konuMap.values())
+      .filter((k) => k.dogru + k.yanlis > 0)
+      .map((k) => ({
+        ...k,
+        basariYuzdesi: k.toplam > 0 ? parseFloat(((k.dogru / k.toplam) * 100).toFixed(1)) : 0,
+      }))
+      .sort((a, b) => a.basariYuzdesi - b.basariYuzdesi);
+
+    // Platform genelinde soru başarı oranları (bu soruyu çözenler arasında)
+    const soruIds = katilim.cevaplar.map((c) => c.soruId);
+    const soruBasariMap: Record<string, number> = {};
+    if (soruIds.length > 0) {
+      const gruplar = await prisma.ogrenciCevap.groupBy({
+        by: ['soruId', 'dogru'],
+        where: {
+          soruId: { in: soruIds },
+          katilim: { durum: 'TAMAMLANDI' },
+        },
+        _count: { _all: true },
+      });
+      const agg = new Map<string, { dogru: number; toplam: number }>();
+      for (const g of gruplar) {
+        const mevcut = agg.get(g.soruId) || { dogru: 0, toplam: 0 };
+        mevcut.toplam += g._count._all;
+        if (g.dogru === true) mevcut.dogru += g._count._all;
+        agg.set(g.soruId, mevcut);
+      }
+      for (const [sid, v] of agg) {
+        soruBasariMap[sid] = v.toplam > 0 ? parseFloat(((v.dogru / v.toplam) * 100).toFixed(1)) : 0;
+      }
+    }
+
+    const cevaplarZengin = katilim.cevaplar.map((c) => ({
+      ...c,
+      platformBasariYuzdesi: soruBasariMap[c.soruId] ?? null,
+    }));
+
+    const cohort = await prisma.sinavKatilim.findMany({
+      where: { sinavId: katilim.sinavId, durum: KatilimDurumu.TAMAMLANDI },
+      select: { netPuan: true },
+    });
+    const tahminiSiralama = tahminiSiralamaHesapla(
+      katilim.netPuan,
+      cohort.map((c) => c.netPuan),
+      SIRALAMA_HAVUZ_BOYUTU,
+    );
+
+    res.json({
+      basarili: true,
+      veri: {
+        ...katilim,
+        cevaplar: cevaplarZengin,
+        kazanimAnalizi,
+        konuAnalizi,
+        zamanAnalizi,
+        tahminiSiralama,
+        /** UI’da gösterilecek ana sıra: 2000’lik tahmini */
+        gosterilenSiralama: tahminiSiralama?.sira ?? katilim.ulusalSiralama,
+        siralamaHavuz: SIRALAMA_HAVUZ_BOYUTU,
+      },
+    });
   } catch (err) { next(err); }
 }
 

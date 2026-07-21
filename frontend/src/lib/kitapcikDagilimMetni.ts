@@ -54,6 +54,8 @@ export function dersKitapcikEtiketi(ders: string): string {
   if (n.includes('tarih')) return 'Tarih-1';
   if (n.includes('cografya')) return 'Coğrafya-1';
   if (n.includes('ingilizce')) return 'İngilizce';
+  if (n.includes('vatandaslik') || n.includes('anayasa') || n.includes('hukuk')) return 'Vatandaşlık';
+  if (n.includes('guncel')) return 'Güncel Bilgiler';
   return ham;
 }
 
@@ -122,5 +124,17 @@ export function bolumdenKisaKod(bolumAdi: string, tur: string): string {
     return 'AYT';
   }
   if (tur === 'LGS') return 'LGS';
+  if (tur === 'KPSS' || tur.startsWith('KPSS_')) {
+    if (b.includes('GENEL YETENEK') || n.includes('genel yetenek') || b === 'GY' || n === 'gy') return 'GY';
+    if (b.includes('GENEL KÜLTÜR') || b.includes('GENEL KULTUR') || n.includes('genel kultur') || b === 'GK' || n === 'gk')
+      return 'GK';
+    if (b.includes('TÜRKÇE') || n.includes('turkce')) return 'TUR';
+    if (b.includes('MATEMAT') || b.includes('GEOMETR')) return 'MAT';
+    if (b.includes('TARİH') || b.includes('TARIH')) return 'TAR';
+    if (b.includes('COĞRAF') || b.includes('COGRAF')) return 'COG';
+    if (b.includes('VATANDAŞ') || b.includes('VATANDAS') || b.includes('HUKUK')) return 'VAT';
+    if (b.includes('GÜNCEL') || b.includes('GUNCEL')) return 'GUN';
+    return 'TÜR';
+  }
   return TUR_BILGI[tur]?.kod || tur;
 }

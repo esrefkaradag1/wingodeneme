@@ -29,6 +29,9 @@ import {
   denemeKarnesiAdminController,
   soruKopyalaTytController,
   soruTopluKopyalaTytController,
+  kpssKademeOtomatikAtaController,
+  sinavlarCanliOzetController,
+  sinavCanliDurumController,
 } from '../controllers/admin.controller';
 import {
   odemeAyarlariGetController,
@@ -103,6 +106,8 @@ router.patch('/sorular/:id', soruGuncelleController);
 router.post('/sorular/gruba-ata', soruGrubaTopluAtaController);
 
 router.get('/sinavlar', sinavlarListesiController);
+router.post('/sinavlar/kademe-otomatik-ata', rolKontrol('ADMIN', 'SUPER_ADMIN'), kpssKademeOtomatikAtaController);
+router.get('/sinavlar/canli', sinavlarCanliOzetController);
 router.get('/sinav-takvim', adminSinavTakvimListeleController);
 router.post('/sinav-takvim', adminSinavTakvimOlusturController);
 router.put('/sinav-takvim/:id', adminSinavTakvimGuncelleController);
@@ -110,17 +115,18 @@ router.delete('/sinav-takvim/:id', adminSinavTakvimSilController);
 router.get('/sinavlar/:sinavId/sorular', sinavSorulariAdminController);
 router.get('/sinavlar/:sinavId/sure-analizi', sinavSureAnaliziController);
 router.get('/sinavlar/:sinavId/katilimlar', sinavKatilimlariAdminController);
+router.get('/sinavlar/:sinavId/canli', sinavCanliDurumController);
 router.get('/sinavlar/:sinavId/katilim/:katilimId/karnesi', denemeKarnesiAdminController);
 router.get('/sinavlar/:id', sinavDetayAdminController);
-router.post('/sinavlar', sinavOlusturController);
-router.put('/sinavlar/:id', sinavGuncelleController);
-router.delete('/sinavlar/:id', sinavSilController);
-router.post('/sinavlar/:id/bankadan-doldur', sinavBankadanOtomatikDoldurController);
+router.post('/sinavlar', rolKontrol('ADMIN', 'SUPER_ADMIN'), sinavOlusturController);
+router.put('/sinavlar/:id', rolKontrol('ADMIN', 'SUPER_ADMIN'), sinavGuncelleController);
+router.delete('/sinavlar/:id', rolKontrol('ADMIN', 'SUPER_ADMIN'), sinavSilController);
+router.post('/sinavlar/:id/bankadan-doldur', rolKontrol('ADMIN', 'SUPER_ADMIN'), sinavBankadanOtomatikDoldurController);
 router.post('/sinavlar/:id/soru-ata', sinavaSoruAtaController);
 router.delete('/sinavlar/:sinavId/sorular/:soruId', sinavdanSoruKaldirController);
 router.post('/sinavlar/:id/sorular', soruEkleController);
-router.post('/sinavlar/:sinavId/ogrenci-ata', sinavOgrenciAtaController);
-router.delete('/sinavlar/:sinavId/ogrenci/:ogrenciId', sinavOgrenciAtamaKaldirController);
+router.post('/sinavlar/:sinavId/ogrenci-ata', rolKontrol('ADMIN', 'SUPER_ADMIN'), sinavOgrenciAtaController);
+router.delete('/sinavlar/:sinavId/ogrenci/:ogrenciId', rolKontrol('ADMIN', 'SUPER_ADMIN'), sinavOgrenciAtamaKaldirController);
 router.get('/sinavlar/:sinavId/ogrenciler', sinavAtananOgrencilerController);
 router.post('/sorular/:id/copy-to-tyt', rolKontrol('ADMIN', 'SUPER_ADMIN'), soruKopyalaTytController);
 router.post('/sorular/toplu-copy-to-tyt', rolKontrol('ADMIN', 'SUPER_ADMIN'), soruTopluKopyalaTytController);

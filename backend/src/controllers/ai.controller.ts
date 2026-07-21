@@ -10,8 +10,7 @@ import { aiSoruKaliteIsleme } from '../services/soruAiKalite';
 import { soruUretimGarantiKatmani } from '../services/soruGarantiKatmani';
 import { validateUretilenSoruListesi } from '../utils/soruUretimDogrulama';
 import { buildMetinHtmlFromParts, cozumMetniniHtmlYap } from '../utils/soruMetinBirlestir';
-import { reqOgretmenKisit, ogretmenDersiUretebilirMi, ogretmenDersiUretebilirMiKademe } from '../services/ogretmenSinirlama';
-import { ogretimTuruIzinUyumlu } from '../utils/grupOgretimTuru';
+import { reqOgretmenKisit, ogretmenKonuUretebilirMi } from '../services/ogretmenSinirlama';
 import { metinSesUret } from '../services/tts.service';
 import { ogretmenTalimatKirp } from '../constants/ogretmenTalimat';
 import {
@@ -30,15 +29,9 @@ export async function soruUretController(req: AuthRequest, res: Response, next: 
     if (!konu) { res.status(404).json({ basarili: false, mesaj: 'Konu bulunamadı' }); return; }
 
     const ogrKisit = await reqOgretmenKisit(req);
-    if (ogrKisit) {
-      const turler = ogrKisit.ogretimTurleri?.length ? ogrKisit.ogretimTurleri : [ogrKisit.ogretimTuru];
-      if (
-        !ogretimTuruIzinUyumlu(konu.ogretimTuru, turler) ||
-        !ogretmenDersiUretebilirMiKademe(ogrKisit, konu.ders, konu.ogretimTuru)
-      ) {
-        res.status(403).json({ basarili: false, mesaj: 'Bu branş veya kademe için soru üretme yetkiniz yok.' });
-        return;
-      }
+    if (ogrKisit && !ogretmenKonuUretebilirMi(ogrKisit, konu)) {
+      res.status(403).json({ basarili: false, mesaj: 'Bu branş veya kademe için soru üretme yetkiniz yok.' });
+      return;
     }
 
     const { sorular, kullanılanModel, kullanilanKaynaklar } = await soruUret({
@@ -214,12 +207,13 @@ export async function analizYapController(req: AuthRequest, res: Response, next:
     const profil = await prisma.ogrenciProfil.findUnique({ where: { kullaniciId: req.kullanici!.userId } });
     if (!profil) { res.status(404).json({ basarili: false, mesaj: 'Profil bulunamadı' }); return; }
 
-    const performans = await ogrenciAnalizGetir(profil.id) as any;
+    const performans = await ogrenciAnalizGetir(profil.id, req.isKpssPlatform ? 'kpss' : 'yks') as any;
     const aiAnaliz = await ogrenciAnalizOlustur({
       ogrenciAd: `${profil.ad} ${profil.soyad}`,
       zayifKonular: performans.zayifKonular,
       dersPerformanslari: performans.dersPerformanslari,
       ortalamaNe: performans.ortalamaNe,
+      platform: req.isKpssPlatform ? 'kpss' : 'yks',
     });
 
     await prisma.aIAnaliz.create({
@@ -240,12 +234,13 @@ export async function studyPlanOlusturController(req: AuthRequest, res: Response
     const profil = await prisma.ogrenciProfil.findUnique({ where: { kullaniciId: req.kullanici!.userId } });
     if (!profil) { res.status(404).json({ basarili: false, mesaj: 'Profil bulunamadı' }); return; }
 
-    const performans = await ogrenciAnalizGetir(profil.id) as { zayifKonular?: Array<{ konu: string; ders: string; basari: number }> };
+    const performans = await ogrenciAnalizGetir(profil.id, req.isKpssPlatform ? 'kpss' : 'yks') as { zayifKonular?: Array<{ konu: string; ders: string; basari: number }> };
     const zayifKonular = Array.isArray(performans?.zayifKonular) ? performans.zayifKonular : [];
     const plan = await studyPlanOlustur({
       ogrenci: profil,
       zayifKonular,
       hedefUniversite: profil.hedefUniversite,
+      platform: req.isKpssPlatform ? 'kpss' : 'yks',
     });
     const normalizePlan = studyPlanNormalize(plan, zayifKonular);
 

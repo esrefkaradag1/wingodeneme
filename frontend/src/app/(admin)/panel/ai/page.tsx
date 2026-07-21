@@ -540,8 +540,10 @@ export default function AIPaneli() {
   const secilenKonu = konular.find((k) => k.id === form.konuIds[0]);
 
   const sinavlarGrubaGore = useMemo(() => {
-    if (!form.grupId) return sinavlar;
-    return sinavlar.filter((s: { grupId?: string }) => s.grupId === form.grupId);
+    const base = !form.grupId
+      ? sinavlar
+      : sinavlar.filter((s: { grupId?: string }) => s.grupId === form.grupId);
+    return base.filter((s: { baslik?: string }) => s.baslik !== 'Soru Bankası (Grup)');
   }, [sinavlar, form.grupId]);
 
   const secilenReferansGrup = useMemo(
@@ -562,8 +564,10 @@ export default function AIPaneli() {
     if (t && kpssOgretimTuruMu(t)) setKpssKademeReferans(t);
   }, [secilenReferansGrup?.id, secilenReferansGrup?.tamYol]);
   const referansSinavlarGrubaGore = useMemo(() => {
-    if (!referansForm.grupId) return sinavlar;
-    return sinavlar.filter((s: { grupId?: string }) => s.grupId === referansForm.grupId);
+    const base = !referansForm.grupId
+      ? sinavlar
+      : sinavlar.filter((s: { grupId?: string }) => s.grupId === referansForm.grupId);
+    return base.filter((s: { baslik?: string }) => s.baslik !== 'Soru Bankası (Grup)');
   }, [sinavlar, referansForm.grupId]);
 
   const { data: panelModelleri } = useQuery({
@@ -1597,7 +1601,7 @@ export default function AIPaneli() {
                   <option value="GK">Genel Kültür (Tarih, Coğrafya, Vatandaşlık, Güncel)</option>
                 </select>
                 <p className="text-xs text-gray-500 mt-1">
-                  ÖSYM KPSS Tablo-1 dağılımına uygun konu listesi (Türkçe 30, Matematik 30, Tarih 27, Coğrafya 18, Vatandaşlık 9, Güncel 6).
+                  ÖSYM KPSS Tablo-1 dağılımına uygun konu listesi (Türkçe 30, Matematik 27, Geometri 3, Tarih 27, Coğrafya 18, Vatandaşlık 9, Güncel 6).
                 </p>
               </div>
             )}

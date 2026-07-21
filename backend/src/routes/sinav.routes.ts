@@ -5,6 +5,7 @@ import {
   sinavDetayController,
   sinavaKatilController,
   cevapGonderController,
+  cevapTaslakKaydetController,
   optikFormYukleController,
   sinavSonucController,
   sinavKatilimlarimController,
@@ -33,6 +34,7 @@ router.post('/sepet-satin-al', rolKontrol('OGRENCI'), sinavSepetSatinAlControlle
 router.post('/:id/satin-al', rolKontrol('OGRENCI'), sinavSatinAlController);
 router.get('/:id', sinavDetayController);
 router.post('/:id/katil', rolKontrol('OGRENCI'), sinavaKatilController);
+router.post('/katilim/:katilimId/cevaplar/taslak', rolKontrol('OGRENCI'), cevapTaslakKaydetController);
 router.post('/katilim/:katilimId/cevaplar', rolKontrol('OGRENCI'), cevapGonderController);
 router.post('/katilim/:katilimId/optik-form', rolKontrol('OGRENCI'), yukle.single('form'), optikFormYukleController);
 router.get('/katilim/:katilimId/sonuc', sinavSonucController);

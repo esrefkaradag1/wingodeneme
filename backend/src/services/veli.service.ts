@@ -224,9 +224,13 @@ export async function veliOgrenciAnalizGetir(veliKullaniciId: string, ogrenciPro
   };
 }
 
-export async function veliOgrenciSinavlarGetir(veliKullaniciId: string, ogrenciProfilId: string) {
+export async function veliOgrenciSinavlarGetir(
+  veliKullaniciId: string,
+  ogrenciProfilId: string,
+  isKpssPlatform = false,
+) {
   const ogrenci = await veliOgrenciDogrula(veliKullaniciId, ogrenciProfilId);
-  return sinavListesiGetir(ogrenci.id);
+  return sinavListesiGetir(ogrenci.id, isKpssPlatform);
 }
 
 export async function veliOgrenciSonucGetir(
@@ -309,7 +313,7 @@ export async function veliOgrenciStudyPlanlarGetir(veliKullaniciId: string, ogre
     where: { ogrenciId: ogrenci.id },
     orderBy: { olusturuldu: 'desc' },
     include: {
-      gorevler: { orderBy: { gun: 'asc' } },
+      gorevler: { orderBy: [{ gun: 'asc' }, { olusturuldu: 'asc' }] },
     },
   });
 }

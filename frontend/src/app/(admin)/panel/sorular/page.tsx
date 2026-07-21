@@ -371,6 +371,16 @@ export default function SorularSayfasi() {
   });
 
   const [duzenlenenSoruId, setDuzenlenenSoruId] = useState<string | null>(null);
+  /** Düzenlenen sorunun konusu — filtre listesinde yokken KonuSecici etiketi için */
+  const duzenlenenKonuRef = useRef<{
+    id: string;
+    ad: string;
+    ders: string;
+    ogretimTuru?: string;
+    yksSegment?: string | null;
+  } | null>(null);
+  /** Kademe değişince aynı ders+ad ile yeni müfredatta eşleştirmeyi dene */
+  const konuEsleRef = useRef<{ ders: string; ad: string } | null>(null);
 
   const [annotationPng, setAnnotationPng] = useState<string>('');
   const [aktifSekme, setAktifSekme] = useState<'metin' | 'cizim' | 'ai'>('metin');
@@ -392,6 +402,41 @@ export default function SorularSayfasi() {
     enabled: yeniSoruForm || importModalOpen,
   });
   const formKonular = formKonularData?.data?.veri || [];
+
+  const formKonularGosterim = useMemo(() => {
+    const liste = Array.isArray(formKonular) ? [...formKonular] : [];
+    const snap = duzenlenenKonuRef.current;
+    if (form.konuId && snap?.id === form.konuId && !liste.some((k: { id: string }) => k.id === form.konuId)) {
+      liste.unshift(snap);
+    }
+    return liste;
+  }, [formKonular, form.konuId]);
+
+  // Kademe/müfredat değişince: aynı ders+konu adı yeni listede varsa otomatik seç
+  useEffect(() => {
+    const hedef = konuEsleRef.current;
+    if (!hedef || !yeniSoruForm) return;
+    if (form.konuId) {
+      konuEsleRef.current = null;
+      return;
+    }
+    if (!formKonular.length) return;
+    const eslesen = formKonular.find(
+      (k: { ders?: string; ad?: string }) =>
+        String(k.ders || '').trim() === hedef.ders && String(k.ad || '').trim() === hedef.ad,
+    );
+    if (eslesen) {
+      setForm((f) => ({ ...f, konuId: eslesen.id }));
+      duzenlenenKonuRef.current = {
+        id: eslesen.id,
+        ad: eslesen.ad,
+        ders: eslesen.ders,
+        ogretimTuru: eslesen.ogretimTuru,
+        yksSegment: eslesen.yksSegment,
+      };
+    }
+    konuEsleRef.current = null;
+  }, [formKonular, form.konuId, yeniSoruForm]);
 
   const { data: sinavlarData } = useQuery({ queryKey: ['admin-sinavlar'], queryFn: () => adminApi.sinavlar() });
   const sinavlar = sinavlarData?.data?.veri || [];
@@ -456,6 +501,8 @@ export default function SorularSayfasi() {
       secenekler: { A: '', B: '', C: '', D: '', E: '' },
     });
     setDuzenlenenSoruId(null);
+    duzenlenenKonuRef.current = null;
+    konuEsleRef.current = null;
     setYeniSoruForm(false);
     setAnnotationPng('');
     setAktifSekme('metin');
@@ -487,6 +534,8 @@ export default function SorularSayfasi() {
       secenekler: { A: '', B: '', C: '', D: '', E: '' },
     });
     setDuzenlenenSoruId(null);
+    duzenlenenKonuRef.current = null;
+    konuEsleRef.current = null;
     setAnnotationPng('');
     setAktifSekme('metin');
     setYeniSoruForm(true);
@@ -557,6 +606,13 @@ export default function SorularSayfasi() {
     mevcut.includes(grupId) ? mevcut.filter((id) => id !== grupId) : [...mevcut, grupId];
 
   const kaydetTikla = () => {
+    if (!String(form.konuId || '').trim()) {
+      toast.hata(
+        'Kademe değiştirdiyseniz yeni müfredattan bir konu seçmeden kaydedemezsiniz. Aksi halde ders/konu (TYT vb.) değişmez.',
+        'Konu seçimi zorunlu',
+      );
+      return;
+    }
     const birlesikMetin = buildMetinHtmlFromParts(form.metinHtml, form.aciklamaHtml, form.cozumHtml);
     const payloadMetin = annotationPng ? annotationMetinHtmlUret(birlesikMetin, annotationPng) : birlesikMetin;
     const payloadForm = payloadMetin !== birlesikMetin ? { ...form, metinHtml: payloadMetin } : { ...form, metinHtml: birlesikMetin };
@@ -578,6 +634,12 @@ export default function SorularSayfasi() {
       handleFormReset();
       toast.basarili('Soru kütüphanesine eklendi.');
     },
+    onError: (err: unknown) => {
+      const mesaj =
+        (err as { response?: { data?: { mesaj?: string } } })?.response?.data?.mesaj ||
+        'Soru eklenirken bir hata oluştu.';
+      toast.hata(mesaj);
+    },
   });
 
   const soruGuncelleMutation = useMutation({
@@ -590,7 +652,12 @@ export default function SorularSayfasi() {
       handleFormReset();
       toast.basarili('Soru başarıyla güncellendi.');
     },
-    onError: () => toast.hata('Soru güncellenirken bir hata oluştu.'),
+    onError: (err: unknown) => {
+      const mesaj =
+        (err as { response?: { data?: { mesaj?: string } } })?.response?.data?.mesaj ||
+        'Soru güncellenirken bir hata oluştu.';
+      toast.hata(mesaj);
+    },
   });
 
   const onayMutation = useMutation({
@@ -1252,7 +1319,12 @@ export default function SorularSayfasi() {
                           <div className="flex items-center justify-center gap-2">
                             {islemAcik ? (
                               <>
-                            {(soru.onayDurumu || 'ONAYLANDI') !== 'ONAYLANDI' && (
+                            {(soru.onayDurumu || 'ONAYLANDI') !== 'ONAYLANDI' &&
+                              !(
+                                ogretmenKisit &&
+                                soru.sinav?.baslik &&
+                                soru.sinav.baslik !== 'Soru Bankası (Grup)'
+                              ) && (
                               <button
                                 type="button"
                                 title="Soruyu onayla"
@@ -1270,8 +1342,33 @@ export default function SorularSayfasi() {
                               const parsed = parseMetinParcalari(soru.metinHtml);
                                const cozumAlan =
                                  parsed.cozumHtml || cozumDuzMetinAiMetadan(soru.aiMeta);
+                               // Mevcut konuId'yi koru — filtre listesinde yoksa bile kayıp olmasın
+                               // (önceki findKonu eşlemesi KPSS panelinde TYT konularını bulamayıp boş bırakıyordu)
+                               const konuTur = String(soru.konu.ogretimTuru || '').toUpperCase();
+                               const mufredatBaslangic: FormMufredatTuru =
+                                 konuTur === 'YKS' || konuTur === 'LGS' || kpssOgretimTuruMu(konuTur)
+                                   ? (konuTur as FormMufredatTuru)
+                                   : 'HEPSI';
+                               setFormMufredatTuru(mufredatBaslangic);
+                               setFormYksKapsam(
+                                 String(soru.konu.yksSegment || '').toUpperCase() === 'TYT' ||
+                                   String(soru.konu.yksSegment || '').toUpperCase().startsWith('AYT')
+                                   ? (String(soru.konu.yksSegment || '').toUpperCase() === 'TYT' ? 'TYT' : 'AYT')
+                                   : 'HEPSI',
+                               );
+                               setFormKpssKapsam('HEPSI');
+                               duzenlenenKonuRef.current = soru.konuId
+                                 ? {
+                                     id: soru.konuId,
+                                     ad: soru.konu.ad,
+                                     ders: soru.konu.ders,
+                                     ogretimTuru: soru.konu.ogretimTuru,
+                                     yksSegment: soru.konu.yksSegment,
+                                   }
+                                 : null;
+                               konuEsleRef.current = null;
                                setForm({
-                                 konuId: '',
+                                 konuId: soru.konuId || '',
                                  grupId: soru.sinav?.grup.id || '',
                                  sinavId: soru.sinav?.id || '',
                                  uygunGrupIds: (soru.uygunGruplar ?? []).map((u) => u.grup.id),
@@ -1284,40 +1381,6 @@ export default function SorularSayfasi() {
                                  kazanim: soru.kazanim || '',
                                  secenekler: { ...soru.secenekler } as any,
                                });
-                               const findKonu =
-                                 formKonular.find((k: any) => k.id === soru.konuId) ||
-                                 konular.find((k: any) => k.id === soru.konuId) ||
-                                 formKonular.find(
-                                   (k: any) =>
-                                     k.ad === soru.konu.ad &&
-                                     String(k.ders || '').trim() === String(soru.konu.ders || '').trim() &&
-                                     String(k.ogretimTuru || '') === String(soru.konu.ogretimTuru || ''),
-                                 ) ||
-                                 konular.find(
-                                   (k: any) =>
-                                     k.ad === soru.konu.ad &&
-                                     String(k.ders || '').trim() === String(soru.konu.ders || '').trim() &&
-                                     String(k.ogretimTuru || '') === String(soru.konu.ogretimTuru || ''),
-                                 ) ||
-                                 formKonular.find(
-                                   (k: any) =>
-                                     k.ad === soru.konu.ad &&
-                                     String(k.ders || '').trim() === String(soru.konu.ders || '').trim(),
-                                 ) ||
-                                 konular.find(
-                                   (k: any) =>
-                                     k.ad === soru.konu.ad &&
-                                     String(k.ders || '').trim() === String(soru.konu.ders || '').trim(),
-                                 );
-                               const konuTur = String(soru.konu.ogretimTuru || '').toUpperCase();
-                               const mufredatBaslangic: FormMufredatTuru =
-                                 konuTur === 'YKS' || konuTur === 'LGS' || kpssOgretimTuruMu(konuTur)
-                                   ? (konuTur as FormMufredatTuru)
-                                   : 'HEPSI';
-                               setFormMufredatTuru(mufredatBaslangic);
-                               setFormYksKapsam('HEPSI');
-                               setFormKpssKapsam('HEPSI');
-                               if (findKonu) setForm((prev) => ({ ...prev, konuId: findKonu.id }));
 
                                setDuzenlenenSoruId(soru.id);
                                setYeniSoruForm(true);
@@ -1474,7 +1537,12 @@ export default function SorularSayfasi() {
                                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Onay Durumu</p>
                                      <StatusBadge status={soru.onayDurumu || 'ONAYLANDI'} guncellendi={soruManuelGuncellendi(soru)} />
                                      {(soru.onayDurumu || 'ONAYLANDI') !== 'ONAYLANDI' &&
-                                       soruIslemYapilabilir(soru, Boolean(ogretmenKisit), kullaniciId) && (
+                                       soruIslemYapilabilir(soru, Boolean(ogretmenKisit), kullaniciId) &&
+                                       !(
+                                         ogretmenKisit &&
+                                         soru.sinav?.baslik &&
+                                         soru.sinav.baslik !== 'Soru Bankası (Grup)'
+                                       ) && (
                                        <button
                                          type="button"
                                          disabled={onayMutation.isPending}
@@ -1538,6 +1606,15 @@ export default function SorularSayfasi() {
                             <select
                               value={formMufredatTuru}
                               onChange={(e) => {
+                                const onceki =
+                                  formKonularGosterim.find((k: { id: string }) => k.id === form.konuId) ||
+                                  duzenlenenKonuRef.current;
+                                if (onceki?.ders && onceki?.ad) {
+                                  konuEsleRef.current = {
+                                    ders: String(onceki.ders).trim(),
+                                    ad: String(onceki.ad).trim(),
+                                  };
+                                }
                                 setFormMufredatTuru(e.target.value as FormMufredatTuru);
                                 setForm((f) => ({ ...f, konuId: '' }));
                               }}
@@ -1557,6 +1634,15 @@ export default function SorularSayfasi() {
                               <select
                                 value={formYksKapsam}
                                 onChange={(e) => {
+                                  const onceki =
+                                    formKonularGosterim.find((k: { id: string }) => k.id === form.konuId) ||
+                                    duzenlenenKonuRef.current;
+                                  if (onceki?.ders && onceki?.ad) {
+                                    konuEsleRef.current = {
+                                      ders: String(onceki.ders).trim(),
+                                      ad: String(onceki.ad).trim(),
+                                    };
+                                  }
                                   setFormYksKapsam(e.target.value as 'HEPSI' | 'TYT' | 'AYT');
                                   setForm((f) => ({ ...f, konuId: '' }));
                                 }}
@@ -1576,6 +1662,15 @@ export default function SorularSayfasi() {
                               <select
                                 value={formKpssKapsam}
                                 onChange={(e) => {
+                                  const onceki =
+                                    formKonularGosterim.find((k: { id: string }) => k.id === form.konuId) ||
+                                    duzenlenenKonuRef.current;
+                                  if (onceki?.ders && onceki?.ad) {
+                                    konuEsleRef.current = {
+                                      ders: String(onceki.ders).trim(),
+                                      ad: String(onceki.ad).trim(),
+                                    };
+                                  }
                                   setFormKpssKapsam(e.target.value as 'HEPSI' | 'GY' | 'GK');
                                   setForm((f) => ({ ...f, konuId: '' }));
                                 }}
@@ -1591,6 +1686,7 @@ export default function SorularSayfasi() {
                         <p className="text-[11px] text-indigo-800/70">
                           Listedeki mavi/yeşil «KPSS ÖL / LİS / OÖ» rozeti, sorunun bağlandığı müfredat kademesidir.
                           Sağdaki mor grup etiketleri (uygun gruplar) bundan bağımsızdır — grup seçmek kademe rozetini değiştirmez.
+                          Kademeyi değiştirdikten sonra mutlaka yeni müfredattan bir konu seçin; aksi halde ders/konu kaydı değişmez.
                           AI soru üretimi ile aynı konu havuzu. Liste üstündeki YKS/LGS sekmesi konu seçimini etkilemez.
                           {formKonular.length > 0 ? ` ${formKonular.length} konu listeleniyor.` : ''}
                         </p>
@@ -1600,16 +1696,34 @@ export default function SorularSayfasi() {
                         <div className="space-y-2 col-span-2 sm:col-span-1">
                            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Konu Seçimi</label>
                            <KonuSecici
-                             konular={formKonular}
+                             konular={formKonularGosterim}
                              value={form.konuId}
-                             onChange={(konuId) => setForm({ ...form, konuId })}
-                             placeholder="Konu ara veya seç..."
+                             onChange={(konuId) => {
+                               const secilen = formKonularGosterim.find((k: { id: string }) => k.id === konuId);
+                               if (secilen) {
+                                 duzenlenenKonuRef.current = {
+                                   id: secilen.id,
+                                   ad: secilen.ad,
+                                   ders: secilen.ders,
+                                   ogretimTuru: secilen.ogretimTuru,
+                                   yksSegment: secilen.yksSegment,
+                                 };
+                               }
+                               setForm({ ...form, konuId });
+                             }}
+                             placeholder={!form.konuId ? 'Konu ara veya seç… (zorunlu)' : 'Konu ara veya seç...'}
+                             className={!form.konuId ? 'ring-2 ring-amber-300 rounded-2xl' : ''}
                              oncelikliKapsam={
                                formMufredatTuru === 'YKS' && formYksKapsam !== 'HEPSI'
                                  ? formYksKapsam
                                  : null
                              }
                            />
+                           {!form.konuId && (
+                             <p className="text-[11px] font-semibold text-amber-700">
+                               Konu seçilmeden kaydetmek ders/konuyu güncellemez.
+                             </p>
+                           )}
                         </div>
                         <div className="space-y-2">
                            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Zorluk</label>
@@ -1723,8 +1837,8 @@ export default function SorularSayfasi() {
                      {aktifSekme === 'cizim' && (
                         <div className="space-y-4">
                            <SoruAiGorsel
-                              ders={formKonular.find((k: any) => k.id === form.konuId)?.ders}
-                              konu={formKonular.find((k: any) => k.id === form.konuId)?.ad}
+                              ders={formKonularGosterim.find((k: any) => k.id === form.konuId)?.ders}
+                              konu={formKonularGosterim.find((k: any) => k.id === form.konuId)?.ad}
                               onEkle={aiGorselEkle}
                            />
                            <div className="flex items-center justify-between">

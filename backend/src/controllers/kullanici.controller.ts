@@ -122,7 +122,7 @@ export async function studyPlanlarGetirController(req: AuthRequest, res: Respons
       orderBy: { olusturuldu: 'desc' },
       include: {
         gorevler: {
-          orderBy: { gun: 'asc' },
+          orderBy: [{ gun: 'asc' }, { olusturuldu: 'asc' }],
         },
       },
     });

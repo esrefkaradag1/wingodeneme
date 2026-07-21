@@ -299,6 +299,32 @@ export function ogretmenIcinGrupTurlari(kisit: OgretmenKisit | null): OgretimTur
   return turler;
 }
 
+/** Öğretmenin sınav/grup kademesine erişimi (çoklu kademe + LGS↔YKS genişlemesi) */
+export function ogretmenSinavTuruneErisebilir(
+  kisit: OgretmenKisit | null,
+  grupTur: OgretimTuru | string | null | undefined,
+): boolean {
+  if (!kisit) return true;
+  if (!grupTur) return false;
+  const izinli = ogretmenIcinGrupTurlari(kisit);
+  if (!izinli?.length) return false;
+  return ogretimTuruIzinUyumlu(grupTur as OgretimTuru, izinli);
+}
+
+/** AI / referans üretim: konu kademesi öğretmen izinleriyle uyumlu mu */
+export function ogretmenKonuUretebilirMi(
+  kisit: OgretmenKisit | null,
+  konu: { ogretimTuru: OgretimTuru; ders: string },
+): boolean {
+  if (!kisit) return true;
+  const izinli = ogretmenIcinGrupTurlari(kisit);
+  if (!izinli?.length) return false;
+  return (
+    ogretimTuruIzinUyumlu(konu.ogretimTuru, izinli) &&
+    ogretmenDersiUretebilirMiKademe(kisit, konu.ders, konu.ogretimTuru)
+  );
+}
+
 export async function reqOgretmenKisit(req: AuthRequest): Promise<OgretmenKisit | null> {
   const k = req.kullanici;
   if (!k) return null;
@@ -364,11 +390,10 @@ export async function ogretmenSoruIslemIzni(
   if (!ogrKisit) return { ok: true };
 
   if (soru.konu) {
-    const izinliTurler = ogrKisit.ogretimTurleri?.length ? ogrKisit.ogretimTurleri : [ogrKisit.ogretimTuru];
-    if (
-      !ogretimTuruIzinUyumlu(soru.konu.ogretimTuru as OgretimTuru, izinliTurler) ||
-      !ogretmenDersiUretebilirMiKademe(ogrKisit, soru.konu.ders || '', soru.konu.ogretimTuru)
-    ) {
+    if (!ogretmenKonuUretebilirMi(ogrKisit, {
+      ogretimTuru: soru.konu.ogretimTuru as OgretimTuru,
+      ders: soru.konu.ders || '',
+    })) {
       return { ok: false, status: 403, mesaj: 'Bu soru sizin branşınıza ait değil.' };
     }
   }
@@ -384,6 +409,43 @@ export async function ogretmenSoruIslemIzni(
       ok: false,
       status: 403,
       mesaj: 'Yalnızca kendi hazırladığınız sorular üzerinde işlem yapabilirsiniz.',
+    };
+  }
+  return { ok: true };
+}
+
+/**
+ * Öğretmen, gerçek deneme sınavına atanmış soruyu ONAYLANDI yapamaz —
+ * atama onayı yalnızca ADMIN/SUPER_ADMIN tarafından verilir.
+ * Soru bankası (grup havuzu) içerik onayı öğretmen için serbest kalır.
+ */
+export async function ogretmenSinavAtamaOnayEngeli(
+  req: AuthRequest,
+  soruIds: string[],
+  hedefOnay: string,
+): Promise<{ ok: true } | { ok: false; status: number; mesaj: string }> {
+  if (hedefOnay !== 'ONAYLANDI') return { ok: true };
+  const ogrKisit = await reqOgretmenKisit(req);
+  if (!ogrKisit) return { ok: true };
+
+  const { GRUP_BANKA_SINAV_BASLIGI } = await import('../utils/grupBankaSinavi');
+  const sorular = await prisma.soru.findMany({
+    where: { id: { in: soruIds } },
+    select: {
+      id: true,
+      sinavId: true,
+      sinav: { select: { baslik: true } },
+    },
+  });
+
+  const denemede = sorular.some(
+    (s) => s.sinavId && s.sinav?.baslik !== GRUP_BANKA_SINAV_BASLIGI,
+  );
+  if (denemede) {
+    return {
+      ok: false,
+      status: 403,
+      mesaj: 'Sınava atanmış soruları yalnızca yönetici onaylayabilir.',
     };
   }
   return { ok: true };
@@ -418,11 +480,12 @@ export async function ogretmenSoruIdsIslemIzni(
   }
 
   for (const s of sorular) {
-    const izinliTurler = ogrKisit.ogretimTurleri?.length ? ogrKisit.ogretimTurleri : [ogrKisit.ogretimTuru];
     if (
       s.konu &&
-      (!ogretimTuruIzinUyumlu(s.konu.ogretimTuru as OgretimTuru, izinliTurler) ||
-        !ogretmenDersiUretebilirMiKademe(ogrKisit, s.konu.ders || '', s.konu.ogretimTuru))
+      !ogretmenKonuUretebilirMi(ogrKisit, {
+        ogretimTuru: s.konu.ogretimTuru as OgretimTuru,
+        ders: s.konu.ders || '',
+      })
     ) {
       return { ok: false, status: 403, mesaj: 'Seçilen sorulardan bazıları sizin branşınıza ait değil.' };
     }

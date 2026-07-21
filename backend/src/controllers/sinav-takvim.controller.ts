@@ -149,13 +149,19 @@ export async function ogrenciSinavTakvimListeleController(req: AuthRequest, res:
         where: { kullaniciId: req.kullanici.userId },
       });
       if (ogrenci) {
-        const veri = await ogrenciSinavTakvimListele(ogrenci.id, req.kullanici.userId, yil, ay);
+        const veri = await ogrenciSinavTakvimListele(
+          ogrenci.id,
+          req.kullanici.userId,
+          yil,
+          ay,
+          req.isKpssPlatform === true,
+        );
         res.json({ basarili: true, veri, meta: { yil, ay }, oturum: 'ogrenci' });
         return;
       }
     }
 
-    const veri = await publicSinavTakvimListele(yil, ay);
+    const veri = await publicSinavTakvimListele(yil, ay, req.isKpssPlatform === true);
     res.json({
       basarili: true,
       veri,
@@ -167,10 +173,10 @@ export async function ogrenciSinavTakvimListeleController(req: AuthRequest, res:
   }
 }
 
-export async function publicSinavTakvimListeleController(_req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+export async function publicSinavTakvimListeleController(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   try {
-    const { yil, ay } = parseYilAy(_req.query as Record<string, unknown>);
-    const veri = await publicSinavTakvimListele(yil, ay);
+    const { yil, ay } = parseYilAy(req.query as Record<string, unknown>);
+    const veri = await publicSinavTakvimListele(yil, ay, req.isKpssPlatform === true);
     res.json({ basarili: true, veri, meta: { yil, ay } });
   } catch (err) {
     next(err);

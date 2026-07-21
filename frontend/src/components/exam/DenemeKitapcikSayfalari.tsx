@@ -118,7 +118,7 @@ interface Props {
   sinavBaslik?: string | null;
 }
 
-/** YKS + LGS: iki sütun, sayfa başına 8 soru (ÖSYM kitapçık düzeni) */
+/** YKS + LGS + KPSS: iki sütun, sayfa başına 8 soru (ÖSYM kitapçık düzeni) */
 export function DenemeKitapcikSayfalari({
   tur,
   baslangicZamani,

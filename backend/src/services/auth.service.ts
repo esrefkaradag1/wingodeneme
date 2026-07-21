@@ -10,6 +10,7 @@ import { ogretimTuruBelirle } from '../utils/ogretimTuru';
 import { bransIcinDersler, branslarParse } from './ogretmenSinirlama';
 import { platformOgretimTuruUyumlu, platformOgretimTurleriUyumlu } from '../utils/paketPlatformFiltre';
 import { OgretimTuru } from '@prisma/client';
+import { kpssUcretsizSinavAtaOgrenciArkaPlan } from './kpssKademeSinavAtama.service';
 
 interface KayitGirdisi {
   email: string;
@@ -234,6 +235,12 @@ export async function ogrenciKayit(girdi: KayitGirdisi, platformTurleri?: Ogreti
   });
 
   const { yeniKullanici: kullanici, yeniVeliOlusturuldu, veliGirisSifresi } = kayitSonuc;
+
+  // KPSS öğrencisine yayındaki ücretsiz denemeleri kademesine göre ata
+  kpssUcretsizSinavAtaOgrenciArkaPlan(
+    kullanici.ogrenciProfil?.id,
+    kullanici.ogrenciProfil?.ogretimTuru,
+  );
 
   const token = tokenOlustur({ userId: kullanici.id, rol: kullanici.rol, email: kullanici.email });
   const refreshToken = refreshTokenOlustur(kullanici.id);

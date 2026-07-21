@@ -35,6 +35,7 @@ import {
   kpssMi,
   kademeTemasi,
 } from '@/lib/ogrenciKademe';
+import { isKpssMode } from '@/lib/platform';
 
 type DuyuruAlici = {
   id: string;
@@ -53,7 +54,11 @@ type DestekTalebi = {
 export default function DashboardSayfasi() {
   const { kullanici, girisYap } = useAuthStore();
   const { data: analizData } = useQuery({ queryKey: ['analiz'], queryFn: () => analizApi.benim() });
-  const { data: sinavlarData } = useQuery({ queryKey: ['sinavlar'], queryFn: () => sinavApi.liste() });
+  const panelKpss = isKpssMode();
+  const { data: sinavlarData } = useQuery({
+    queryKey: ['sinavlar', panelKpss ? 'kpss' : 'yks'],
+    queryFn: () => sinavApi.liste(),
+  });
   const { data: oneriData } = useQuery({ queryKey: ['oneriler'], queryFn: () => aiApi.oneriler() });
 
   const { data: paketlerData } = useQuery({ queryKey: ['paketler'], queryFn: () => paketApi.liste() });
@@ -122,10 +127,39 @@ export default function DashboardSayfasi() {
 
   const stats = [
     { ikon: BookOpen, deger: analiz?.toplamSinav || 0, etiket: 'Toplam Sınav', gradient: 'from-indigo-600 to-blue-600', textColor: 'text-indigo-600' },
-    { ikon: Trophy, deger: analiz?.enIyiSiralama ? `#${analiz.enIyiSiralama.toLocaleString('tr-TR')}` : '—', etiket: 'En İyi Sıra', gradient: 'from-amber-500 to-orange-500', textColor: 'text-amber-600' },
-    { ikon: Target, deger: `${analiz?.ortalamaNet?.toFixed(1) || '0.0'}`, etiket: 'Ortalama Net', gradient: 'from-emerald-500 to-teal-500', textColor: 'text-emerald-600' },
+    {
+      ikon: Trophy,
+      deger: analiz?.enIyiSiralama
+        ? `#${analiz.enIyiSiralama.toLocaleString('tr-TR')}`
+        : '—',
+      etiket: analiz?.siralamaHavuz ? `En İyi Sıra / ${analiz.siralamaHavuz.toLocaleString('tr-TR')}` : 'En İyi Sıra',
+      gradient: 'from-amber-500 to-orange-500',
+      textColor: 'text-amber-600',
+    },
+    {
+      ikon: Target,
+      deger: `${(analiz?.ortalamaNet ?? analiz?.ortalamaNe)?.toFixed?.(1) || '0.0'}`,
+      etiket: 'Ortalama Net',
+      gradient: 'from-emerald-500 to-teal-500',
+      textColor: 'text-emerald-600',
+    },
     { ikon: Swords, deger: tamamlananSinav, etiket: 'Tamamlanan', gradient: 'from-rose-500 to-pink-500', textColor: 'text-rose-600' },
   ];
+
+  const sonSira = analiz?.sonDenemeSiralama as
+    | {
+        sira: number;
+        havuz: number;
+        gercekKatilim: number;
+        ortalamaNet: number;
+        ogrenciNet: number;
+        yuzdelik: number;
+        sinavBaslik?: string;
+        katilimId?: string;
+        ilkUc: Array<{ sira: number; tahminiNet: number }>;
+      }
+    | null
+    | undefined;
 
   return (
     <div className="space-y-8 pb-12">
@@ -202,6 +236,80 @@ export default function DashboardSayfasi() {
           </motion.div>
         ))}
       </div>
+
+      {/* Son deneme — 2000’lik tahmini sıralama (1-2-3 + sen) */}
+      {sonSira && (
+        <motion.section
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className={`rounded-2xl border p-6 shadow-lg ${
+            kpss
+              ? 'border-teal-100 bg-gradient-to-br from-teal-50/90 to-white'
+              : lgs
+                ? 'border-blue-100 bg-gradient-to-br from-blue-50/90 to-white'
+                : 'border-amber-100 bg-gradient-to-br from-amber-50/90 to-white'
+          }`}
+        >
+          <div className="flex flex-wrap items-start justify-between gap-4 mb-5">
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-widest text-amber-700 mb-1">
+                Tahmini Türkiye sıralaması
+              </p>
+              <h2 className="text-lg font-bold text-gray-900">
+                {sonSira.sinavBaslik || 'Son deneme'}
+              </h2>
+              <p className="text-xs text-gray-500 mt-1">
+                Netin {sonSira.ogrenciNet} · deneme ort. {sonSira.ortalamaNet} · gerçek katılım{' '}
+                {sonSira.gercekKatilim} kişi → {sonSira.havuz.toLocaleString('tr-TR')} üzerinden tahmin
+              </p>
+            </div>
+            {sonSira.katilimId && (
+              <Link
+                href={`/sinavlar/${sonSira.katilimId}/sonuc`}
+                className={`text-sm font-bold hover:underline ${vurguMetin}`}
+              >
+                Sonuca git →
+              </Link>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {sonSira.ilkUc.map((u) => (
+              <div
+                key={u.sira}
+                className={`rounded-2xl border bg-white/80 p-4 text-center ${
+                  u.sira === 1
+                    ? 'border-amber-200 shadow-sm'
+                    : u.sira === 2
+                      ? 'border-slate-200'
+                      : 'border-orange-100'
+                }`}
+              >
+                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
+                  {u.sira}. sıra
+                </p>
+                <p className="text-2xl font-bold text-gray-900 mt-1">#{u.sira}</p>
+                <p className="text-xs text-gray-500 mt-1">~{u.tahminiNet} net</p>
+              </div>
+            ))}
+            <div
+              className={`rounded-2xl border p-4 text-center text-white shadow-md ${
+                kpss
+                  ? 'border-teal-600 bg-gradient-to-br from-teal-600 to-teal-700'
+                  : lgs
+                    ? 'border-blue-600 bg-gradient-to-br from-blue-600 to-blue-700'
+                    : 'border-amber-500 bg-gradient-to-br from-amber-500 to-orange-600'
+              }`}
+            >
+              <p className="text-[10px] font-bold uppercase tracking-widest text-white/80">Senin sıran</p>
+              <p className="text-3xl font-bold mt-1">#{sonSira.sira.toLocaleString('tr-TR')}</p>
+              <p className="text-xs text-white/80 mt-1">
+                / {sonSira.havuz.toLocaleString('tr-TR')} · %{sonSira.yuzdelik}
+              </p>
+            </div>
+          </div>
+        </motion.section>
+      )}
 
       {/* ÖSYM / YKS müfredat & kılavuz özeti */}
       <motion.section

@@ -57,7 +57,11 @@ export async function veliOgrenciAnalizController(req: AuthRequest, res: Respons
 
 export async function veliOgrenciSinavlarController(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   try {
-    const veri = await veliOgrenciSinavlarGetir(veliUid(req), req.params.ogrenciId);
+    const veri = await veliOgrenciSinavlarGetir(
+      veliUid(req),
+      req.params.ogrenciId,
+      req.isKpssPlatform === true,
+    );
     res.json({ basarili: true, veri });
   } catch (err) {
     next(err);

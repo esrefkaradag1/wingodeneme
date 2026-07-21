@@ -9,7 +9,8 @@ export async function ogrenciAnalizController(req: AuthRequest, res: Response, n
   try {
     const ogrenciProfil = await prisma.ogrenciProfil.findUnique({ where: { kullaniciId: req.kullanici!.userId } });
     if (!ogrenciProfil) { res.status(404).json({ basarili: false, mesaj: 'Öğrenci bulunamadı' }); return; }
-    const analiz = await ogrenciAnalizGetir(ogrenciProfil.id);
+    const platform = req.isKpssPlatform ? 'kpss' : 'yks';
+    const analiz = await ogrenciAnalizGetir(ogrenciProfil.id, platform);
     res.json({ basarili: true, veri: analiz });
   } catch (err) { next(err); }
 }

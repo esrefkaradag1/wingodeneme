@@ -4,12 +4,20 @@ import { useParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { CheckCircle, Circle, Map } from 'lucide-react';
 import { veliApi } from '@/lib/api';
+import {
+  CALISMA_PLANI_ACIKLAMA,
+  gorevBaslikTemizle,
+  gorevBlokNoParse,
+  gunlukOzetMetni,
+  oturumEtiketi,
+  oturumSaatAraligi,
+} from '@/lib/studyPlanGosterim';
 import { VeliOgrenciBaslik } from '@/components/veli/VeliOgrenciShell';
 import { VeliSayfa, VeliPanel, VeliBadge, VeliBosDurum, VeliYukleniyor } from '@/components/veli/VeliUI';
 
 interface StudyGorev {
   id: string; baslik: string; ders: string; konu: string;
-  sureDakika: number; tamamlandi: boolean; gun: number;
+  sureDakika: number; tamamlandi: boolean; gun: number; olusturuldu?: string;
 }
 
 interface StudyPlan {
@@ -49,6 +57,19 @@ export default function VeliOgrenciStudyPlanPage() {
     acc[g.gun]!.push(g);
     return acc;
   }, {});
+  for (const gun of Object.keys(gunluk)) {
+    gunluk[Number(gun)]!.sort((a, b) => {
+      const na = gorevBlokNoParse(a.baslik);
+      const nb = gorevBlokNoParse(b.baslik);
+      if (na != null && nb != null && na !== nb) return na - nb;
+      if (na != null && nb == null) return -1;
+      if (na == null && nb != null) return 1;
+      const ta = a.olusturuldu ? new Date(a.olusturuldu).getTime() : 0;
+      const tb = b.olusturuldu ? new Date(b.olusturuldu).getTime() : 0;
+      if (ta !== tb) return ta - tb;
+      return a.id.localeCompare(b.id);
+    });
+  }
   const gunler = Object.keys(gunluk).map(Number).sort((a, b) => a - b);
 
   return (
@@ -78,15 +99,26 @@ export default function VeliOgrenciStudyPlanPage() {
         )}
       </VeliPanel>
 
+      <VeliPanel className="!p-4 border-indigo-100 bg-indigo-50/40">
+        <p className="text-xs font-bold text-indigo-900">Günlük çalışma düzeni</p>
+        <p className="text-xs text-indigo-800/80 mt-1 leading-relaxed">{CALISMA_PLANI_ACIKLAMA}</p>
+      </VeliPanel>
+
       <div className="space-y-4">
         {gunler.map((gun) => (
           <VeliPanel key={gun} className="!p-4 sm:!p-5">
-            <h3 className="text-sm font-bold text-gray-900 mb-3 flex items-center gap-2">
-              <span className="w-7 h-7 rounded-lg bg-violet-100 text-violet-700 flex items-center justify-center text-xs font-black">{gun}</span>
-              Gün {gun}
-            </h3>
+            <div className="flex flex-wrap items-baseline justify-between gap-2 mb-3">
+              <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                <span className="w-7 h-7 rounded-lg bg-violet-100 text-violet-700 flex items-center justify-center text-xs font-black">{gun}</span>
+                Gün {gun}
+              </h3>
+              <span className="text-[10px] font-semibold text-gray-400">{gunlukOzetMetni(gunluk[gun] ?? [])}</span>
+            </div>
             <ul className="space-y-2">
-              {(gunluk[gun] ?? []).map((g) => (
+              {(gunluk[gun] ?? []).map((g, oturumIndex) => {
+                const oturumNo = gorevBlokNoParse(g.baslik) ?? oturumIndex + 1;
+                const konuBaslik = gorevBaslikTemizle(g.baslik);
+                return (
                 <li key={g.id} className="flex items-start gap-3 p-3 rounded-xl bg-gray-50/80 border border-gray-100/80">
                   {g.tamamlandi ? (
                     <CheckCircle className="w-5 h-5 text-emerald-500 shrink-0" />
@@ -94,11 +126,20 @@ export default function VeliOgrenciStudyPlanPage() {
                     <Circle className="w-5 h-5 text-gray-300 shrink-0" />
                   )}
                   <div>
-                    <p className="text-sm font-semibold text-gray-900">{g.ders} — {g.baslik}</p>
-                    <p className="text-xs text-gray-500 mt-0.5">{g.konu} · {g.sureDakika} dk</p>
+                    <div className="flex flex-wrap items-center gap-2 mb-0.5">
+                      <span className="text-[9px] font-bold uppercase tracking-wider text-violet-700 bg-violet-100 px-1.5 py-0.5 rounded">
+                        {oturumEtiketi(oturumNo)}
+                      </span>
+                      <span className="text-[10px] text-gray-400 tabular-nums">
+                        {oturumSaatAraligi(oturumNo, g.sureDakika)}
+                      </span>
+                    </div>
+                    <p className="text-sm font-semibold text-gray-900">{konuBaslik}</p>
+                    <p className="text-xs text-gray-500 mt-0.5">{g.ders} · {g.sureDakika} dk</p>
                   </div>
                 </li>
-              ))}
+              );
+              })}
             </ul>
           </VeliPanel>
         ))}

@@ -20,8 +20,20 @@ const VARSAYILAN_IZINLER: Record<string, string[]> = {
   // ADMIN ve SUPER_ADMIN için '*' her şeyi açar (UI tarafında yorumlanır)
   SUPER_ADMIN: ['*'],
   ADMIN: ['*'],
-  TEACHER: ['/panel', '/panel/sorular', '/panel/ai'],
+  // Sınav listesi: hoca branş sırasına göre soru atar; yayın/oluşturma admin’de kalır
+  TEACHER: ['/panel', '/panel/sorular', '/panel/ai', '/panel/sinavlar'],
 };
+
+/** Eski varsayılan (sinavlar menüsü yok) — soft migration */
+const ESKI_TEACHER_MENULER = ['/panel', '/panel/sorular', '/panel/ai'];
+
+function teacherMenuleriMigrate(liste: string[]): string[] {
+  if (liste.includes('*') || liste.includes('/panel/sinavlar')) return liste;
+  const sirali = [...liste].sort().join(',');
+  const eski = [...ESKI_TEACHER_MENULER].sort().join(',');
+  if (sirali === eski) return [...liste, '/panel/sinavlar'];
+  return liste;
+}
 
 async function izinleriOku(): Promise<Record<string, string[]>> {
   const kayit = await prisma.sistemAyarlari.findUnique({ where: { anahtar: AYAR_ANAHTAR } });
@@ -29,7 +41,11 @@ async function izinleriOku(): Promise<Record<string, string[]>> {
   try {
     const parsed = JSON.parse(kayit.deger);
     if (parsed && typeof parsed === 'object') {
-      return { ...VARSAYILAN_IZINLER, ...parsed };
+      const merged: Record<string, string[]> = { ...VARSAYILAN_IZINLER, ...parsed };
+      if (Array.isArray(merged.TEACHER)) {
+        merged.TEACHER = teacherMenuleriMigrate(merged.TEACHER);
+      }
+      return merged;
     }
   } catch {}
   return VARSAYILAN_IZINLER;

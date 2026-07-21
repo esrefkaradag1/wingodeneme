@@ -33,6 +33,16 @@ import { sureMsToMetin } from '@/lib/sureFormat';
 import OgretmenTahtaAnlatimi from '@/components/exam/OgretmenTahtaAnlatimi';
 import type { HataAciklaVeri } from '@/lib/hataAciklaTahta';
 
+interface TahminiSiralama {
+  sira: number;
+  havuz: number;
+  gercekKatilim: number;
+  ortalamaNet: number;
+  ogrenciNet: number;
+  yuzdelik: number;
+  ilkUc: Array<{ sira: number; tahminiNet: number }>;
+}
+
 interface SonucVerisi {
   id: string;
   durum: string;
@@ -43,6 +53,9 @@ interface SonucVerisi {
   hamPuan: number;
   ulusalSiralama: number | null;
   yuzdelik: number | null;
+  gosterilenSiralama?: number | null;
+  siralamaHavuz?: number;
+  tahminiSiralama?: TahminiSiralama | null;
   sinav: { baslik: string; tur: string };
   kazanimAnalizi?: Array<{
     kazanim: string;
@@ -55,12 +68,22 @@ interface SonucVerisi {
     basariYuzdesi: number;
     yanlisSoruNo: number[];
   }>;
+  konuAnalizi?: Array<{
+    ders: string;
+    konu: string;
+    toplam: number;
+    dogru: number;
+    yanlis: number;
+    bos: number;
+    basariYuzdesi: number;
+  }>;
   cevaplar: Array<{
     id: string;
     soruId: string;
     secilen: string | null;
     dogru: boolean | null;
     sureMs?: number | null;
+    platformBasariYuzdesi?: number | null;
     soru: {
       siraNo: number;
       metinHtml: string;
@@ -163,6 +186,8 @@ export default function SinavSonucSayfasi() {
   const k = data;
   const cevaplarSirali = [...(k.cevaplar || [])].sort((a, b) => a.soru.siraNo - b.soru.siraNo);
   const kazanimAnalizi = k.kazanimAnalizi || [];
+  const konuAnalizi = k.konuAnalizi || [];
+  const konuAnaliziGoster = konuAnalizi.filter((ka) => ka.dogru + ka.yanlis > 0);
   const zaman = k.zamanAnalizi;
 
   return (
@@ -210,8 +235,49 @@ export default function SinavSonucSayfasi() {
         <OzetKutu ikon={<CheckCircle2 className="w-6 h-6" />} etiket="Doğru" deger={k.dogruSayisi} color="emerald" />
         <OzetKutu ikon={<XCircle className="w-6 h-6" />} etiket="Yanlış" deger={k.yanlisSayisi} color="rose" />
         <OzetKutu ikon={<MinusCircle className="w-6 h-6" />} etiket="Boş" deger={k.bosSayisi} color="slate" />
-        <OzetKutu ikon={<Trophy className="w-6 h-6" />} etiket="Sıralama" deger={k.ulusalSiralama ? `#${k.ulusalSiralama}` : '—'} color="amber" />
+        <OzetKutu
+          ikon={<Trophy className="w-6 h-6" />}
+          etiket={k.siralamaHavuz ? `Sıra / ${k.siralamaHavuz.toLocaleString('tr-TR')}` : 'Sıralama'}
+          deger={
+            k.gosterilenSiralama
+              ? `#${k.gosterilenSiralama.toLocaleString('tr-TR')}`
+              : k.ulusalSiralama
+                ? `#${k.ulusalSiralama}`
+                : '—'
+          }
+          color="amber"
+        />
       </div>
+
+      {k.tahminiSiralama && (
+        <div className="rounded-2xl border border-amber-100 bg-amber-50/50 p-5">
+          <p className="text-[11px] font-bold uppercase tracking-widest text-amber-700 mb-3">
+            Tahmini sıralama (2000 üzerinden)
+          </p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {k.tahminiSiralama.ilkUc.map((u) => (
+              <div key={u.sira} className="rounded-xl bg-white border border-amber-100 p-3 text-center">
+                <p className="text-[10px] font-bold text-gray-400 uppercase">{u.sira}. sıra</p>
+                <p className="text-xl font-bold text-gray-900">#{u.sira}</p>
+                <p className="text-xs text-gray-500">~{u.tahminiNet} net</p>
+              </div>
+            ))}
+            <div className="rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 text-white p-3 text-center shadow">
+              <p className="text-[10px] font-bold uppercase text-white/80">Senin sıran</p>
+              <p className="text-2xl font-bold">
+                #{k.tahminiSiralama.sira.toLocaleString('tr-TR')}
+              </p>
+              <p className="text-[11px] text-white/80">
+                / {k.tahminiSiralama.havuz.toLocaleString('tr-TR')} · %{k.tahminiSiralama.yuzdelik}
+              </p>
+            </div>
+          </div>
+          <p className="text-xs text-gray-500 mt-3">
+            Deneme ortalaması {k.tahminiSiralama.ortalamaNet} net · gerçek katılım{' '}
+            {k.tahminiSiralama.gercekKatilim} kişi
+          </p>
+        </div>
+      )}
 
       {/* Zaman Analizi */}
       {zaman && zaman.kayitliSoruSayisi > 0 && (
@@ -274,6 +340,58 @@ export default function SinavSonucSayfasi() {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Konu Bazlı Analiz */}
+      {konuAnaliziGoster.length > 0 && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <div>
+              <h2 className="text-lg font-bold text-gray-900 flex items-center gap-3">
+                <Target className="w-6 h-6 text-indigo-600" /> Konu Bazlı Analiz
+              </h2>
+              <p className="text-xs text-gray-500 mt-1">
+                Yalnızca en az bir doğru veya yanlış cevabın olduğu konular gösterilir.{' '}
+                <span className="font-semibold">D: Doğru · Y: Yanlış · B: Boş</span>
+              </p>
+            </div>
+            <div className="text-xs font-bold text-gray-400 uppercase tracking-widest">
+              {konuAnaliziGoster.length} konu
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {konuAnaliziGoster.map((ka) => {
+              const renk =
+                ka.basariYuzdesi >= 70
+                  ? 'border-emerald-100 bg-emerald-50/40'
+                  : ka.basariYuzdesi >= 50
+                    ? 'border-amber-100 bg-amber-50/40'
+                    : 'border-rose-100 bg-rose-50/40';
+
+              return (
+                <div key={`${ka.ders}-${ka.konu}`} className={`rounded-2xl border p-5 ${renk}`}>
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0">
+                      <div className="text-[10px] font-bold text-indigo-600 uppercase tracking-widest mb-1">
+                        {ka.ders}
+                      </div>
+                      <div className="text-sm font-bold text-gray-900 leading-snug">{ka.konu}</div>
+                      <div className="mt-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                        D:{ka.dogru} Y:{ka.yanlis} B:{ka.bos}
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <div className="text-2xl font-bold tracking-tight text-gray-900">
+                        %{ka.basariYuzdesi.toFixed(0)}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 
@@ -476,7 +594,12 @@ export default function SinavSonucSayfasi() {
                                      <span className="text-[11px] font-bold text-indigo-600">{c.soru.konu.ad}</span>
                                   </div>
                                   <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest flex items-center gap-1">
-                                     Başarı Oranı: <span className="text-gray-900">%65</span>
+                                     Platform başarı:{' '}
+                                     <span className="text-gray-900">
+                                       {typeof c.platformBasariYuzdesi === 'number'
+                                         ? `%${c.platformBasariYuzdesi.toFixed(0)}`
+                                         : '—'}
+                                     </span>
                                   </div>
                                </div>
 

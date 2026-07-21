@@ -123,6 +123,7 @@ export function SoruKarti({ soru, secilen, onSec, aktif, onTikla, saltOkunur, ko
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
+                onTikla?.();
                 secenekTikla(sik);
               }}
               className={`osym-secenek w-full text-left group p-2 rounded-xl border border-transparent transition-all ${isaretli ? 'bg-indigo-50 border-indigo-100 shadow-sm' : 'hover:bg-gray-50'}`}

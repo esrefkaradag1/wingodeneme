@@ -135,7 +135,8 @@ export default function AnalizSayfasi() {
           <h2 className="text-sm font-bold text-gray-900">Hangi soruda ne kadar bekledin?</h2>
         </div>
         <p className="text-xs text-gray-500 mb-5">
-          Tamamladığın sınavlarda her soruda geçirdiğin süreyi inceleyebilir, en uzun kaldığın soruları görebilirsin.
+          Hangi soruda ne kadar kaldığını gör. Ortalama aykırı değerleri (tek soruya yığılan süreler)
+          hariç tutar; kapsama oranı ölçüm kalitesini gösterir.
         </p>
         <OgrenciSureAnaliziPanel analizler={sureAnalizleri} />
       </section>

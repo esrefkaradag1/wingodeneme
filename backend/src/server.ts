@@ -266,14 +266,12 @@ async function baslatSunucu(): Promise<void> {
     logger.error('Error updating existing KPSS group bank exams:', err.message);
   });
 
-  // KPSS konularını veritabanına otomatik olarak yükleme
-  prisma.konu.findFirst({
-    where: { ogretimTuru: { in: ['KPSS_LISANS', 'KPSS_ONLISANS', 'KPSS_ORTAOGRETIM'] } }
-  }).then(async (varMi) => {
-    if (!varMi) {
-      logger.info('KPSS Konuları veritabanında bulunamadı. Otomatik yükleme başlatılıyor...');
+  // KPSS konularını senkronize et (eksik Türkçe vb. başlıkları ekle / güncelle)
+  void (async () => {
+    try {
       let eklenen = 0;
       for (const konu of KPSS_KONU_AGACI) {
+        const onceki = await prisma.konu.findUnique({ where: { id: konu.id }, select: { id: true } });
         await prisma.konu.upsert({
           where: { id: konu.id },
           update: {
@@ -283,15 +281,17 @@ async function baslatSunucu(): Promise<void> {
             uniteAdi: konu.uniteAdi,
             yksSegment: konu.yksSegment,
           },
-          create: { ...konu, kazanimlar: [] }
+          create: { ...konu, kazanimlar: [] },
         });
-        eklenen++;
+        if (!onceki) eklenen++;
       }
-      logger.info(`KPSS Konuları başarıyla veritabanına yüklendi: ${eklenen} adet konu eklendi.`);
+      if (eklenen > 0) {
+        logger.info(`KPSS konu ağacı senkron: ${eklenen} yeni konu eklendi (toplam şablon ${KPSS_KONU_AGACI.length}).`);
+      }
+    } catch (err) {
+      logger.error('Error syncing KPSS topics:', (err as Error).message);
     }
-  }).catch(err => {
-    logger.error('Error loading KPSS topics:', err.message);
-  });
+  })();
 
 
   // Vercel serverless ortamda listen() çağrılmaz

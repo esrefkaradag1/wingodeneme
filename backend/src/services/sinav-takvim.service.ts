@@ -3,6 +3,7 @@ import { AppHatasi } from '../middlewares/hata.middleware';
 import { ogrenciSinavErisimiVar, ogrenciSinavSatinAlmaSahipMi } from './sinav.service';
 import { ogrenciBildirimGonder, adminlereSiparisBildirimi } from './bildirim.service';
 import { SinavTuru } from '@prisma/client';
+import { platformSinavTurleri } from '../utils/netHesapla';
 import {
   kademeliMiktarDagit,
   kademeliSepetToplamHesapla,
@@ -131,15 +132,17 @@ export async function adminSinavTakvimSil(id: string) {
 }
 
 /** Oturum olmadan yayınlanmış takvim sınavları */
-export async function publicSinavTakvimListele(yil: number, ay: number) {
+export async function publicSinavTakvimListele(yil: number, ay: number, isKpssPlatform = false) {
   const { baslangic, bitis } = ayAraligi(yil, ay);
   const simdi = new Date();
+  const izinliTurler = platformSinavTurleri(isKpssPlatform) as SinavTuru[];
 
   const sinavlar = await prisma.sinav.findMany({
     where: {
       yayinlandi: true,
       takvimdeGoster: true,
       baslangicZamani: { gte: baslangic, lte: bitis },
+      tur: { in: izinliTurler },
     },
     orderBy: { baslangicZamani: 'asc' },
     include: {
@@ -169,9 +172,16 @@ export async function publicSinavTakvimListele(yil: number, ay: number) {
   }));
 }
 
-export async function ogrenciSinavTakvimListele(ogrenciId: string, kullaniciId: string, yil: number, ay: number) {
+export async function ogrenciSinavTakvimListele(
+  ogrenciId: string,
+  kullaniciId: string,
+  yil: number,
+  ay: number,
+  isKpssPlatform = false,
+) {
   const { baslangic, bitis } = ayAraligi(yil, ay);
   const simdi = new Date();
+  const izinliTurler = platformSinavTurleri(isKpssPlatform) as SinavTuru[];
 
   const [sinavlar, atamalar, bekleyenSatinAlimlar] = await Promise.all([
     prisma.sinav.findMany({
@@ -179,6 +189,7 @@ export async function ogrenciSinavTakvimListele(ogrenciId: string, kullaniciId: 
         yayinlandi: true,
         takvimdeGoster: true,
         baslangicZamani: { gte: baslangic, lte: bitis },
+        tur: { in: izinliTurler },
       },
       orderBy: { baslangicZamani: 'asc' },
       include: {

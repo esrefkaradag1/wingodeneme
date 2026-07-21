@@ -7,10 +7,11 @@ import type { AuthRequest } from '../middlewares/auth.middleware';
 import { cache } from '../config/redis';
 import { aiSoruKaliteIsleme } from '../services/soruAiKalite';
 import { soruUretimGarantiKatmani } from '../services/soruGarantiKatmani';
-import { ensureGrupBankaSinavi } from '../utils/grupBankaSinavi';
+import { ensureGrupBankaSinavi, GRUP_BANKA_SINAV_BASLIGI } from '../utils/grupBankaSinavi';
 import { platformOgretimTuruUyumlu } from '../utils/paketPlatformFiltre';
 import { validateUretilenSoruListesi } from '../utils/soruUretimDogrulama';
-import { ogretmenIcinGrupTurlari, reqOgretmenKisit, ogretmenBransKayitNormalize, ogretmenBranslarByTurNormalize, ogretmenSoruIslemIzni, ogretmenSoruIdsIslemIzni, ogretmenKendiSorulariWhere } from '../services/ogretmenSinirlama';
+import { ogretmenIcinGrupTurlari, reqOgretmenKisit, ogretmenBransKayitNormalize, ogretmenBranslarByTurNormalize, ogretmenSoruIslemIzni, ogretmenSoruIdsIslemIzni, ogretmenKendiSorulariWhere, ogretmenSinavAtamaOnayEngeli, ogretmenSinavTuruneErisebilir, ogretmenKonuUretebilirMi } from '../services/ogretmenSinirlama';
+import { kpssUcretsizSinavTopluAta, kpssUcretsizSinavAtaOgrenciArkaPlan } from '../services/kpssKademeSinavAtama.service';
 import { grupOgretmenFiltreyeUygun, ogretimTuruPrismaFiltre } from '../utils/grupOgretimTuru';
 import {
   normalizeSinavOturumlar,
@@ -20,7 +21,7 @@ import { parseSinavTuru, prismaSinavTuruHatasiMi } from '../utils/sinavTur';
 import { parseIsoTarih } from '../utils/sinavZaman';
 import { ogrenciProfilOgretimGirdisi } from '../utils/ogretimTuru';
 import { sinavSureAnaliziGetir } from '../services/sinav.service';
-import { denemeKarnesiGetir, sinavKatilimlariListele } from '../services/deneme-karnesi.service';
+import { denemeKarnesiGetir, sinavKatilimlariListele, sinavCanliDurumGetir, sinavlarCanliOzetGetir } from '../services/deneme-karnesi.service';
 import { aktiviteKaydet } from '../services/kullaniciAktivite.service';
 import { soruKullaniciOzetSelect } from '../utils/soruDuzenleyen';
 import { konuIdListesiNormalize } from '../utils/soruKonuEtiket';
@@ -30,6 +31,8 @@ import {
   uygunGrupIdsNormalize,
 } from '../utils/soruUygunGrup';
 import { kpssKardesKonuIds, kpssKardesSayilariBirlestir } from '../utils/kpssKardesKonu';
+import { sinavdaMukerrerSoruVarMi, sinavSoruImzaHaritasi } from '../utils/sinavMukerrerSoru';
+import { soruMetinImzasi, soruMetinImzasiGecerli } from '../utils/soruMetinImza';
 
 const ZORLUK_DEGERLERI: SoruZorlugu[] = ['KOLAY', 'ORTA', 'ZOR'];
 
@@ -175,13 +178,21 @@ export async function sinavlarListesiController(req: AuthRequest, res: Response,
 
     const where: any = {};
     if (ogrKisit) {
-      where.grup = { tur: ogrKisit.ogretimTuru };
+      const turler = ogretmenIcinGrupTurlari(ogrKisit) ?? [ogrKisit.ogretimTuru];
+      // Öğretmen denemelere soru atar; grup havuzu («Soru Bankası») ayrı akışta kalır
+      where.AND = [
+        { grup: { tur: { in: turler } } },
+        { baslik: { not: GRUP_BANKA_SINAV_BASLIGI } },
+      ];
     } else if (platformTurleri) {
       where.grup = { tur: { in: platformTurleri } };
     }
 
+    const ogretmenTurKey = ogrKisit
+      ? (ogretmenIcinGrupTurlari(ogrKisit) ?? [ogrKisit.ogretimTuru]).slice().sort().join(',')
+      : null;
     const platformKey = isKpss ? 'KPSS' : 'YKS_LGS';
-    const cacheKey = `admin:sinavlar:${ogrKisit?.ogretimTuru || platformKey}`;
+    const cacheKey = `admin:sinavlar:${ogretmenTurKey || platformKey}:v2`;
     const cached = await cache.al<any[]>(cacheKey);
     if (cached) {
       res.json({ basarili: true, veri: cached });
@@ -210,6 +221,27 @@ async function sinavListesiCacheTemizle(): Promise<void> {
   await cache.siliModeliyle('admin:sinavlar:*');
 }
 
+/** KPSS: kademeye göre yayındaki ücretsiz denemelere eksik öğrenci atamalarını tamamlar */
+export async function kpssKademeOtomatikAtaController(
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const veri = await kpssUcretsizSinavTopluAta();
+    res.json({
+      basarili: true,
+      mesaj:
+        veri.yeniAtama > 0
+          ? `${veri.yeniAtama} yeni atama yapıldı (${veri.sinavSayisi} sınav tarandı).`
+          : `Eksik atama yok (${veri.sinavSayisi} sınav tarandı).`,
+      veri,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function sinavDetayAdminController(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   try {
     const ogrKisit = await reqOgretmenKisit(req);
@@ -228,7 +260,7 @@ export async function sinavDetayAdminController(req: AuthRequest, res: Response,
       return;
     }
 
-    if (ogrKisit && sinav.grup.tur !== ogrKisit.ogretimTuru) {
+    if (ogrKisit && !ogretmenSinavTuruneErisebilir(ogrKisit, sinav.grup?.tur)) {
       res.status(403).json({ basarili: false, mesaj: 'Bu sınava erişim yetkiniz yok (kademe uyuşmazlığı).' });
       return;
     }
@@ -256,6 +288,27 @@ export async function sinavKatilimlariAdminController(req: AuthRequest, res: Res
   }
 }
 
+/** Tüm aktif / canlı sınav özeti (KPSS panelde anlık kim girdi) */
+export async function sinavlarCanliOzetController(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const platformTurleri = (req as AuthRequest & { platformTurleri?: string[] }).platformTurleri;
+    const veri = await sinavlarCanliOzetGetir(platformTurleri);
+    res.json({ basarili: true, veri });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/** Tek sınav canlı katılım */
+export async function sinavCanliDurumController(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const veri = await sinavCanliDurumGetir(req.params.sinavId);
+    res.json({ basarili: true, veri });
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function denemeKarnesiAdminController(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   try {
     const veri = await denemeKarnesiGetir(req.params.katilimId);
@@ -265,12 +318,20 @@ export async function denemeKarnesiAdminController(req: AuthRequest, res: Respon
   }
 }
 
-export async function sinavSorulariAdminController(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function sinavSorulariAdminController(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   try {
     const { sinavId } = req.params;
-    const varMi = await prisma.sinav.findUnique({ where: { id: sinavId }, select: { id: true } });
-    if (!varMi) {
+    const sinav = await prisma.sinav.findUnique({
+      where: { id: sinavId },
+      select: { id: true, grup: { select: { tur: true } } },
+    });
+    if (!sinav) {
       res.status(404).json({ basarili: false, mesaj: 'Sınav bulunamadı' });
+      return;
+    }
+    const ogrKisit = await reqOgretmenKisit(req);
+    if (ogrKisit && !ogretmenSinavTuruneErisebilir(ogrKisit, sinav.grup?.tur)) {
+      res.status(403).json({ basarili: false, mesaj: 'Bu sınava erişim yetkiniz yok (kademe uyuşmazlığı).' });
       return;
     }
     const sorular = await prisma.soru.findMany({
@@ -474,6 +535,26 @@ export async function soruEkleController(req: AuthRequest, res: Response, next: 
       grupId?: string;
       uygunGrupIds?: string[];
     };
+    if (!konuId || typeof konuId !== 'string') {
+      res.status(400).json({ basarili: false, mesaj: 'konuId gerekli' });
+      return;
+    }
+
+    const konu = await prisma.konu.findUnique({
+      where: { id: konuId },
+      select: { id: true, ders: true, ogretimTuru: true },
+    });
+    if (!konu) {
+      res.status(404).json({ basarili: false, mesaj: 'Konu bulunamadı' });
+      return;
+    }
+
+    const ogrKisit = await reqOgretmenKisit(req);
+    if (ogrKisit && !ogretmenKonuUretebilirMi(ogrKisit, konu)) {
+      res.status(403).json({ basarili: false, mesaj: 'Bu branş veya kademe için soru oluşturma yetkiniz yok.' });
+      return;
+    }
+
     let sinavId: string | null = req.params.id === 'pool' ? null : req.params.id;
     if (req.params.id === 'pool' && typeof bodyGrupId === 'string' && bodyGrupId.trim() !== '') {
       const bankaId = await ensureGrupBankaSinavi(bodyGrupId.trim());
@@ -483,11 +564,37 @@ export async function soruEkleController(req: AuthRequest, res: Response, next: 
       }
       sinavId = bankaId;
     }
-    if (!konuId || typeof konuId !== 'string') {
-      res.status(400).json({ basarili: false, mesaj: 'konuId gerekli' });
-      return;
+
+    if (ogrKisit && sinavId) {
+      const sinav = await prisma.sinav.findUnique({
+        where: { id: sinavId },
+        select: { baslik: true, grup: { select: { tur: true } } },
+      });
+      if (!sinav) {
+        res.status(404).json({ basarili: false, mesaj: 'Sınav bulunamadı' });
+        return;
+      }
+      if (!ogretmenSinavTuruneErisebilir(ogrKisit, sinav.grup?.tur)) {
+        res.status(403).json({ basarili: false, mesaj: 'Bu sınava / havuza erişim yetkiniz yok (kademe uyuşmazlığı).' });
+        return;
+      }
     }
+
     const z = parseZorluk(zorluk);
+    // Öğretmen manuel soruları onay bekler; admin doğrudan onaylı ekler
+    const onayDurumu = ogrKisit ? SoruOnayDurumu.ONAY_BEKLIYOR : SoruOnayDurumu.ONAYLANDI;
+
+    if (sinavId) {
+      const mukerrer = await sinavdaMukerrerSoruVarMi(sinavId, String(metinHtml ?? ''));
+      if (mukerrer.var) {
+        res.status(400).json({
+          basarili: false,
+          mesaj: `Bu soru metni sınava zaten eklenmiş (S.${mukerrer.siraNo}). Mükerrer soru eklenemez.`,
+        });
+        return;
+      }
+    }
+
     const soru = await prisma.soru.create({
       data: {
         sinavId,
@@ -499,7 +606,7 @@ export async function soruEkleController(req: AuthRequest, res: Response, next: 
         dogruCevap: String(dogruCevap ?? 'A'),
         zorluk: z,
         kazanim: kazanim != null && String(kazanim).length > 0 ? String(kazanim) : null,
-        onayDurumu: SoruOnayDurumu.ONAYLANDI,
+        onayDurumu,
         ...(aiUretildi === true ? { aiUretildi: true } : {}),
         ...(typeof aiModeli === 'string' && aiModeli.length > 0 ? { aiModeli } : {}),
         ...(kullaniciId ? { olusturanId: kullaniciId, duzenleyenId: kullaniciId } : {}),
@@ -561,6 +668,11 @@ export async function soruBankaTopluController(req: AuthRequest, res: Response, 
     const konu = await prisma.konu.findUnique({ where: { id: primaryKonuId } });
     if (!konu) {
       res.status(404).json({ basarili: false, mesaj: 'Konu bulunamadı' });
+      return;
+    }
+    const ogrKisit = await reqOgretmenKisit(req);
+    if (ogrKisit && !ogretmenKonuUretebilirMi(ogrKisit, konu)) {
+      res.status(403).json({ basarili: false, mesaj: 'Bu branş veya kademe için soru kaydetme yetkiniz yok.' });
       return;
     }
     const secenekSayisi = konu.ogretimTuru === 'LGS' ? 4 : 5;
@@ -648,11 +760,22 @@ export async function soruBankaTopluController(req: AuthRequest, res: Response, 
 
     const modelEtiket = typeof aiModeli === 'string' && aiModeli.length > 0 ? aiModeli : null;
 
+    const sinavImzaHaritasi = rawSinav ? await sinavSoruImzaHaritasi(rawSinav) : null;
+    const batchImzalar = new Set<string>();
+
     const olusturulan = await prismaInteraktifTransaction(async (tx) => {
       const rows = [];
       for (let i = 0; i < sonSorular.length; i++) {
         const d = sonSorular[i];
         const s = sorular[i];
+        const metin = String(d.metinHtml ?? d.metin ?? s.metinHtml ?? '');
+        const imza = soruMetinImzasi(metin);
+        if (rawSinav && soruMetinImzasiGecerli(imza)) {
+          if (sinavImzaHaritasi?.has(imza) || batchImzalar.has(imza)) {
+            continue;
+          }
+          batchImzalar.add(imza);
+        }
         const soru = await tx.soru.create({
           data: {
             konuId: primaryKonuId,
@@ -737,6 +860,11 @@ export async function soruOnayGuncelleController(req: AuthRequest, res: Response
     const izin = await ogretmenSoruIslemIzni(req, mevcut);
     if (!izin.ok) {
       res.status(izin.status).json({ basarili: false, mesaj: izin.mesaj });
+      return;
+    }
+    const atamaEngeli = await ogretmenSinavAtamaOnayEngeli(req, [id], onayDurumu);
+    if (!atamaEngeli.ok) {
+      res.status(atamaEngeli.status).json({ basarili: false, mesaj: atamaEngeli.mesaj });
       return;
     }
     const soru = await prisma.soru.update({
@@ -1795,6 +1923,9 @@ export async function kullaniciOlusturAdminController(req: AuthRequest, res: Res
       res.status(500).json({ basarili: false, mesaj: 'Kullanıcı oluşturulamadı' });
       return;
     }
+    if (yeni.rol === Rol.OGRENCI && yeni.ogrenciProfil) {
+      kpssUcretsizSinavAtaOgrenciArkaPlan(yeni.ogrenciProfil.id, yeni.ogrenciProfil.ogretimTuru);
+    }
     const { sifre: _s, refreshToken: _r, dogrulamaKodu: _d, ...guvenli } = yeni;
     res.status(201).json({ basarili: true, veri: guvenli });
   } catch (err) { next(err); }
@@ -2343,6 +2474,11 @@ export async function soruTopluOnayGuncelleController(req: AuthRequest, res: Res
       res.status(topluIzin.status).json({ basarili: false, mesaj: topluIzin.mesaj });
       return;
     }
+    const atamaEngeli = await ogretmenSinavAtamaOnayEngeli(req, ids, onayDurumu);
+    if (!atamaEngeli.ok) {
+      res.status(atamaEngeli.status).json({ basarili: false, mesaj: atamaEngeli.mesaj });
+      return;
+    }
 
     // Etkilenen sınav id'leri (cache silmek için)
     const sorular = await prisma.soru.findMany({
@@ -2571,10 +2707,29 @@ export async function soruGuncelleController(req: AuthRequest, res: Response, ne
       }
     }
 
+    // Boş konuId gönderilirse Prisma güncellemeyi atlar → başarı mesajı gelir ama TYT/YKS konusu kalır.
+    if (konuId !== undefined && (konuId === null || String(konuId).trim() === '')) {
+      res.status(400).json({
+        basarili: false,
+        mesaj: 'Konu seçimi zorunlu. Kademe değiştirdiyseniz yeni müfredattan bir konu seçin.',
+      });
+      return;
+    }
+
+    let hedefKonuId: string | undefined;
+    if (konuId !== undefined && String(konuId).trim() !== '') {
+      hedefKonuId = String(konuId).trim();
+      const konuVar = await prisma.konu.findUnique({ where: { id: hedefKonuId }, select: { id: true } });
+      if (!konuVar) {
+        res.status(400).json({ basarili: false, mesaj: 'Seçilen konu bulunamadı' });
+        return;
+      }
+    }
+
     const soru = await prisma.soru.update({
       where: { id },
       data: {
-        konuId: konuId !== undefined && konuId !== '' ? konuId : undefined,
+        konuId: hedefKonuId,
         ...(hedefSinavId !== undefined ? { sinavId: hedefSinavId } : {}),
         siraNo: siraNo !== undefined ? parseInt(String(siraNo), 10) : undefined,
         metinHtml: metinHtml !== undefined ? String(metinHtml) : undefined,
@@ -2627,10 +2782,15 @@ export async function soruGuncelleController(req: AuthRequest, res: Response, ne
 }
 
 /**
- * Sınavın konu dağılımına bakarak, grubun soru bankasından (havuzdan)
- * eksik olan soru adedi kadar soruyu otomatik olarak bu sınawa atar.
+ * Sınava soru ata.
+ * - Kaynak banka / havuz (null veya «Soru Bankası») → taşı (move)
+ * - Kaynak başka bir deneme sınavıysa → kopyala (clone); önceki kitapçık bozulmaz
+ * Böylece aynı içerik KPSS Lisans + Önlisans + Ortaöğretim denemelerinde birlikte kullanılabilir.
+ *
+ * TEACHER: yalnızca kendi branş/kendi soruları; atama sonrası onayDurumu = ONAY_BEKLIYOR
+ * (öğrenci sınavında görünmez; admin onaylayınca aktif olur).
  */
-export async function sinavaSoruAtaController(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function sinavaSoruAtaController(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   try {
     const { id: sinavId } = req.params;
     const { soruIds, hedefKonuId } = req.body as { soruIds?: unknown; hedefKonuId?: unknown };
@@ -2640,9 +2800,18 @@ export async function sinavaSoruAtaController(req: Request, res: Response, next:
       return;
     }
 
-    const sinav = await prisma.sinav.findUnique({ where: { id: sinavId }, select: { id: true } });
+    const sinav = await prisma.sinav.findUnique({
+      where: { id: sinavId },
+      select: { id: true, grup: { select: { tur: true } } },
+    });
     if (!sinav) {
       res.status(404).json({ basarili: false, mesaj: 'Sınav bulunamadı' });
+      return;
+    }
+
+    const ogrKisit = await reqOgretmenKisit(req);
+    if (ogrKisit && !ogretmenSinavTuruneErisebilir(ogrKisit, sinav.grup?.tur)) {
+      res.status(403).json({ basarili: false, mesaj: 'Bu sınava erişim yetkiniz yok (kademe uyuşmazlığı).' });
       return;
     }
 
@@ -2650,10 +2819,42 @@ export async function sinavaSoruAtaController(req: Request, res: Response, next:
     const hedefKonu =
       typeof hedefKonuId === 'string' && hedefKonuId.trim().length > 0 ? hedefKonuId.trim() : null;
 
+    if (ogrKisit) {
+      const sahiplik = await ogretmenSoruIdsIslemIzni(req, ids);
+      if (!sahiplik.ok) {
+        res.status(sahiplik.status).json({ basarili: false, mesaj: sahiplik.mesaj });
+        return;
+      }
+    }
+
     if (hedefKonu) {
       const konuVar = await prisma.konu.findUnique({ where: { id: hedefKonu }, select: { id: true } });
       if (!konuVar) {
         res.status(400).json({ basarili: false, mesaj: 'Hedef konu bulunamadı' });
+        return;
+      }
+    }
+
+    const mevcutlar = await prisma.soru.findMany({
+      where: { id: { in: ids } },
+      include: {
+        uygunGruplar: { select: { grupId: true } },
+        ekKonular: { select: { konuId: true } },
+        sinav: { select: { id: true, baslik: true } },
+      },
+    });
+    if (mevcutlar.length === 0) {
+      res.status(404).json({ basarili: false, mesaj: 'Soru bulunamadı' });
+      return;
+    }
+
+    if (ogrKisit) {
+      const reddedilen = mevcutlar.filter((s) => s.onayDurumu === SoruOnayDurumu.REDDEDILDI);
+      if (reddedilen.length > 0) {
+        res.status(400).json({
+          basarili: false,
+          mesaj: 'Reddedilmiş sorular sınava atanamaz.',
+        });
         return;
       }
     }
@@ -2664,25 +2865,145 @@ export async function sinavaSoruAtaController(req: Request, res: Response, next:
     });
     let siraNo = (maxSira._max.siraNo ?? 0) + 1;
 
-    await prisma.$transaction(
-      ids.map((sid) =>
-        prisma.soru.update({
-          where: { id: sid },
+    const sinavImzaHaritasi = await sinavSoruImzaHaritasi(sinavId);
+
+    let tasinan = 0;
+    let kopyalanan = 0;
+    let atlanan = 0;
+    const etkilenenSinavIds = new Set<string>([sinavId]);
+    const ogretmenAtama = Boolean(ogrKisit);
+    const talepEdenId = req.kullanici?.userId;
+
+    const atamaAiMeta = (mevcut: unknown): Prisma.InputJsonValue => {
+      const base =
+        mevcut && typeof mevcut === 'object' && !Array.isArray(mevcut)
+          ? { ...(mevcut as Record<string, unknown>) }
+          : {};
+      return {
+        ...base,
+        atamaOnay: {
+          talepEdenId: talepEdenId ?? null,
+          talepZamani: new Date().toISOString(),
+        },
+      } as Prisma.InputJsonValue;
+    };
+
+    await prismaInteraktifTransaction(async (tx) => {
+      for (const orijinal of mevcutlar) {
+        if (orijinal.sinavId === sinavId) {
+          atlanan++;
+          continue;
+        }
+
+        const imza = soruMetinImzasi(orijinal.metinHtml);
+        if (soruMetinImzasiGecerli(imza) && sinavImzaHaritasi.has(imza)) {
+          atlanan++;
+          continue;
+        }
+
+        const kaynakBankaMi =
+          !orijinal.sinavId ||
+          orijinal.sinav?.baslik === GRUP_BANKA_SINAV_BASLIGI;
+
+        if (kaynakBankaMi) {
+          // Havuzdan denemeye taşı
+          if (orijinal.sinavId) etkilenenSinavIds.add(orijinal.sinavId);
+          await tx.soru.update({
+            where: { id: orijinal.id },
+            data: {
+              sinavId,
+              siraNo: siraNo++,
+              ...(hedefKonu ? { konuId: hedefKonu } : {}),
+              ...(ogretmenAtama
+                ? {
+                    onayDurumu: SoruOnayDurumu.ONAY_BEKLIYOR,
+                    aiMeta: atamaAiMeta(orijinal.aiMeta),
+                  }
+                : {}),
+            },
+          });
+          tasinan++;
+          if (soruMetinImzasiGecerli(imza)) {
+            sinavImzaHaritasi.set(imza, { siraNo: siraNo - 1, soruId: orijinal.id });
+          }
+          continue;
+        }
+
+        // Başka denemede: kopyala — önceki kitapçıkta kalsın
+        if (orijinal.sinavId) etkilenenSinavIds.add(orijinal.sinavId);
+        const kopya = await tx.soru.create({
           data: {
             sinavId,
             siraNo: siraNo++,
-            ...(hedefKonu ? { konuId: hedefKonu } : {}),
+            konuId: hedefKonu || orijinal.konuId,
+            metinHtml: orijinal.metinHtml,
+            gorselUrl: orijinal.gorselUrl,
+            secenekler: (orijinal.secenekler as Prisma.InputJsonValue) ?? {},
+            dogruCevap: orijinal.dogruCevap,
+            zorluk: orijinal.zorluk,
+            kazanim: orijinal.kazanim,
+            onayDurumu: ogretmenAtama
+              ? SoruOnayDurumu.ONAY_BEKLIYOR
+              : orijinal.onayDurumu,
+            aiUretildi: orijinal.aiUretildi,
+            aiModeli: orijinal.aiModeli,
+            aiMeta: ogretmenAtama
+              ? atamaAiMeta(orijinal.aiMeta)
+              : orijinal.aiMeta === null
+                ? Prisma.JsonNull
+                : (orijinal.aiMeta as Prisma.InputJsonValue),
+            ogretmenGuncelledi: orijinal.ogretmenGuncelledi,
+            olusturanId: orijinal.olusturanId,
+            duzenleyenId: orijinal.duzenleyenId,
           },
-        })
-      )
-    );
+        });
 
-    await cache.sil(`sinav:${sinavId}`);
-    res.json({ basarili: true, veri: { eklenenAdet: ids.length } });
-  } catch (err) { next(err); }
+        if (soruMetinImzasiGecerli(imza)) {
+          sinavImzaHaritasi.set(imza, { siraNo: kopya.siraNo, soruId: kopya.id });
+        }
+
+        if (orijinal.uygunGruplar.length > 0) {
+          await tx.soruUygunGrup.createMany({
+            data: orijinal.uygunGruplar.map((u) => ({
+              soruId: kopya.id,
+              grupId: u.grupId,
+            })),
+            skipDuplicates: true,
+          });
+        }
+        if (orijinal.ekKonular.length > 0) {
+          await tx.soruKonuEtiket.createMany({
+            data: orijinal.ekKonular.map((e) => ({
+              soruId: kopya.id,
+              konuId: e.konuId,
+            })),
+            skipDuplicates: true,
+          });
+        }
+        kopyalanan++;
+      }
+    });
+
+    for (const sid of etkilenenSinavIds) {
+      await cache.sil(`sinav:${sid}`);
+    }
+
+    res.json({
+      basarili: true,
+      veri: {
+        eklenenAdet: tasinan + kopyalanan,
+        tasinanAdet: tasinan,
+        kopyalananAdet: kopyalanan,
+        atlananAdet: atlanan,
+        adminOnayiBekliyor: ogretmenAtama,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
 }
 
-export async function sinavdanSoruKaldirController(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function sinavdanSoruKaldirController(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   try {
     const { sinavId, soruId } = req.params as { sinavId: string; soruId: string };
     if (!sinavId || !soruId) {
@@ -2690,15 +3011,39 @@ export async function sinavdanSoruKaldirController(req: Request, res: Response, 
       return;
     }
 
-    const sinav = await prisma.sinav.findUnique({ where: { id: sinavId }, select: { id: true, grupId: true } });
+    const sinav = await prisma.sinav.findUnique({
+      where: { id: sinavId },
+      select: { id: true, grupId: true, grup: { select: { tur: true } } },
+    });
     if (!sinav) {
       res.status(404).json({ basarili: false, mesaj: 'Sınav bulunamadı' });
       return;
     }
 
-    const soru = await prisma.soru.findUnique({ where: { id: soruId }, select: { id: true, sinavId: true } });
+    const ogrKisit = await reqOgretmenKisit(req);
+    if (ogrKisit && !ogretmenSinavTuruneErisebilir(ogrKisit, sinav.grup?.tur)) {
+      res.status(403).json({ basarili: false, mesaj: 'Bu sınava erişim yetkiniz yok (kademe uyuşmazlığı).' });
+      return;
+    }
+
+    const soru = await prisma.soru.findUnique({
+      where: { id: soruId },
+      select: {
+        id: true,
+        sinavId: true,
+        olusturanId: true,
+        duzenleyenId: true,
+        konu: { select: { ders: true, ogretimTuru: true } },
+      },
+    });
     if (!soru || soru.sinavId !== sinavId) {
       res.status(404).json({ basarili: false, mesaj: 'Soru bu sınavda bulunamadı' });
+      return;
+    }
+
+    const izin = await ogretmenSoruIslemIzni(req, soru);
+    if (!izin.ok) {
+      res.status(izin.status).json({ basarili: false, mesaj: izin.mesaj });
       return;
     }
 
@@ -2719,6 +3064,8 @@ export async function sinavdanSoruKaldirController(req: Request, res: Response, 
         data: {
           sinavId: yeniSinavId,
           siraNo: yeniSiraNo ?? 0,
+          // Öğretmen çıkardıysa bankada tekrar içerik onayı gerekmesin diye ONAYLANDI bırakılabilir;
+          // admin zaten onaylamadıysa ONAY_BEKLIYOR kalır — durumu koru.
         },
       });
 

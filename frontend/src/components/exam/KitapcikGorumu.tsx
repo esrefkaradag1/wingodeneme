@@ -135,14 +135,26 @@ export function KitapcikGorumu({
   const oncekiSayfa = () => {
     if (suankiSayfa > 0) {
       setDirection(-1);
-      setSuankiSayfa((s) => s - 1);
+      const yeniSayfa = suankiSayfa - 1;
+      setSuankiSayfa(yeniSayfa);
+      const ilkSoru = sayfaPlan[yeniSayfa]?.sorular?.[0];
+      if (ilkSoru) {
+        const idx = soruIndexById.get(ilkSoru.id);
+        if (idx != null) onSoruDegistir(idx);
+      }
     }
   };
 
   const sonrakiSayfa = () => {
     if (suankiSayfa < toplamSayfa - 1) {
       setDirection(1);
-      setSuankiSayfa((s) => s + 1);
+      const yeniSayfa = suankiSayfa + 1;
+      setSuankiSayfa(yeniSayfa);
+      const ilkSoru = sayfaPlan[yeniSayfa]?.sorular?.[0];
+      if (ilkSoru) {
+        const idx = soruIndexById.get(ilkSoru.id);
+        if (idx != null) onSoruDegistir(idx);
+      }
     }
   };
 

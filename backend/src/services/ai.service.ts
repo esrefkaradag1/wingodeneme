@@ -1179,9 +1179,17 @@ export async function ogrenciAnalizOlustur(veri: {
   zayifKonular: Array<{ konu: string; ders: string; basari: number }>;
   dersPerformanslari: Array<{ ders: string; ortalama: number }>;
   ortalamaNe: number;
+  platform?: 'kpss' | 'yks';
 }) {
+  const kpss = veri.platform === 'kpss';
+  const sinavEtiket = kpss ? 'KPSS (Genel Yetenek + Genel Kültür)' : 'YKS/LGS';
+  const hedefNot = kpss
+    ? 'Hedef: KPSS puanı / kurum-kadro sıralaması. Üniversite tercihi kullanma.'
+    : 'Hedef: YKS/LGS puanı ve sıralama. Üniversite/lise hedefi çerçevesinde değerlendir.';
+
   const prompt = `
-Sen bir eğitim danışmanısın. Öğrenci performansını analiz et ve kişiselleştirilmiş geri bildirim ver.
+Sen bir ${sinavEtiket} eğitim danışmanısın. Öğrenci performansını analiz et ve kişiselleştirilmiş geri bildirim ver.
+${hedefNot}
 
 Öğrenci: ${veri.ogrenciAd}
 Ortalama Net: ${veri.ortalamaNe}
@@ -1224,7 +1232,8 @@ export function studyPlanNormalize(
     .map((g) => {
       if (!g || typeof g !== 'object') return null;
       const o = g as Record<string, unknown>;
-      const baslik = String(o.baslik || '').trim();
+      const baslikHam = String(o.baslik || '').trim();
+      const baslik = baslikHam.replace(/\s*[—–-]\s*\d+\.\s*blok\s*$/i, '').trim() || baslikHam;
       const ders = String(o.ders || '').trim();
       const konu = String(o.konu || '').trim();
       const sureDakika = Number(o.sureDakika) > 0 ? Number(o.sureDakika) : 45;
@@ -1252,20 +1261,30 @@ export async function studyPlanOlustur(veri: {
   ogrenci: { ad: string; soyad: string; sinif?: string | null };
   zayifKonular: Array<{ konu: string; ders: string; basari: number }>;
   hedefUniversite?: string | null;
+  platform?: 'kpss' | 'yks';
 }): Promise<StudyPlanCikti> {
+  const kpss = veri.platform === 'kpss';
+  const uzman = kpss ? 'KPSS (GY + GK) çalışma planı uzmanı' : 'YKS/LGS çalışma planı uzmanı';
+  const hedefSatir = kpss
+    ? `Hedef: KPSS başarı / kurum-kadro (üniversite hedefi yok)`
+    : `Hedef Üniversite: ${veri.hedefUniversite || 'Belirtilmemiş'}`;
+
   const prompt = `
-Sen bir YKS/LGS çalışma planı uzmanısın. 30 günlük kişiselleştirilmiş çalışma planı oluştur.
+Sen bir ${uzman}sın. 30 günlük kişiselleştirilmiş çalışma planı oluştur.
 
 Öğrenci: ${veri.ogrenci.ad} ${veri.ogrenci.soyad}
 Sınıf: ${veri.ogrenci.sinif || 'Belirtilmemiş'}
-Hedef Üniversite: ${veri.hedefUniversite || 'Belirtilmemiş'}
+${hedefSatir}
 Zayıf Konular: ${JSON.stringify(veri.zayifKonular)}
 
 KURALLAR:
-- Her gün tam 4 çalışma bloğu olacak (4 × 45 dakika = günlük 3 saat).
+- Her gün tam 4 çalışma oturumu olacak (4 × 45 dakika = günlük 3 saat).
 - Toplam 30 gün; gun alanı 1–30 arası.
 - Her görevin sureDakika değeri 45 olmalı.
+- Her günde 4 görev sırayla 1., 2., 3. ve 4. oturumu temsil eder.
+- baslik alanına yalnızca konu/görev adını yaz; "1. blok", "2. blok" gibi ifadeler kullanma.
 - Zayıf konulara öncelik ver; ders ve konu adlarını Türkçe yaz.
+${kpss ? '- GY (Türkçe, Matematik) ve GK (Tarih, Coğrafya, Vatandaşlık, Güncel) dengesini koru.' : ''}
 
 Yalnızca JSON döndür:
 {
@@ -1288,10 +1307,10 @@ Yalnızca JSON döndür:
 `;
 
   try {
-    const icerik = await openrouterChat('openai/gpt-4.1', [{ role: 'user', content: prompt }], { temperature: 0.6, max_tokens: 4000 });
+    const icerik = await openrouterChat('anthropic/claude-sonnet-4.6', [{ role: 'user', content: prompt }]);
     return studyPlanNormalize(jsonAyikla(icerik), veri.zayifKonular);
   } catch (err) {
-    logger.error('Study plan hatası:', err);
+    logger.error('Study plan AI hatası:', err);
     return studyPlanSablon(veri.zayifKonular);
   }
 }
@@ -1313,7 +1332,7 @@ function studyPlanSablon(zayifKonular: Array<{ konu: string; ders: string }>): S
     for (let blok = 0; blok < 4; blok += 1) {
       const k = konular[(gun + blok) % konular.length];
       gorevler.push({
-        baslik: `${k.konu} — ${blok + 1}. blok`,
+        baslik: k.konu,
         ders: k.ders,
         konu: k.konu,
         sureDakika: 45,
@@ -1322,7 +1341,7 @@ function studyPlanSablon(zayifKonular: Array<{ konu: string; ders: string }>): S
     }
   }
   return {
-    baslik: '30 Günlük Çalışma Planı (4×45 dk)',
+    baslik: '30 Günlük Çalışma Planı (günde 4 oturum × 45 dk)',
     hedefler: { kisa: 'Net artışı', orta: 'Zayıf konuları güçlendir', uzun: 'Hedef puana ulaş' },
     gorevler,
   };
