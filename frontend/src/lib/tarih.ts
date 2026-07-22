@@ -1,3 +1,5 @@
+import { eachDayOfInterval, endOfMonth, endOfWeek, startOfMonth, startOfWeek } from 'date-fns';
+
 /** datetime-local input için ISO / tarih string → yyyy-MM-ddTHH:mm (yerel) */
 export function isoToDatetimeLocal(iso: string): string {
   const d = new Date(iso);
@@ -20,4 +22,13 @@ export function datetimeLocalEkleDakika(datetimeLocal: string, dakika: number): 
   if (Number.isNaN(d.getTime())) return '';
   d.setMinutes(d.getMinutes() + Math.max(0, Math.floor(dakika)));
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+
+/** Pazartesi başlangıçlı aylık takvim ızgarası (önceki/sonraki ay dolgu günleri dahil) */
+export function ayTakvimGunleri(ay: Date): Date[] {
+  const monthStart = startOfMonth(ay);
+  const monthEnd = endOfMonth(ay);
+  const gridStart = startOfWeek(monthStart, { weekStartsOn: 1 });
+  const gridEnd = endOfWeek(monthEnd, { weekStartsOn: 1 });
+  return eachDayOfInterval({ start: gridStart, end: gridEnd });
 }

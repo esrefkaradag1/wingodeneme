@@ -3,7 +3,7 @@
 import { useMemo, useState, useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { adminApi } from '@/lib/api';
-import { datetimeLocalEkleDakika, isoToDatetimeLocal } from '@/lib/tarih';
+import { datetimeLocalEkleDakika, isoToDatetimeLocal, ayTakvimGunleri } from '@/lib/tarih';
 import {
   Calendar as CalendarIcon,
   ChevronLeft,
@@ -21,8 +21,6 @@ import {
 } from 'lucide-react';
 import {
   addMonths,
-  eachDayOfInterval,
-  endOfMonth,
   format,
   isSameDay,
   isSameMonth,
@@ -170,8 +168,7 @@ export default function AdminSinavTakvimiSayfasi() {
 
   const sinavlar = (data?.data?.veri || []) as TakvimSinav[];
   const monthStart = startOfMonth(currentDate);
-  const monthEnd = endOfMonth(monthStart);
-  const calendarDays = eachDayOfInterval({ start: monthStart, end: monthEnd });
+  const calendarDays = ayTakvimGunleri(currentDate);
 
   const kaydetMutation = useMutation({
     mutationFn: async () => {

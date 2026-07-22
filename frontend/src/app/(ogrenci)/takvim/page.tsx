@@ -19,8 +19,6 @@ import {
 import {
   format,
   startOfMonth,
-  endOfMonth,
-  eachDayOfInterval,
   isSameMonth,
   isSameDay,
   addMonths,
@@ -28,7 +26,7 @@ import {
   isToday,
 } from 'date-fns';
 import { tr } from 'date-fns/locale';
-import { useMemo, useState } from 'react';
+import { ayTakvimGunleri } from '@/lib/tarih';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
 import { toast } from '@/store/toast.store';
@@ -108,8 +106,7 @@ export default function TakvimSayfasi() {
 
   const sinavlar = (data?.data?.veri || []) as TakvimSinav[];
   const monthStart = startOfMonth(currentDate);
-  const monthEnd = endOfMonth(monthStart);
-  const calendarDays = eachDayOfInterval({ start: monthStart, end: monthEnd });
+  const calendarDays = ayTakvimGunleri(currentDate);
 
   const satinAlMutation = useMutation({
     mutationFn: (sinavIds: string[]) => sinavApi.sepetSatinAl({ sinavIds }),
