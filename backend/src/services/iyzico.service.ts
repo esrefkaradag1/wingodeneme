@@ -1,7 +1,8 @@
 import { IYZICO_CURRENCY, IYZICO_LOCALE } from '../config/iyzico';
 import Iyzipay from 'iyzipay';
 import { logger } from '../utils/logger';
-import { getIyziConfig } from './ayarlar.service';
+import { getIyziConfig, iyzicoConfigGecerliMi } from './ayarlar.service';
+import { AppHatasi } from '../middlewares/hata.middleware';
 
 interface IyziCheckoutRequest {
   conversationId: string;
@@ -49,6 +50,13 @@ export const iyzicoService = {
    */
   async checkoutFormInitialize(request: IyziCheckoutRequest): Promise<any> {
     const config = await getIyziConfig();
+    if (!iyzicoConfigGecerliMi(config)) {
+      logger.error('Iyzico API anahtarları eksik veya geçersiz (IYZICO_API_KEY / IYZICO_SECRET_KEY)');
+      throw new AppHatasi(
+        'Ödeme sistemi yapılandırılmamış. Lütfen yöneticinin panelden Iyzico API bilgilerini girmesini bekleyin.',
+        503,
+      );
+    }
     const iyzipay = new Iyzipay(config);
 
     return new Promise((resolve, reject) => {
@@ -81,6 +89,10 @@ export const iyzicoService = {
    */
   async checkoutFormAuthResult(token: string): Promise<any> {
     const config = await getIyziConfig();
+    if (!iyzicoConfigGecerliMi(config)) {
+      logger.error('Iyzico API anahtarları eksik veya geçersiz (token doğrulama)');
+      throw new AppHatasi('Ödeme sistemi yapılandırılmamış.', 503);
+    }
     const iyzipay = new Iyzipay(config);
 
     return new Promise((resolve, reject) => {
