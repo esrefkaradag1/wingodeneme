@@ -24,35 +24,54 @@ type IyzicoKullanici = {
   ogrenciProfil?: { ad: string; soyad: string; sehir?: string | null } | null;
 };
 
+/** Iyzico gsmNumber: +905XXXXXXXXX */
+export function iyzicoGsmNormalize(telefon?: string | null): string {
+  const digits = String(telefon || '').replace(/\D/g, '');
+  if (!digits) return '+905000000000';
+  if (digits.startsWith('90') && digits.length >= 12) return `+${digits.slice(0, 12)}`;
+  if (digits.startsWith('0') && digits.length >= 11) return `+90${digits.slice(1, 11)}`;
+  if (digits.length === 10) return `+90${digits}`;
+  return `+90${digits.slice(-10)}`;
+}
+
 export function iyzicoAdresBilgileri(uid: string, kullanici: IyzicoKullanici, req: Request) {
   const profil = kullanici.ogrenciProfil;
-  const ip = req.ip && req.ip.includes(':') ? '85.31.226.21' : req.ip || '85.31.226.21';
+  const rawIp = String(req.headers['x-forwarded-for'] || req.ip || '')
+    .split(',')[0]
+    .trim();
+  const ip =
+    !rawIp || rawIp === '::1' || rawIp.startsWith(':') || rawIp === '127.0.0.1'
+      ? '85.31.226.21'
+      : rawIp;
   const adSoyad = `${profil?.ad || 'Müşteri'} ${profil?.soyad || ''}`.trim();
+  const sehir = (profil?.sehir || 'Istanbul').trim() || 'Istanbul';
+  const adres = sehir === 'Istanbul' ? 'Türkiye' : sehir;
 
   return {
     buyer: {
       id: uid,
       name: profil?.ad || 'Ad belirtilmemiş',
       surname: profil?.soyad || 'Soyad belirtilmemiş',
-      gsmNumber: kullanici.telefon || '+905000000000',
+      gsmNumber: iyzicoGsmNormalize(kullanici.telefon),
       email: kullanici.email,
+      // Sanal ürünlerde Iyzico dokümantasyonu test TC kabul eder; canlıda da yaygın kullanılır.
       identityNumber: '11111111111',
-      registrationAddress: profil?.sehir || 'Adres belirtilmemiş',
+      registrationAddress: adres,
       ip,
-      city: profil?.sehir || 'Istanbul',
+      city: sehir,
       country: 'Turkey',
     },
     shippingAddress: {
       contactName: adSoyad,
-      city: profil?.sehir || 'Istanbul',
+      city: sehir,
       country: 'Turkey',
-      address: profil?.sehir || 'Adres belirtilmemiş',
+      address: adres,
     },
     billingAddress: {
       contactName: adSoyad,
-      city: profil?.sehir || 'Istanbul',
+      city: sehir,
       country: 'Turkey',
-      address: profil?.sehir || 'Adres belirtilmemiş',
+      address: adres,
     },
   };
 }

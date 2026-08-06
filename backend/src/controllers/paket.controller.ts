@@ -596,9 +596,24 @@ export async function iyzicoCallback(req: any, res: Response, next: NextFunction
       res.redirect(`${frontendUrl}/market/odeme-basarili?siparisId=${siparisId}`);
     } else {
       const frontendUrl = await siparisFrontendUrl(siparisId);
-      await iyzicoGrupSiparisleriniIptal(siparisId, sonuc.errorMessage || 'Ödeme başarısız');
+      const hataMesaji =
+        sonuc.errorMessage ||
+        (sonuc.paymentStatus ? `Ödeme durumu: ${sonuc.paymentStatus}` : null) ||
+        'Ödeme başarısız';
+      logger.warn('Iyzico ödeme başarısız', {
+        siparisId,
+        status: sonuc.status,
+        paymentStatus: sonuc.paymentStatus,
+        errorCode: sonuc.errorCode,
+        errorGroup: sonuc.errorGroup,
+        errorMessage: sonuc.errorMessage,
+      });
+      await iyzicoGrupSiparisleriniIptal(
+        siparisId,
+        [hataMesaji, sonuc.errorCode ? `kod:${sonuc.errorCode}` : null].filter(Boolean).join(' | '),
+      );
 
-      res.redirect(`${frontendUrl}/market/odeme-hata?mesaj=${encodeURIComponent(sonuc.errorMessage || 'Ödeme başarısız')}`);
+      res.redirect(`${frontendUrl}/market/odeme-hata?mesaj=${encodeURIComponent(hataMesaji)}`);
     }
   } catch (err) {
     next(err);

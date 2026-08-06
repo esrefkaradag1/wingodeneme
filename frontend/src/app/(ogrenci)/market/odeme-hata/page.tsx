@@ -30,6 +30,8 @@ export default function OdemeHataSayfasi() {
            <ul className="text-xs font-bold text-rose-700/60 space-y-2">
               <li className="flex items-center gap-2 justify-center">• Bakiyenizi kontrol edin</li>
               <li className="flex items-center gap-2 justify-center">• Kartın internet alışverişine açık olduğunu doğrulayın</li>
+              <li className="flex items-center gap-2 justify-center">• 3D Secure / SMS onayını tamamladığınızdan emin olun</li>
+              <li className="flex items-center gap-2 justify-center">• Sorun sürerse bankanız veya destek ile iletişime geçin</li>
            </ul>
         </div>
 
@@ -41,7 +43,7 @@ export default function OdemeHataSayfasi() {
             Tekrar Dene <RefreshCcw className="w-4 h-4" />
            </Link>
            <Link 
-            href="/yardim"
+            href="/destek"
             className="w-full py-4 bg-gray-50 text-gray-600 rounded-2xl font-black text-sm flex items-center justify-center gap-2 hover:bg-gray-100 transition-all active:scale-95"
            >
             Destek Al <LifeBuoy className="w-4 h-4" />
