@@ -16,6 +16,10 @@ interface Kullanici {
   izinliDersler?: string[];
   /** Öğrenci ve öğretmen için kademe (YKS / LGS) */
   ogretimTuru?: 'YKS' | 'LGS';
+  /** KOC rolü referans kodu */
+  referansKod?: string;
+  /** KOC rolü tipi: BIREYSEL koç mu, KURUMSAL/KURUM_OGRETMENI mi */
+  kocTipi?: 'BIREYSEL' | 'KURUMSAL' | 'KURUM_OGRETMENI';
 }
 
 interface AuthStore {

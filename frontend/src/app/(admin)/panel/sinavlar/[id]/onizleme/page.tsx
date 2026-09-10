@@ -88,9 +88,9 @@ export default function KitapcikOnizlemeSayfasi() {
     refetchOnMount: 'always',
   });
 
-  const htmlIndir = () => {
+  const htmlIndir = async () => {
     if (!data) return;
-    kitapcikHtmlDosyaIndir(
+    await kitapcikHtmlDosyaIndir(
       {
         baslik: data.baslik,
         tur: data.tur,

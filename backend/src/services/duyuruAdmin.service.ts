@@ -41,6 +41,7 @@ export async function duyuruAdminListele(q: string) {
     mesaj: d.mesaj,
     hedefTuru: d.hedefTuru,
     hedefRoller: d.hedefRoller,
+    hedefOgretimTurleri: d.hedefOgretimTurleri,
     olusturuldu: d.olusturuldu,
     olusturan: d.olusturan,
     aliciToplam: d._count?.alicilar || 0,

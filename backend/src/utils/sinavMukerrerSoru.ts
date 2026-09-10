@@ -1,20 +1,21 @@
 import { prisma } from '../config/database';
 import { soruMetinImzasi, soruMetinImzasiGecerli } from './soruMetinImza';
+import { sinavSorulariniGetir } from './sinavSoruListe';
 
 export type MukerrerSoruBilgi = { siraNo: number; soruId: string };
 
-/** Sınavdaki mevcut soruların metin imzalarını döndürür. */
+/** Sınavdaki mevcut soruların (birincil + paylaşım) metin imzalarını döndürür. */
 export async function sinavSoruImzaHaritasi(
   sinavId: string,
   excludeSoruId?: string,
 ): Promise<Map<string, MukerrerSoruBilgi>> {
-  const sorular = await prisma.soru.findMany({
-    where: { sinavId, ...(excludeSoruId ? { id: { not: excludeSoruId } } : {}) },
+  const sorular = await sinavSorulariniGetir(sinavId, {
     select: { id: true, siraNo: true, metinHtml: true },
   });
   const map = new Map<string, MukerrerSoruBilgi>();
   for (const s of sorular) {
-    const imza = soruMetinImzasi(s.metinHtml);
+    if (excludeSoruId && s.id === excludeSoruId) continue;
+    const imza = soruMetinImzasi(String(s.metinHtml ?? ''));
     if (!soruMetinImzasiGecerli(imza)) continue;
     if (!map.has(imza)) map.set(imza, { siraNo: s.siraNo, soruId: s.id });
   }

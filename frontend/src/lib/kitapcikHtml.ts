@@ -27,13 +27,74 @@ export interface KitapcikHtmlSinav {
   konuDagilimi?: unknown;
 }
 
+const KATEX_CDN = 'https://cdn.jsdelivr.net/npm/katex@0.16.11/dist';
+
+/** LLM/editör bazen fazla \\ üretir; KaTeX delimiter arar. */
+function katexHamNormalize(html: string): string {
+  return String(html || '')
+    .replace(/\\{2}([\(\)\[\]])/g, '\\$1')
+    .replace(
+      /\\{2}(sqrt|frac|left|right|cdot|cdotp|pm|mp|times|div|leq|geq|neq|approx|equiv|text|mathrm|mathbf|overline)/gi,
+      '\\$1',
+    );
+}
+
+/**
+ * Kitapçık HTML'inde taşma/üst üste binmeyi azaltır:
+ * öğretmen notu ekran görüntülerini çıkarır, float/absolute img stillerini temizler.
+ */
+export function sanitizeKitapcikIcerikHtml(html: string): string {
+  let out = katexHamNormalize(html || '');
+
+  // Yapıştırılmış «Öğretmen notu» ekran görüntüleri kitapçığa girmesin
+  out = out.replace(/<img\b[^>]*alt\s*=\s*["'][^"']*öğretmen[^"']*["'][^>]*>/gi, '');
+
+  // Inline style'dan layout bozan özellikler
+  out = out.replace(/\sstyle\s*=\s*(["'])([\s\S]*?)\1/gi, (_m, q: string, style: string) => {
+    const temiz = String(style)
+      .replace(/(?:^|;)\s*(?:position|float|top|left|right|bottom|z-index|transform)\s*:[^;]*/gi, '')
+      .replace(/(?:^|;)\s*(?:width|max-width|height|min-width|min-height)\s*:[^;]*/gi, '')
+      .replace(/^;+|;+$/g, '')
+      .trim();
+    return temiz ? ` style=${q}${temiz}${q}` : '';
+  });
+
+  // Editör/LLM artıkları
+  out = out.replace(/\sdata-path-to-node="[^"]*"/gi, '');
+  out = out.replace(/\sdata-start="[^"]*"/gi, '');
+  out = out.replace(/\sdata-end="[^"]*"/gi, '');
+  out = out.replace(/\sid="p-rc_[^"]*"/gi, '');
+  out = out.replace(/class="PDq2pG_selectionAnchor[^"]*"/gi, '');
+  out = out.replace(/<span[^>]*aria-hidden="true"[^>]*class="PDq2pG_selectionAnchor"[^>]*>\s*<\/span>/gi, '');
+
+  // img etiketlerine güvenli sınıf
+  out = out.replace(/<img\b([^>]*)>/gi, (_m, attrs: string) => {
+    let a = String(attrs || '');
+    if (!/\bclass\s*=/.test(a)) a += ' class="kitapcik-img"';
+    else a = a.replace(/\bclass\s*=\s*(["'])([\s\S]*?)\1/i, (_cm, q: string, cls: string) => {
+      return `class=${q}${cls} kitapcik-img${q}`;
+    });
+    return `<img${a}>`;
+  });
+
+  return out;
+}
+
+function secenekIcerikHtml(t: string): string {
+  const raw = String(t || '').trim();
+  if (!raw) return '';
+  // Zaten HTML (katex span vb.) ise sanitize et; düz metin/LaTeX ise escape
+  if (/<[a-z][\s\S]*>/i.test(raw)) return sanitizeKitapcikIcerikHtml(raw);
+  return escapeHtml(katexHamNormalize(raw));
+}
+
 function seceneklerHtml(secenekler: Record<string, string>): string {
   const siklar = ['A', 'B', 'C', 'D', 'E'] as const;
   return siklar
     .map((sik) => {
       const t = secenekler[sik];
       if (!t) return '';
-      return `<div class="sec"><span class="sik">${sik}</span><span class="st">${escapeHtml(t)}</span></div>`;
+      return `<div class="sec"><span class="sik">${sik}</span><span class="st">${secenekIcerikHtml(t)}</span></div>`;
     })
     .filter(Boolean)
     .join('');
@@ -57,17 +118,26 @@ function sayfaParcala<T>(dizi: T[], sayfaBoyu: number): T[][] {
 
 function soruBloklariHtml(sorular: KitapcikHtmlSoru[]): string {
   return sorular
-    .map(
-      (s) => `
+    .map((s) => {
+      const metin = sanitizeKitapcikIcerikHtml(soruGorunurHtml(s.metinHtml));
+      const gorsel = s.gorselUrl?.trim();
+      // Metinde zaten aynı görsel varsa tekrar etme
+      const gorselTekrar =
+        gorsel && metin.includes(gorsel)
+          ? ''
+          : gorsel
+            ? `<div class="gorsel"><img class="kitapcik-img" src="${escapeHtml(gorsel)}" alt="" /></div>`
+            : '';
+      return `
     <div class="soru">
       <div class="sno">${s.siraNo}.</div>
       <div class="sbody">
-        <div class="metin">${soruGorunurHtml(s.metinHtml)}</div>
-        ${s.gorselUrl ? `<div class="gorsel"><img src="${escapeHtml(s.gorselUrl)}" alt="" /></div>` : ''}
+        <div class="metin">${metin}</div>
+        ${gorselTekrar}
         <div class="secenekler">${seceneklerHtml(s.secenekler)}</div>
       </div>
-    </div>`
-    )
+    </div>`;
+    })
     .join('\n');
 }
 
@@ -168,7 +238,7 @@ export function kitapcikHtmlBelgesiUret(sinav: KitapcikHtmlSinav, sorular: Kitap
   .sayfa-ic { display: flex; flex-direction: column; min-height: 0; }
   .sayfa-kapak .kapak-gorsel { width: 100%; max-height: 280mm; object-fit: contain; display: block; margin: 0 auto; }
   .iki-sutun { column-count: 2; column-gap: 1.6rem; column-rule: 2px solid var(--ogm-accent); }
-  .iki-sutun .soru { break-inside: avoid; page-break-inside: avoid; }
+  .iki-sutun .soru { break-inside: avoid; page-break-inside: avoid; -webkit-column-break-inside: avoid; display: inline-block; width: 100%; vertical-align: top; }
   .tek-sutun { column-count: 1; }
   .ic-yks { border-top: 1px solid #111; border-bottom: 1px solid #111; padding: 8px 0; margin-bottom: 14px; }
   .ic-yks-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
@@ -210,16 +280,58 @@ export function kitapcikHtmlBelgesiUret(sinav: KitapcikHtmlSinav, sorular: Kitap
   .ogm-top-sag { background: #fff; color: #111827; font-size: 11px; font-weight: 700; padding: 10px 12px; text-align: right; border-left: 1.8px solid var(--ogm-accent); display: flex; align-items: center; justify-content: flex-end; }
   .ogm-top-orta { background: var(--ogm-accent); color: #fff; font-size: 12px; font-weight: 900; padding: 10px 12px; text-align: center; text-transform: uppercase; letter-spacing: .04em; display: flex; align-items: center; justify-content: center; line-height: 1.35; }
   .ogm-talimat { border-top: 1.8px solid var(--ogm-accent); padding: 10px 12px; font-size: 11px; line-height: 1.55; font-family: 'Times New Roman', Times, serif; }
-  .soru { border-bottom: 1px solid #ddd; padding: 14px 0; display: flex; gap: 10px; align-items: flex-start; }
+  .soru { border-bottom: 1px solid #ddd; padding: 14px 0; display: flex; gap: 10px; align-items: flex-start; clear: both; }
   .sno { font-weight: 700; font-size: 15px; min-width: 1.5em; line-height: 1.35; }
-  .sbody { flex: 1; min-width: 0; }
-  .metin { font-size: 14px; line-height: 1.45; margin-bottom: 10px; }
-  .gorsel { text-align: center; margin: 10px 0; }
-  .gorsel img { max-width: 100%; height: auto; }
+  .sbody { flex: 1; min-width: 0; overflow: hidden; }
+  .metin { font-size: 14px; line-height: 1.45; margin-bottom: 10px; overflow: hidden; }
+  .metin p { margin: 0 0 8px 0; }
+  .gorsel { text-align: center; margin: 10px 0; clear: both; }
+  .kitapcik-img, .metin img, .gorsel img, .secenekler img {
+    max-width: 100% !important;
+    width: auto !important;
+    height: auto !important;
+    max-height: 220px;
+    display: block !important;
+    margin: 8px auto !important;
+    float: none !important;
+    position: static !important;
+    clear: both;
+    object-fit: contain;
+  }
   .secenekler .sec { display: flex; gap: 10px; align-items: flex-start; margin: 4px 0; font-size: 13px; line-height: 1.35; }
   .secenekler .sik { width: 18px; height: 18px; border: 1.6px solid #111827; border-radius: 999px; text-align: center; line-height: 16px; font-size: 10px; font-weight: 800; flex-shrink: 0; }
   .secenekler .st { font-weight: 500; color: #111827; }
-  @media print { body { background: #fff; padding: 0; } .sayfa { box-shadow: none; padding: 10mm; margin-bottom: 0; page-break-after: always; } .sayfa:last-of-type { page-break-after: auto; } .sayfa.sayfa-ogm::before { display: none; } }`;
+  .katex { font-size: 1.05em; }
+  .katex-display { margin: 0.4em 0; overflow-x: auto; overflow-y: hidden; }
+  @media print { body { background: #fff; padding: 0; } .sayfa { box-shadow: none; padding: 10mm; margin-bottom: 0; page-break-after: always; break-after: page; } .sayfa:last-of-type { page-break-after: auto; break-after: auto; } .sayfa.sayfa-ogm::before { display: none; } .kitapcik-img, .metin img, .gorsel img { max-height: 180px; } }`;
+
+  const katexHead = `
+<link rel="stylesheet" href="${KATEX_CDN}/katex.min.css" crossorigin="anonymous" />
+<script defer src="${KATEX_CDN}/katex.min.js" crossorigin="anonymous"></script>
+<script defer src="${KATEX_CDN}/contrib/auto-render.min.js" crossorigin="anonymous"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    var deneme = 0;
+    function run() {
+      if (typeof renderMathInElement === 'function') {
+        renderMathInElement(document.body, {
+          delimiters: [
+            { left: '$$', right: '$$', display: true },
+            { left: '\\\\[', right: '\\\\]', display: true },
+            { left: '$', right: '$', display: false },
+            { left: '\\\\(', right: '\\\\)', display: false }
+          ],
+          throwOnError: false,
+          strict: false,
+          ignoredTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+        });
+        return;
+      }
+      if (deneme++ < 20) setTimeout(run, 150);
+    }
+    run();
+  });
+</script>`;
 
   if (n === 0) {
     return `<!DOCTYPE html>
@@ -229,6 +341,7 @@ export function kitapcikHtmlBelgesiUret(sinav: KitapcikHtmlSinav, sorular: Kitap
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>${escapeHtml(sinav.baslik)} — Kitapçık</title>
 <style>${cssOrtak}</style>
+${katexHead}
 </head>
 <body>
 <div class="sayfa${ogm ? ' sayfa-ogm' : ''}">
@@ -277,6 +390,7 @@ export function kitapcikHtmlBelgesiUret(sinav: KitapcikHtmlSinav, sorular: Kitap
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>${escapeHtml(sinav.baslik)} — Kitapçık</title>
 <style>${cssOrtak}</style>
+${katexHead}
 </head>
 <body>
 ${kapakSayfasiHtml}
@@ -285,14 +399,44 @@ ${sayfaDivleri}
 </html>`;
 }
 
-export function kitapcikHtmlDosyaIndir(sinav: KitapcikHtmlSinav, sorular: KitapcikHtmlSoru[], dosyaAdi?: string): void {
-  const html = kitapcikHtmlBelgesiUret(sinav, sorular);
+export async function kitapcikHtmlDosyaIndir(
+  sinav: KitapcikHtmlSinav,
+  sorular: KitapcikHtmlSoru[],
+  dosyaAdi?: string
+): Promise<void> {
+  let html = kitapcikHtmlBelgesiUret(sinav, sorular);
+
+  // İndirmeden önce LaTeX'i yerelde KaTeX ile işle (CDN/offline bağımlılığını azaltır)
+  try {
+    const mod = await import('katex/contrib/auto-render');
+    const renderMathInElement = (mod as { default: (n: HTMLElement, o: object) => void }).default;
+    if (typeof renderMathInElement === 'function' && typeof DOMParser !== 'undefined') {
+      const doc = new DOMParser().parseFromString(html, 'text/html');
+      renderMathInElement(doc.body, {
+        delimiters: [
+          { left: '$$', right: '$$', display: true },
+          { left: '\\[', right: '\\]', display: true },
+          { left: '$', right: '$', display: false },
+          { left: '\\(', right: '\\)', display: false },
+        ],
+        throwOnError: false,
+        strict: false,
+        ignoredTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'],
+      });
+      html = '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
+    }
+  } catch {
+    /* CDN fallback script HTML içinde kalır */
+  }
+
   const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = (dosyaAdi || `kitapcik-${sinav.baslik.replace(/[^\wğüşıöçĞÜŞİÖÇ\s-]/gi, '').slice(0, 40) || 'sinav'}`) + '.html';
-  // Safari/Chrome güvenlik politikaları için DOM'a ekleyip tıklat
+  a.download =
+    (dosyaAdi ||
+      `kitapcik-${sinav.baslik.replace(/[^\wğüşıöçĞÜŞİÖÇ\s-]/gi, '').slice(0, 40) || 'sinav'}`) +
+    '.html';
   document.body.appendChild(a);
   a.click();
   a.remove();

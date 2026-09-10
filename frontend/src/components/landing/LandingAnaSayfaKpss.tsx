@@ -29,6 +29,7 @@ import type { SiteGenelIcerik } from '@/lib/site-icerik-defaults';
 import { api } from '@/lib/api';
 import { OdemeGuvenRozetleri } from '@/components/landing/OdemeGuvenRozetleri';
 import { PaketSatisKarti } from '@/components/landing/PaketSatisKarti';
+import { LandingBizimleCalisin } from '@/components/landing/LandingBizimleCalisin';
 import { siteLogoGorunum } from '@/lib/site-marka-logo';
 import { useAuthStore } from '@/store/auth.store';
 import { LandingKullaniciMenu } from '@/components/landing/LandingKullaniciMenu';
@@ -74,6 +75,7 @@ interface Paket {
   ozellikler: string[];
   aktif: boolean;
   populer: boolean;
+  disUrl?: string | null;
 }
 
 function LandingIcerikKpss() {
@@ -659,6 +661,8 @@ function LandingIcerikKpss() {
         </div>
       </section>
 
+      <LandingBizimleCalisin kpssModu />
+
       {/* Footer */}
       <footer className="relative bg-[#030a09] text-white overflow-hidden border-t border-[#2ABBA7]/10">
         <div className="absolute top-1/3 right-0 w-64 h-64 bg-[#2ABBA7]/4 rounded-full blur-[100px] pointer-events-none" />
@@ -729,6 +733,7 @@ function LandingIcerikKpss() {
               <h3 className="text-xs font-black uppercase tracking-widest text-slate-500 mb-7">Kaynaklar</h3>
               <ul className="space-y-4">
                 <li><Link href="/#istatistik" className="text-sm text-slate-400 hover:text-[#2ABBA7] transition-colors duration-200 flex items-center gap-2.5"><span className="w-1.5 h-1.5 rounded-full bg-[#2ABBA7]/30" />İstatistikler</Link></li>
+                <li><Link href="/bizimle-calisin" className="text-sm text-slate-400 hover:text-[#2ABBA7] transition-colors duration-200 flex items-center gap-2.5"><span className="w-1.5 h-1.5 rounded-full bg-[#2ABBA7]/30" />Bizimle çalışın</Link></li>
               </ul>
             </div>
 

@@ -11,6 +11,7 @@ import { toast } from '@/store/toast.store';
 import { useSiteIcerik } from '@/contexts/SiteIcerikContext';
 import { siteLogoGorunum } from '@/lib/site-marka-logo';
 import { KADEME_TEMA, NAV_RENK_SINIFLARI, kademeTemasi, kpssMi, lgsMi, navGruplari, ogretimTuruCoz } from '@/lib/ogrenciKademe';
+import { FaturaBilgiZorunluModal } from '@/components/ogrenci/FaturaBilgiZorunluModal';
 
 function navAktif(pathname: string, href: string): boolean {
   if (href === '/dashboard') return pathname === '/dashboard';
@@ -245,6 +246,7 @@ export function OgrenciLayout({ children }: { children: React.ReactNode }) {
         </header>
         <main className="relative z-0 flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">{children}</main>
       </div>
+      <FaturaBilgiZorunluModal />
     </div>
   );
 }

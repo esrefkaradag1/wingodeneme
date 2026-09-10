@@ -6,6 +6,10 @@ import {
   LayoutDashboard,
   BookOpen,
   Users,
+  GraduationCap,
+  BadgePercent,
+  BadgeCheck,
+  School,
   BarChart3,
   Brain,
   Bell,
@@ -27,9 +31,11 @@ import {
   Calendar,
   Lightbulb,
   ArrowLeftRight,
+  Volume2,
+  VolumeX,
   type LucideIcon,
 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '@/store/auth.store';
 import { siteLogoGorunum } from '@/lib/site-marka-logo';
@@ -40,6 +46,40 @@ import { OgretmenOneriModal } from '@/components/admin/OgretmenOneriModal';
 import { AdminPageHelp } from '@/components/admin/AdminPageHelp';
 import { isKpssMode } from '@/lib/platform';
 import { cn } from '@/lib/utils';
+import {
+  adminBildirimSesiAcikMi,
+  adminBildirimSesiAyarla,
+  adminBildirimSesiCal,
+  adminBildirimSesiKilidiAc,
+  adminBildirimSesiTurSec,
+} from '@/lib/adminBildirimSesi';
+
+type PanelSayacVeri = {
+  destek?: number;
+  bildirimler?: number;
+  iletisimFormlari?: number;
+  ogretmenOnerileri?: number;
+  kurumBasvurulari?: number;
+  soruYazariBasvurulari?: number;
+  siparisBekleyen?: number;
+  havaleOnayBekleyen?: number;
+  soruOnayBekleyen?: number;
+  kocYetkisi?: boolean;
+  kocOgrenciSayisi?: number;
+};
+
+/** Sesli uyarı için izlenen onay / sipariş sayaçları */
+const SES_SAYAC_ANAHTARLARI = [
+  'bildirimler',
+  'siparisBekleyen',
+  'havaleOnayBekleyen',
+  'destek',
+  'iletisimFormlari',
+  'ogretmenOnerileri',
+  'kurumBasvurulari',
+  'soruYazariBasvurulari',
+  'soruOnayBekleyen',
+] as const satisfies readonly (keyof PanelSayacVeri)[];
 
 
 export type AdminNavItem = {
@@ -47,6 +87,8 @@ export type AdminNavItem = {
   ikon: LucideIcon;
   etiket: string;
   adminOnly?: boolean;
+  /** Yalnızca koç yetkisi verilmiş hesaplarda görünür (öğretmen → koç paneli kısayolu) */
+  kocYetkisiGerekli?: boolean;
 };
 
 export type AdminNavGrup = {
@@ -82,9 +124,13 @@ export const adminNavGruplari: AdminNavGrup[] = [
     ogeler: [
       { href: '/panel/kullanicilar', ikon: Users, etiket: 'Kullanıcılar' },
       { href: '/panel/ogretmen-aktivite', ikon: Activity, etiket: 'Öğretmen Takibi', adminOnly: true },
+      { href: '/panel/kurumlar', ikon: School, etiket: 'Kurum Başvuruları', adminOnly: true },
+      { href: '/panel/koclar', ikon: GraduationCap, etiket: 'Koçlar', adminOnly: true },
+      { href: '/koc/dashboard', ikon: GraduationCap, etiket: 'Koç Panelim', kocYetkisiGerekli: true },
       { href: '/panel/gruplar', ikon: FolderOpen, etiket: 'Gruplar' },
       { href: '/panel/duyurular', ikon: Megaphone, etiket: 'Duyurular' },
       { href: '/panel/ogretmen-onerileri', ikon: Lightbulb, etiket: 'Öğretmen Önerileri', adminOnly: true },
+      { href: '/panel/soru-yazari-basvurulari', ikon: BadgeCheck, etiket: 'Soru Yazarı Başvuruları', adminOnly: true },
       { href: '/panel/iletisim-formlari', ikon: Mail, etiket: 'İletişim Formları' },
       { href: '/panel/destek', ikon: LifeBuoy, etiket: 'Destek Talepleri' },
     ],
@@ -96,6 +142,8 @@ export const adminNavGruplari: AdminNavGrup[] = [
       { href: '/panel/site-yonetimi', ikon: Settings, etiket: 'Site Yönetimi' },
       { href: '/panel/paketler', ikon: CreditCard, etiket: 'Paket Yönetimi' },
       { href: '/panel/siparisler', ikon: ShoppingBag, etiket: 'Siparişler' },
+      { href: '/panel/indirim-kodlari', ikon: BadgePercent, etiket: 'İndirim Kodları', adminOnly: true },
+      { href: '/panel/kazancim', ikon: Wallet, etiket: 'Kazançlarım' },
       { href: '/panel/ayarlar/odeme', ikon: Wallet, etiket: 'Ödeme Ayarları' },
       { href: '/panel/ayarlar/ai-modeller', ikon: Brain, etiket: 'AI Model Ayarları', adminOnly: true },
       { href: '/panel/rol-izinleri', ikon: ShieldCheck, etiket: 'Rol İzinleri', adminOnly: true },
@@ -118,14 +166,20 @@ const navIkonKutuSinifi: Record<string, string> = {
   '/panel/egitim-materyali': 'from-emerald-500 to-teal-600 shadow-emerald-500/35',
   '/panel/kullanicilar': 'from-indigo-500 to-blue-600 shadow-indigo-500/35',
   '/panel/ogretmen-aktivite': 'from-emerald-500 to-teal-600 shadow-emerald-500/35',
+  '/panel/kurumlar': 'from-indigo-500 to-violet-600 shadow-indigo-500/35',
+  '/panel/koclar': 'from-teal-500 to-emerald-600 shadow-teal-500/35',
+  '/koc/dashboard': 'from-teal-500 to-cyan-600 shadow-teal-500/35',
   '/panel/gruplar': 'from-cyan-500 to-blue-600 shadow-cyan-500/35',
   '/panel/duyurular': 'from-orange-400 to-red-500 shadow-orange-500/35',
   '/panel/ogretmen-onerileri': 'from-amber-400 to-orange-500 shadow-amber-500/35',
+  '/panel/soru-yazari-basvurulari': 'from-indigo-500 to-blue-600 shadow-indigo-500/35',
   '/panel/iletisim-formlari': 'from-sky-500 to-blue-600 shadow-sky-500/35',
   '/panel/destek': 'from-teal-500 to-emerald-600 shadow-teal-500/35',
   '/panel/site-yonetimi': 'from-slate-500 to-slate-700 shadow-slate-500/30',
   '/panel/paketler': 'from-pink-500 to-rose-600 shadow-pink-500/35',
   '/panel/siparisler': 'from-lime-500 to-green-600 shadow-lime-500/30',
+  '/panel/indirim-kodlari': 'from-emerald-500 to-green-600 shadow-emerald-500/35',
+  '/panel/kazancim': 'from-emerald-500 to-teal-600 shadow-emerald-500/35',
   '/panel/ayarlar/odeme': 'from-yellow-400 to-amber-500 shadow-yellow-500/30',
   '/panel/ayarlar/ai-modeller': 'from-fuchsia-500 to-purple-600 shadow-fuchsia-500/35',
   '/panel/rol-izinleri': 'from-red-500 to-rose-700 shadow-red-500/35',
@@ -187,10 +241,8 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
   const [mobilAcik, setMobilAcik] = useState(false);
   const [oneriModalAcik, setOneriModalAcik] = useState(false);
   const [kpssModu, setKpssModu] = useState(false);
-
-  useEffect(() => {
-    setKpssModu(isKpssMode());
-  }, []);
+  const [sesAcik, setSesAcik] = useState(true);
+  const oncekiSayacRef = useRef<Partial<Record<(typeof SES_SAYAC_ANAHTARLARI)[number], number>> | null>(null);
 
   const pathname = usePathname();
   const { kullanici, cikisYap, token } = useAuthStore();
@@ -203,19 +255,92 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
   const yoneticiMi = rol === 'ADMIN' || rol === 'SUPER_ADMIN';
   const [izinli, setIzinli] = useState<{ tumIzin: boolean; menuler: string[] } | null>(null);
 
+  useEffect(() => {
+    setKpssModu(isKpssMode());
+    setSesAcik(adminBildirimSesiAcikMi());
+  }, []);
+
+  // Oturum değişince önceki sayaçları sıfırla (yanlış alarm olmasın)
+  useEffect(() => {
+    oncekiSayacRef.current = null;
+  }, [token]);
+
+  // Tarayıcı autoplay kilidi: ilk tıklamada AudioContext'i aç
+  useEffect(() => {
+    const ac = () => {
+      void adminBildirimSesiKilidiAc();
+    };
+    window.addEventListener('pointerdown', ac, { once: true });
+    window.addEventListener('keydown', ac, { once: true });
+    return () => {
+      window.removeEventListener('pointerdown', ac);
+      window.removeEventListener('keydown', ac);
+    };
+  }, []);
+
   const { data: panelSayacData } = useQuery({
     queryKey: ['admin-panel-sayaclari'],
     queryFn: () => api.get('/admin/panel-sayaclari').then((r) => r.data),
     enabled: Boolean(token),
-    refetchInterval: 60_000,
-    staleTime: 30_000,
+    refetchInterval: 15_000,
+    staleTime: 10_000,
+    refetchOnWindowFocus: true,
   });
 
+  const sayacVeri = (panelSayacData?.veri ?? {}) as PanelSayacVeri;
+
+  // Sayaç artınca sesli bildirim
+  useEffect(() => {
+    if (!token || !panelSayacData?.veri) return;
+
+    const veri = panelSayacData.veri as PanelSayacVeri;
+    const guncel: Partial<Record<(typeof SES_SAYAC_ANAHTARLARI)[number], number>> = {};
+    for (const k of SES_SAYAC_ANAHTARLARI) {
+      guncel[k] = Number(veri[k] ?? 0);
+    }
+
+    const onceki = oncekiSayacRef.current;
+    oncekiSayacRef.current = guncel;
+    if (!onceki) return;
+
+    let artisVar = false;
+    const artislar = { siparis: false, havale: false, bildirim: false };
+    for (const k of SES_SAYAC_ANAHTARLARI) {
+      const once = onceki[k] ?? 0;
+      const simdi = guncel[k] ?? 0;
+      if (simdi > once) {
+        artisVar = true;
+        if (k === 'siparisBekleyen') artislar.siparis = true;
+        if (k === 'havaleOnayBekleyen') artislar.havale = true;
+        if (k === 'bildirimler') artislar.bildirim = true;
+      }
+    }
+
+    if (artisVar && adminBildirimSesiAcikMi()) {
+      void adminBildirimSesiCal(adminBildirimSesiTurSec(artislar));
+    }
+  }, [token, panelSayacData]);
+
+  // Koç yetkisi verilmiş öğretmen hesapları koç panelini de görür
+  const kocYetkisi: boolean = sayacVeri.kocYetkisi === true;
+
   const adminRozetler: Record<string, number> = {
-    '/panel/ogretmen-onerileri': panelSayacData?.veri?.ogretmenOnerileri ?? 0,
-    '/panel/iletisim-formlari': panelSayacData?.veri?.iletisimFormlari ?? 0,
-    '/panel/destek': panelSayacData?.veri?.destek ?? 0,
-    '/panel/bildirimler': panelSayacData?.veri?.bildirimler ?? 0,
+    '/panel/ogretmen-onerileri': sayacVeri.ogretmenOnerileri ?? 0,
+    '/panel/iletisim-formlari': sayacVeri.iletisimFormlari ?? 0,
+    '/panel/destek': sayacVeri.destek ?? 0,
+    '/panel/bildirimler': sayacVeri.bildirimler ?? 0,
+    '/koc/dashboard': sayacVeri.kocOgrenciSayisi ?? 0,
+    '/panel/kurumlar': sayacVeri.kurumBasvurulari ?? 0,
+    '/panel/soru-yazari-basvurulari': sayacVeri.soruYazariBasvurulari ?? 0,
+    '/panel/siparisler': sayacVeri.siparisBekleyen ?? 0,
+    '/panel/sorular': sayacVeri.soruOnayBekleyen ?? 0,
+  };
+
+  const sesToggle = () => {
+    const yeni = !sesAcik;
+    setSesAcik(yeni);
+    adminBildirimSesiAyarla(yeni);
+    if (yeni) void adminBildirimSesiCal('onay');
   };
 
   useEffect(() => {
@@ -236,6 +361,7 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
 
   const filtrelenmisGruplar = useMemo(() => {
     const menuGorunur = (item: AdminNavItem) => {
+      if (item.kocYetkisiGerekli) return kocYetkisi;
       if (item.adminOnly && !yoneticiMi) return false;
       if (yoneticiMi) return true;
       if (!izinli) return item.href === '/panel';
@@ -249,7 +375,7 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
         ogeler: grup.ogeler.filter(menuGorunur),
       }))
       .filter((grup) => grup.ogeler.length > 0);
-  }, [yoneticiMi, izinli]);
+  }, [yoneticiMi, izinli, kocYetkisi]);
 
   const platformDegistir = () => {
     if (typeof window === 'undefined') return;
@@ -424,6 +550,21 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
             <Menu className="h-5 w-5" />
           </button>
           <div className="flex-1" />
+          <button
+            type="button"
+            onClick={sesToggle}
+            title={sesAcik ? 'Sesli bildirim açık — kapatmak için tıklayın' : 'Sesli bildirim kapalı — açmak için tıklayın'}
+            aria-label={sesAcik ? 'Sesli bildirimi kapat' : 'Sesli bildirimi aç'}
+            className={cn(
+              'inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold transition shadow-sm',
+              sesAcik
+                ? 'border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
+                : 'border-slate-200 bg-slate-50 text-slate-500 hover:bg-slate-100',
+            )}
+          >
+            {sesAcik ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
+            <span className="hidden sm:inline">{sesAcik ? 'Ses açık' : 'Ses kapalı'}</span>
+          </button>
           <AdminPageHelp pathname={pathname} />
           <button
             type="button"

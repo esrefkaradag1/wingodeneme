@@ -2,9 +2,10 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Loader2, Lock, Save, User } from 'lucide-react';
+import { FileText, Loader2, Lock, Save, User, Link2 } from 'lucide-react';
 import { authApi, kullaniciApi } from '@/lib/api';
 import { OGRENCI_SINIF_SECENEKLERI, siniftanOgretimTuru } from '@/lib/ogrenciKademe';
+import { tcKimlikNoGecerliMi, tcKimlikNoNormalize } from '@/lib/tcKimlik';
 import { useAuthStore } from '@/store/auth.store';
 import { toast } from '@/store/toast.store';
 
@@ -14,11 +15,21 @@ type ProfilVeri = {
   okul?: string | null;
   sehir?: string | null;
   ilce?: string | null;
+  adres?: string | null;
+  tcKimlikNo?: string | null;
   sinif?: string | null;
   ogretimTuru?: string;
   hedefUniversite?: string | null;
   hedefBolum?: string | null;
   kullanici?: { email: string; telefon?: string | null };
+  koc?: {
+    id: string;
+    ad: string;
+    soyad: string;
+    tip: string;
+    kurumAdi?: string | null;
+    referansKod: string;
+  } | null;
 };
 
 const inputCls =
@@ -34,6 +45,8 @@ export default function ProfilSayfasi() {
   const [okul, setOkul] = useState('');
   const [sehir, setSehir] = useState('');
   const [ilce, setIlce] = useState('');
+  const [adres, setAdres] = useState('');
+  const [tcKimlikNo, setTcKimlikNo] = useState('');
   const [sinif, setSinif] = useState('');
   const [hedefUniversite, setHedefUniversite] = useState('');
   const [hedefBolum, setHedefBolum] = useState('');
@@ -41,6 +54,7 @@ export default function ProfilSayfasi() {
   const [mevcutSifre, setMevcutSifre] = useState('');
   const [yeniSifre, setYeniSifre] = useState('');
   const [yeniSifreTekrar, setYeniSifreTekrar] = useState('');
+  const [kocKod, setKocKod] = useState('');
 
   const { data, isLoading } = useQuery({
     queryKey: ['ogrenci', 'profil'],
@@ -59,24 +73,33 @@ export default function ProfilSayfasi() {
     setOkul(profil.okul || '');
     setSehir(profil.sehir || '');
     setIlce(profil.ilce || '');
+    setAdres(profil.adres || '');
+    setTcKimlikNo(profil.tcKimlikNo || '');
     setSinif(profil.sinif || '');
     setHedefUniversite(profil.hedefUniversite || '');
     setHedefBolum(profil.hedefBolum || '');
   }, [profil]);
 
   const profilMut = useMutation({
-    mutationFn: () =>
-      kullaniciApi.profilGuncelle({
+    mutationFn: () => {
+      const tc = tcKimlikNoNormalize(tcKimlikNo);
+      if (tc && !tcKimlikNoGecerliMi(tc)) {
+        throw { response: { data: { mesaj: 'Geçerli bir TC kimlik numarası girin' } } };
+      }
+      return kullaniciApi.profilGuncelle({
         ad: ad.trim(),
         soyad: soyad.trim(),
         telefon: telefon.trim() || null,
         okul: okul.trim() || null,
         sehir: sehir.trim() || null,
         ilce: ilce.trim() || null,
+        adres: adres.trim() || null,
+        tcKimlikNo: tc || null,
         sinif: sinif || null,
         hedefUniversite: lgs ? null : hedefUniversite.trim() || null,
         hedefBolum: lgs ? null : hedefBolum.trim() || null,
-      }),
+      });
+    },
     onSuccess: async () => {
       toast.basarili('Profiliniz güncellendi.');
       qc.invalidateQueries({ queryKey: ['ogrenci', 'profil'] });
@@ -113,6 +136,18 @@ export default function ProfilSayfasi() {
     },
     onError: (e: { response?: { data?: { mesaj?: string } } }) =>
       toast.hata(e?.response?.data?.mesaj || 'Şifre güncellenemedi'),
+  });
+
+  const kocBaglaMut = useMutation({
+    mutationFn: () => kullaniciApi.kocReferansBagla(kocKod.trim()),
+    onSuccess: (res) => {
+      const zaten = Boolean((res.data.veri as { zatenBagli?: boolean })?.zatenBagli);
+      toast.basarili(zaten ? 'Zaten bu koça bağlısınız' : 'Koç / kurum bağlantısı kuruldu');
+      setKocKod('');
+      qc.invalidateQueries({ queryKey: ['ogrenci', 'profil'] });
+    },
+    onError: (e: { response?: { data?: { mesaj?: string } } }) =>
+      toast.hata(e?.response?.data?.mesaj || 'Referans kodu bağlanamadı'),
   });
 
   const sifreKaydet = () => {
@@ -232,6 +267,91 @@ export default function ProfilSayfasi() {
         >
           {profilMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
           Kaydet
+        </button>
+      </section>
+
+      <section className="card !p-6 space-y-5">
+        <h2 className="text-sm font-black text-gray-800 uppercase tracking-wider flex items-center gap-2">
+          <Link2 className="w-4 h-4" />
+          Koç / kurum bağlantısı
+        </h2>
+        {profil?.koc ? (
+          <div className="rounded-xl border border-teal-100 bg-teal-50/70 px-4 py-3 text-sm text-teal-900">
+            <p className="font-bold">
+              {[profil.koc.ad, profil.koc.soyad].filter(Boolean).join(' ')}
+              {profil.koc.kurumAdi ? ` · ${profil.koc.kurumAdi}` : ''}
+            </p>
+            <p className="text-xs mt-1 text-teal-700">
+              {profil.koc.tip === 'KURUMSAL' ? 'Kurumsal' : 'Özel ders / koç'} · Kod: {profil.koc.referansKod}
+            </p>
+          </div>
+        ) : (
+          <>
+            <p className="text-xs text-gray-500 -mt-2">
+              Koçunuz veya kurumunuzun verdiği referans kodunu girerek hesabınızı bağlayın.
+            </p>
+            <div className="flex flex-col sm:flex-row gap-2 max-w-xl">
+              <input
+                className={inputCls}
+                value={kocKod}
+                onChange={(e) => setKocKod(e.target.value.toUpperCase())}
+                placeholder="WINGO-XXXXXX"
+              />
+              <button
+                type="button"
+                disabled={kocBaglaMut.isPending || !kocKod.trim()}
+                onClick={() => kocBaglaMut.mutate()}
+                className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-sm font-bold disabled:opacity-60"
+              >
+                {kocBaglaMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Link2 className="w-4 h-4" />}
+                Bağla
+              </button>
+            </div>
+          </>
+        )}
+      </section>
+
+      <section className="card !p-6 space-y-5">
+        <h2 className="text-sm font-black text-gray-800 uppercase tracking-wider flex items-center gap-2">
+          <FileText className="w-4 h-4" />
+          Fatura bilgileri
+        </h2>
+        <p className="text-xs text-gray-500 -mt-2">
+          Ödeme ve fatura kesimi için TC kimlik numarası ile açık adres gereklidir.
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="sm:col-span-2">
+            <label className="block text-xs font-bold text-gray-600 mb-1.5">TC kimlik no</label>
+            <input
+              className={inputCls}
+              inputMode="numeric"
+              maxLength={11}
+              value={tcKimlikNo}
+              onChange={(e) => setTcKimlikNo(tcKimlikNoNormalize(e.target.value))}
+              placeholder="11 haneli TC"
+              autoComplete="off"
+            />
+          </div>
+          <div className="sm:col-span-2">
+            <label className="block text-xs font-bold text-gray-600 mb-1.5">Açık adres</label>
+            <textarea
+              className={`${inputCls} resize-none min-h-[88px]`}
+              value={adres}
+              onChange={(e) => setAdres(e.target.value)}
+              placeholder="Mahalle, sokak, bina/daire no"
+            />
+          </div>
+        </div>
+        <button
+          type="button"
+          disabled={profilMut.isPending}
+          onClick={() => profilMut.mutate()}
+          className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-white text-sm font-bold disabled:opacity-60 ${
+            lgs ? 'bg-blue-600 hover:bg-blue-700' : 'bg-indigo-600 hover:bg-indigo-700'
+          }`}
+        >
+          {profilMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+          Fatura bilgilerini kaydet
         </button>
       </section>
 

@@ -5,12 +5,16 @@ import { AppHatasi } from '../middlewares/hata.middleware';
 import type { Request } from 'express';
 import { oturumBaslat, oturumBitir } from './kullaniciAktivite.service';
 import { bildirimGonder, epostaGonder } from './bildirim.service';
+import { tcKimlikNoGecerliMi, tcKimlikNoNormalize } from '../utils/tcKimlik';
+import { ogrenciSinifGrupIdleri } from '../utils/sinifGrup';
 import { Rol } from '@prisma/client';
 import { ogretimTuruBelirle } from '../utils/ogretimTuru';
 import { bransIcinDersler, branslarParse } from './ogretmenSinirlama';
 import { platformOgretimTuruUyumlu, platformOgretimTurleriUyumlu } from '../utils/paketPlatformFiltre';
 import { OgretimTuru } from '@prisma/client';
 import { kpssUcretsizSinavAtaOgrenciArkaPlan } from './kpssKademeSinavAtama.service';
+import { benzersizReferansKodUret, kocIdReferansKoddan } from './koc.service';
+import { KocTipi, KurumBasvuruDurum } from '@prisma/client';
 
 interface KayitGirdisi {
   email: string;
@@ -18,6 +22,7 @@ interface KayitGirdisi {
   ad: string;
   soyad: string;
   telefon?: string;
+  tcKimlikNo?: string;
   okul?: string;
   sehir?: string;
   ilce?: string;
@@ -30,6 +35,8 @@ interface KayitGirdisi {
   veliEmail?: string;
   veliTelefon?: string;
   veliSifre?: string;
+  /** Koç / kurum referans kodu (WINGO-XXXXXX) */
+  kocReferansKod?: string;
 }
 
 function sifreGecerliMi(sifre: string): string | null {
@@ -61,6 +68,17 @@ function veliSifreBelirle(veliSifre: string | undefined, veliTelefon: string | u
     throw new AppHatasi('Veli telefonu geçersiz; giriş için son 6 hane gerekli', 400);
   }
   return sonAlti;
+}
+
+/** Kayıt zorunlu alan doğrulaması — telefon 10-11 hane, TC kimlik algoritmik geçerli */
+function kayitTelefonNorm(telefon: unknown): string {
+  const rakamlar = telefonRakamlari(String(telefon || ''));
+  const temiz = rakamlar.startsWith('90') && rakamlar.length === 12 ? rakamlar.slice(2) : rakamlar;
+  const son = temiz.startsWith('0') ? temiz.slice(1) : temiz;
+  if (son.length !== 10 || !son.startsWith('5')) {
+    throw new AppHatasi('Geçerli bir cep telefonu girin (5XX XXX XX XX)', 400);
+  }
+  return `0${son}`;
 }
 
 function veliTelefonNorm(telefon: string | undefined): string | undefined {
@@ -109,9 +127,32 @@ async function veliHesapEpostasiGonder(
 
 export async function ogrenciKayit(girdi: KayitGirdisi, platformTurleri?: OgretimTuru[]) {
   const emailNorm = girdi.email.trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailNorm)) {
+    throw new AppHatasi('Geçerli bir e-posta adresi girin', 400);
+  }
   const mevcutKullanici = await prisma.kullanici.findUnique({ where: { email: emailNorm } });
   if (mevcutKullanici) {
     throw new AppHatasi('Bu e-posta adresi zaten kayıtlı', 409);
+  }
+
+  // Telefon ve TC kimlik no kayıtta zorunludur (fatura ve kimlik doğrulama için)
+  const telefonNorm = kayitTelefonNorm(girdi.telefon);
+  const telefonSahibi = await prisma.kullanici.findUnique({ where: { telefon: telefonNorm } });
+  if (telefonSahibi) {
+    throw new AppHatasi('Bu telefon numarası zaten başka bir hesapta kayıtlı. Farklı bir numara girin.', 409);
+  }
+
+  const tcNorm = tcKimlikNoNormalize(girdi.tcKimlikNo);
+  if (!tcNorm) throw new AppHatasi('TC kimlik numarası zorunludur', 400);
+  if (!tcKimlikNoGecerliMi(tcNorm)) {
+    throw new AppHatasi('Geçerli bir TC kimlik numarası girin', 400);
+  }
+  const tcSahibi = await prisma.ogrenciProfil.findFirst({
+    where: { tcKimlikNo: tcNorm },
+    select: { id: true },
+  });
+  if (tcSahibi) {
+    throw new AppHatasi('Bu TC kimlik numarası ile kayıtlı bir hesap zaten var', 409);
   }
 
   const sifreHash = await bcrypt.hash(girdi.sifre, 12);
@@ -189,10 +230,16 @@ export async function ogrenciKayit(girdi: KayitGirdisi, platformTurleri?: Ogreti
       throw new AppHatasi('Seçilen kademe bu platformda kayıt için uygun değil', 400);
     }
 
-    if (girdi.telefon && girdi.telefon.trim()) {
-      const ogrenciTelefonSahibi = await tx.kullanici.findUnique({ where: { telefon: girdi.telefon } });
-      if (ogrenciTelefonSahibi) {
-        throw new AppHatasi('Bu telefon numarası zaten başka bir hesapta kayıtlı. Farklı bir numara girin.', 409);
+    const ogrenciTelefonSahibi = await tx.kullanici.findUnique({ where: { telefon: telefonNorm } });
+    if (ogrenciTelefonSahibi) {
+      throw new AppHatasi('Bu telefon numarası zaten başka bir hesapta kayıtlı. Farklı bir numara girin.', 409);
+    }
+
+    let kocId: string | null = null;
+    if (girdi.kocReferansKod?.trim()) {
+      kocId = await kocIdReferansKoddan(girdi.kocReferansKod);
+      if (!kocId) {
+        throw new AppHatasi('Geçersiz veya pasif koç / kurum referans kodu', 400);
       }
     }
 
@@ -200,12 +247,13 @@ export async function ogrenciKayit(girdi: KayitGirdisi, platformTurleri?: Ogreti
       data: {
         email: emailNorm,
         sifre: sifreHash,
-        telefon: girdi.telefon,
+        telefon: telefonNorm,
         rol: Rol.OGRENCI,
         ogrenciProfil: {
           create: {
             ad: girdi.ad,
             soyad: girdi.soyad,
+            tcKimlikNo: tcNorm,
             okul: girdi.okul,
             sehir: girdi.sehir,
             ilce: girdi.ilce,
@@ -214,18 +262,26 @@ export async function ogrenciKayit(girdi: KayitGirdisi, platformTurleri?: Ogreti
             hedefUniversite: girdi.hedefUniversite,
             hedefBolum: girdi.hedefBolum,
             veliId: veliProfil?.id,
+            kocId,
           },
         },
       },
       include: { ogrenciProfil: true },
     });
 
-    // Grubu otomatik ata
-    const grup = await tx.grup.findFirst({ where: { tur: ogretimTuruKayit, aktif: true } });
-    if (grup && yeniKullanici.ogrenciProfil) {
-      await tx.grupUyelik.create({
-        data: { grupId: grup.id, ogrenciId: yeniKullanici.ogrenciProfil.id },
+    // Sınıf seviyesine göre grup ataması (6-7-8 · 9-10-11-12); seviye grubu yoksa kademe grubuna düşer
+    if (yeniKullanici.ogrenciProfil) {
+      const gruplar = await tx.grup.findMany({
+        where: { tur: ogretimTuruKayit, aktif: true },
+        select: { id: true, ad: true, tur: true, sinifSeviyesi: true, parentId: true },
       });
+      const grupIdleri = ogrenciSinifGrupIdleri(gruplar, girdi.sinif, ogretimTuruKayit);
+      if (grupIdleri.length) {
+        await tx.grupUyelik.createMany({
+          data: grupIdleri.map((grupId) => ({ grupId, ogrenciId: yeniKullanici.ogrenciProfil!.id })),
+          skipDuplicates: true,
+        });
+      }
     }
 
     return { yeniKullanici, yeniVeliOlusturuldu, veliGirisSifresi, veliProfil };
@@ -316,6 +372,12 @@ export async function ogretmenKayit(girdi: {
   const mevcut = await prisma.kullanici.findUnique({ where: { email: girdi.email } });
   if (mevcut) throw new AppHatasi('Bu e-posta adresi zaten kayıtlı', 409);
 
+  const ogretmenTelefon = kayitTelefonNorm(girdi.telefon);
+  const ogretmenTelefonSahibi = await prisma.kullanici.findUnique({ where: { telefon: ogretmenTelefon } });
+  if (ogretmenTelefonSahibi) {
+    throw new AppHatasi('Bu telefon numarası zaten başka bir hesapta kayıtlı', 409);
+  }
+
   const turlerRaw = (girdi.ogretimTurleri?.length ? girdi.ogretimTurleri : girdi.ogretimTuru ? [girdi.ogretimTuru] : []) as string[];
   const ogretimTurleri = [...new Set(turlerRaw.map((t) => String(t).trim()).filter(Boolean))];
   if (ogretimTurleri.length === 0) throw new AppHatasi('En az bir kademe seçiniz', 400);
@@ -357,7 +419,7 @@ export async function ogretmenKayit(girdi: {
     data: {
       email: girdi.email,
       sifre: sifreHash,
-      telefon: girdi.telefon,
+      telefon: ogretmenTelefon,
       rol: Rol.TEACHER,
       aktif: false, // Admin onayı bekliyor
       adminProfil: {
@@ -473,6 +535,107 @@ export async function veliKayit(girdi: { email: string; sifre?: string; ad: stri
   };
 }
 
+export async function kocKayit(girdi: {
+  email: string;
+  sifre: string;
+  ad: string;
+  soyad: string;
+  telefon?: string;
+  tip?: string;
+  kurumAdi?: string;
+  sehir?: string;
+  beklenenOgrenci?: number | string;
+  basvuruNotu?: string;
+}) {
+  const emailNorm = girdi.email.trim().toLowerCase();
+  const mevcut = await prisma.kullanici.findUnique({ where: { email: emailNorm } });
+  if (mevcut) throw new AppHatasi('Bu e-posta adresi zaten kayıtlı', 409);
+
+  const sifreHata = sifreGecerliMi(girdi.sifre);
+  if (sifreHata) throw new AppHatasi(sifreHata, 400);
+
+  const tip: KocTipi =
+    String(girdi.tip || '').toUpperCase() === 'KURUMSAL' ? KocTipi.KURUMSAL : KocTipi.BIREYSEL;
+  if (tip === KocTipi.KURUMSAL && !(girdi.kurumAdi || '').trim()) {
+    throw new AppHatasi('Kurumsal hesap için kurum adı gerekli', 400);
+  }
+
+  const telefonNorm = kayitTelefonNorm(girdi.telefon);
+  const telefonSahibi = await prisma.kullanici.findUnique({ where: { telefon: telefonNorm } });
+  if (telefonSahibi) {
+    throw new AppHatasi('Bu telefon numarası zaten başka bir hesapta kayıtlı', 409);
+  }
+
+  const kurumsalBasvuru = tip === KocTipi.KURUMSAL;
+  const beklenenOgrenciSayi = Number(girdi.beklenenOgrenci);
+  const beklenenOgrenci =
+    Number.isFinite(beklenenOgrenciSayi) && beklenenOgrenciSayi > 0
+      ? Math.min(Math.round(beklenenOgrenciSayi), 100000)
+      : null;
+
+  const sifreHash = await bcrypt.hash(girdi.sifre, 12);
+  const referansKod = await benzersizReferansKodUret();
+
+  const kullanici = await prisma.kullanici.create({
+    data: {
+      email: emailNorm,
+      sifre: sifreHash,
+      telefon: telefonNorm,
+      rol: Rol.KOC,
+      aktif: true,
+      kocProfil: {
+        create: {
+          ad: girdi.ad.trim(),
+          soyad: girdi.soyad.trim(),
+          telefon: telefonNorm,
+          tip,
+          kurumAdi: tip === KocTipi.KURUMSAL ? girdi.kurumAdi!.trim() : null,
+          referansKod,
+          // Kurumsal hesaplar süper admin onayından sonra panele erişir
+          basvuruDurum: kurumsalBasvuru ? KurumBasvuruDurum.BEKLEMEDE : KurumBasvuruDurum.AKTIF,
+          sehir: kurumsalBasvuru ? String(girdi.sehir || '').trim() || null : null,
+          beklenenOgrenci: kurumsalBasvuru ? beklenenOgrenci : null,
+          basvuruNotu: kurumsalBasvuru ? String(girdi.basvuruNotu || '').trim() || null : null,
+        },
+      },
+    },
+    include: { kocProfil: true },
+  });
+
+  const token = tokenOlustur({ userId: kullanici.id, rol: kullanici.rol, email: kullanici.email });
+  const refreshToken = refreshTokenOlustur(kullanici.id);
+
+  await prisma.kullanici.update({
+    where: { id: kullanici.id },
+    data: { refreshToken },
+  });
+
+  await bildirimGonder({
+    kullaniciId: kullanici.id,
+    baslik: kurumsalBasvuru ? 'Kurum başvurunuz alındı' : 'Koç hesabınız hazır',
+    mesaj: kurumsalBasvuru
+      ? 'Başvurunuz yönetici incelemesinde. Onaylandığında kurum paneliniz açılacak ve bilgilendirileceksiniz.'
+      : `Referans kodunuz: ${referansKod}. Öğrencilerinizi bu kodla yönlendirebilirsiniz.`,
+    tur: 'hos_geldiniz',
+  });
+
+  return {
+    token,
+    refreshToken,
+    kullanici: {
+      id: kullanici.id,
+      email: kullanici.email,
+      rol: kullanici.rol,
+      ad: girdi.ad,
+      soyad: girdi.soyad,
+      referansKod,
+      kocTipi: tip,
+    },
+    /** Kurumsal başvurular onay bekler; panel erişimi henüz açık değildir */
+    onayBekliyor: kurumsalBasvuru,
+  };
+}
+
 export async function girisYap(email: string, sifre: string, req?: Pick<Request, 'headers' | 'socket'>) {
   const kullanici = await prisma.kullanici.findUnique({
     where: { email },
@@ -480,6 +643,7 @@ export async function girisYap(email: string, sifre: string, req?: Pick<Request,
       ogrenciProfil: true,
       veliProfil: true,
       adminProfil: true,
+      kocProfil: true,
     },
   });
 
@@ -525,8 +689,10 @@ function kullaniciOzet(kullanici: {
   } | null;
   veliProfil?: { ad: string; soyad: string } | null;
   adminProfil?: { ad: string; soyad: string; brans?: string | null; ogretimTuru?: string | null } | null;
+  kocProfil?: { ad: string; soyad: string; referansKod?: string; tip?: string } | null;
 }) {
-  const profil = kullanici.ogrenciProfil || kullanici.veliProfil || kullanici.adminProfil;
+  const profil =
+    kullanici.ogrenciProfil || kullanici.veliProfil || kullanici.adminProfil || kullanici.kocProfil;
   const ogrenciOgretim = kullanici.ogrenciProfil
     ? ogretimTuruBelirle(kullanici.ogrenciProfil.sinif, kullanici.ogrenciProfil.ogretimTuru)
     : undefined;
@@ -542,6 +708,9 @@ function kullaniciOzet(kullanici: {
     brans,
     branslar: brans ? branslarParse(brans) : undefined,
     ogretimTuru,
+    referansKod: kullanici.kocProfil?.referansKod,
+    /** Koç hesabının tipi — giriş sonrası bireysel koç / kurum paneli ayrımı için */
+    kocTipi: kullanici.kocProfil?.tip,
     izinliDersler:
       kullanici.rol === 'TEACHER' && brans ? bransIcinDersler(brans) : undefined,
   };

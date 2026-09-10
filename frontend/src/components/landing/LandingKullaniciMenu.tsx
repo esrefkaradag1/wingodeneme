@@ -22,6 +22,8 @@ function rolEtiketi(rol?: string): string {
       return 'Öğrenci hesabı';
     case 'VELI':
       return 'Veli hesabı';
+    case 'KOC':
+      return 'Koç / kurumsal hesap';
     case 'TEACHER':
       return 'Öğretmen hesabı';
     case 'ADMIN':
@@ -34,6 +36,7 @@ function rolEtiketi(rol?: string): string {
 
 function panelHref(rol?: string): string {
   if (rol === 'VELI') return '/veli/dashboard';
+  if (rol === 'KOC') return '/koc/dashboard';
   if (rol === 'ADMIN' || rol === 'SUPER_ADMIN' || rol === 'TEACHER') return '/panel';
   return '/dashboard';
 }

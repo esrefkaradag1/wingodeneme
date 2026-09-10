@@ -5,6 +5,7 @@ import { prisma } from '../config/database';
 import { platformOgretimTuruUyumlu } from '../utils/paketPlatformFiltre';
 import { parseSinavTuru } from '../utils/sinavTur';
 import { parseIsoTarih } from '../utils/sinavZaman';
+import { parseKatilimciSayisi } from '../utils/katilimciSayisi';
 import {
   adminSinavTakvimListele,
   adminSinavTakvimOlustur,
@@ -28,6 +29,7 @@ function govdeParse(req: AuthRequest) {
   const {
     baslik, aciklama, tur, grupId, baslangicZamani, bitisZamani, sureDakika,
     ucret, indirimliUcret, takvimdeGoster, satinAlinabilir, yayinlandi,
+    gosterilenKatilimciSayisi,
   } = req.body as Record<string, unknown>;
 
   const baslikNorm = typeof baslik === 'string' ? baslik.trim() : '';
@@ -47,6 +49,7 @@ function govdeParse(req: AuthRequest) {
     throw new Error('Bitiş zamanı başlangıçtan sonra olmalı');
   }
   const sure = Math.max(1, parseInt(String(sureDakika ?? 120), 10) || 120);
+  const katilimci = parseKatilimciSayisi(gosterilenKatilimciSayisi);
 
   return {
     baslik: baslikNorm,
@@ -61,6 +64,7 @@ function govdeParse(req: AuthRequest) {
     takvimdeGoster: takvimdeGoster !== false,
     satinAlinabilir: satinAlinabilir !== false,
     yayinlandi: yayinlandi !== false,
+    ...(katilimci !== undefined ? { gosterilenKatilimciSayisi: katilimci } : {}),
   };
 }
 

@@ -13,6 +13,7 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:seed": "ts-node prisma/seed.ts",
     "seed:lgs-ara-sinif": "ts-node --transpile-only prisma/scripts/lgs-ara-sinif-konulari-yukle.ts",
+    "seed:sinif-gruplari": "ts-node --transpile-only prisma/scripts/sinif-gruplari-kur.ts",
     "seed:yks-ara-sinif": "ts-node --transpile-only prisma/scripts/yks-ara-sinif-konulari-yukle.ts",
     "seed:kpss": "ts-node --transpile-only prisma/scripts/kpss-konulari-yukle.ts",
     "temizle:hatali-atamalar": "ts-node --transpile-only prisma/scripts/hatali-sinav-atamalari-temizle.ts",

@@ -1,6 +1,7 @@
 import { Response, NextFunction } from 'express';
 import { AuthRequest } from '../middlewares/auth.middleware';
 import { prisma } from '../config/database';
+import { indirimKoduDogrula, indirimKullanimiKaydet, type KodDogrulamaSonucu } from '../services/indirimKodu.service';
 import { cache } from '../config/redis';
 import { bildirimGonder, ogrenciBildirimGonder, adminlereSiparisBildirimi } from '../services/bildirim.service';
 import { iyzicoService } from '../services/iyzico.service';
@@ -25,6 +26,9 @@ import {
 import { sinavSepetFiyatAyarlariParse } from '../services/sinav-fiyat-kademe.service';
 import { satinAlimPaketHaklariniUygula } from '../services/paket-erisim.service';
 import { paketPlatformUyumlu, paketKpssMi } from '../utils/paketPlatformFiltre';
+import { efektifKatilimciSayisi } from '../utils/katilimciSayisi';
+import { havaleBilgiPaketi } from '../utils/havaleHesap';
+import { birlesikSoruSayisi } from '../utils/sinavSoruListe';
 
 /** Sipariş içeriğinden (paket/sınav grubu) ödeme sonrası yönlenecek frontend adresini çözer */
 async function siparisFrontendUrl(siparisId: string): Promise<string> {
@@ -126,7 +130,7 @@ export async function aktifPaketDetayGetir(req: AuthRequest, res: Response, next
   try {
     const { id } = req.params;
     const platformKey = req.isKpssPlatform ? 'kpss' : 'yks_lgs';
-    const cacheKey = `paketler:aktif:${id}:v5:${platformKey}`;
+    const cacheKey = `paketler:aktif:${id}:v6:${platformKey}`;
     const cached = await cache.al(cacheKey);
     if (cached) {
       res.set('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=86400');
@@ -176,7 +180,11 @@ export async function aktifPaketDetayGetir(req: AuthRequest, res: Response, next
         indirimliUcret: s.indirimliUcret,
         gosterilenFiyat: gf,
         satinAlinabilir: s.satinAlinabilir,
-        soruSayisi: s._count.sorular,
+        soruSayisi: birlesikSoruSayisi(s._count),
+        katilimciSayisi: efektifKatilimciSayisi(
+          s.gosterilenKatilimciSayisi,
+          s._count.katilimlar ?? 0
+        ),
         durum:
           simdi < s.baslangicZamani ? 'YAKINDA' : simdi > s.bitisZamani ? 'BITTI' : 'AKTIF',
       };
@@ -304,7 +312,7 @@ export async function paketSatinAlimOlustur(req: AuthRequest, res: Response, nex
       res.status(401).json({ basarili: false, mesaj: 'Oturum gerekli' });
       return;
     }
-    const { paketId, notlar, odemeYontemi } = req.body as Record<string, unknown>;
+    const { paketId, notlar, odemeYontemi, indirimKodu } = req.body as Record<string, unknown>;
     if (!paketId || typeof paketId !== 'string') {
       res.status(400).json({ basarili: false, mesaj: 'paketId gerekli' });
       return;
@@ -320,13 +328,28 @@ export async function paketSatinAlimOlustur(req: AuthRequest, res: Response, nex
       res.status(403).json({ basarili: false, mesaj: 'Bu paket bu platformda satışa açık değil' });
       return;
     }
-    const fiyat =
+    const listeFiyati =
       paket.indirimliFiyat != null && paket.indirimliFiyat > 0 ? paket.indirimliFiyat : paket.fiyat;
+
+    // İndirim kodu — geçersizse satın alma tamamen durur (kullanıcı yanlış tutar ödemesin)
+    let kodSonucu: KodDogrulamaSonucu | null = null;
+    if (typeof indirimKodu === 'string' && indirimKodu.trim()) {
+      kodSonucu = await indirimKoduDogrula({
+        kod: indirimKodu,
+        brutTutar: listeFiyati,
+        kullaniciId: uid,
+        isKpssPlatform: req.isKpssPlatform === true,
+      });
+    }
+    const fiyat = kodSonucu ? kodSonucu.netTutar : listeFiyati;
     const ref = `WEB-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 8)}`;
 
     const parcalar: string[] = ['Web satın alma talebi'];
     if (typeof odemeYontemi === 'string' && odemeYontemi.trim()) {
       parcalar.push(`Ödeme tercihi: ${odemeYontemi.trim()}`);
+    }
+    if (kodSonucu) {
+      parcalar.push(`İndirim kodu: ${kodSonucu.kod} (-${kodSonucu.indirimTutari.toFixed(2)} TL)`);
     }
     if (typeof notlar === 'string' && notlar.trim()) {
       parcalar.push(notlar.trim());
@@ -335,15 +358,24 @@ export async function paketSatinAlimOlustur(req: AuthRequest, res: Response, nex
 
     const ucretsizPaket = fiyat <= 0;
 
+    const havaleMi = !ucretsizPaket && odemeYontemi === 'HAVALE';
+
+    const ogrenciKu = await prisma.kullanici.findUnique({
+      where: { id: uid },
+      select: { ogrenciProfil: { select: { kocId: true } } },
+    });
+
     const olusturulan = await prisma.satinAlim.create({
       data: {
         kullaniciId: uid,
         paketId: paket.id,
+        kocProfilId: ogrenciKu?.ogrenciProfil?.kocId ?? null,
         miktar: fiyat,
+        indirimMiktari: kodSonucu ? kodSonucu.indirimTutari : 0,
         toplamTutar: fiyat,
         durum: ucretsizPaket ? 'TAMAMLANDI' : 'BEKLEMEDE',
         odemeZamani: ucretsizPaket ? new Date() : null,
-        odemeMetodu: ucretsizPaket ? 'UCRETSIZ' : undefined,
+        odemeMetodu: ucretsizPaket ? 'UCRETSIZ' : havaleMi ? 'HAVALE' : undefined,
         referansNo: ref,
         notlar: ucretsizPaket ? `${notMetni} | Ücretsiz paket — otomatik tanımlandı` : notMetni,
       },
@@ -352,6 +384,10 @@ export async function paketSatinAlimOlustur(req: AuthRequest, res: Response, nex
         kullanici: { include: { ogrenciProfil: true, veliProfil: true, adminProfil: true } },
       },
     });
+
+    if (kodSonucu) {
+      await indirimKullanimiKaydet(olusturulan.id, uid, kodSonucu);
+    }
 
     // Ücretsiz paket: ödeme beklemeden erişimi hemen tanımla ve bitir.
     if (ucretsizPaket) {
@@ -424,8 +460,10 @@ export async function paketSatinAlimOlustur(req: AuthRequest, res: Response, nex
 
     await ogrenciBildirimGonder({
       kullaniciId: uid,
-      baslik: 'Sipariş kaydınız oluşturuldu',
-      mesaj: `«${paket.ad}» için siparişiniz alındı. Ödeme onayından sonra erişiminiz açılacaktır.`,
+      baslik: havaleMi ? 'Havale siparişiniz oluşturuldu' : 'Sipariş kaydınız oluşturuldu',
+      mesaj: havaleMi
+        ? `«${paket.ad}» için havale/EFT siparişiniz alındı. Ödeme yaptıktan sonra Siparişlerim’den ödeme bildirimi gönderin.`
+        : `«${paket.ad}» için siparişiniz alındı. Ödeme onayından sonra erişiminiz açılacaktır.`,
       tur: 'siparis_beklemede',
       veriJson: { siparisId: olusturulan.id },
     });
@@ -438,7 +476,22 @@ export async function paketSatinAlimOlustur(req: AuthRequest, res: Response, nex
       paketMi: true,
     });
 
-    res.status(201).json({ basarili: true, veri: olusturulan });
+    res.status(201).json({
+      basarili: true,
+      veri: {
+        ...olusturulan,
+        odemeYontemi: havaleMi ? 'HAVALE' : odemeYontemi || null,
+        ...(havaleMi
+          ? {
+              havale: havaleBilgiPaketi({
+                tutar: fiyat,
+                referansNo: olusturulan.referansNo,
+                siparisId: olusturulan.id,
+              }),
+            }
+          : {}),
+      },
+    });
   } catch (err) {
     next(err);
   }
@@ -536,6 +589,36 @@ export async function paketIciSinavSatinAlimOlustur(req: AuthRequest, res: Respo
         res.status(500).json({ basarili: false, mesaj: 'Ödeme servisi hatası' });
         return;
       }
+    }
+
+    // Havale / EFT: bekleyen siparişleri HAVALE olarak işaretle ve banka bilgisi dön.
+    if (odemeYontemi === 'HAVALE' && odemeliSiparisler.length > 0) {
+      await Promise.all(
+        odemeliSiparisler.map((siparis) =>
+          prisma.satinAlim.update({
+            where: { id: siparis.id },
+            data: { odemeMetodu: 'HAVALE' },
+          })
+        )
+      );
+
+      const anaSiparis = odemeliSiparisler[0];
+      const toplamTutar = odemeliSiparisler.reduce((t, s) => t + (s.miktar || 0), 0);
+
+      res.status(201).json({
+        basarili: true,
+        veri: {
+          ...sonuc,
+          ucretsizAdet,
+          odemeYontemi: 'HAVALE',
+          havale: havaleBilgiPaketi({
+            tutar: toplamTutar,
+            referansNo: anaSiparis.referansNo,
+            siparisId: anaSiparis.id,
+          }),
+        },
+      });
+      return;
     }
 
     // Tümü ücretsiz (veya ödeme yöntemi seçilmedi): sipariş(ler) zaten tanımlandı.

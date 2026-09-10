@@ -21,7 +21,14 @@ export function iyzicoAnaSiparisIdFromNot(notlar: string | null | undefined, fal
 type IyzicoKullanici = {
   email: string;
   telefon?: string | null;
-  ogrenciProfil?: { ad: string; soyad: string; sehir?: string | null } | null;
+  ogrenciProfil?: {
+    ad: string;
+    soyad: string;
+    sehir?: string | null;
+    ilce?: string | null;
+    adres?: string | null;
+    tcKimlikNo?: string | null;
+  } | null;
 };
 
 /** Iyzico gsmNumber: +905XXXXXXXXX */
@@ -45,7 +52,13 @@ export function iyzicoAdresBilgileri(uid: string, kullanici: IyzicoKullanici, re
       : rawIp;
   const adSoyad = `${profil?.ad || 'Müşteri'} ${profil?.soyad || ''}`.trim();
   const sehir = (profil?.sehir || 'Istanbul').trim() || 'Istanbul';
-  const adres = sehir === 'Istanbul' ? 'Türkiye' : sehir;
+  const ilce = (profil?.ilce || '').trim();
+  const detayAdres = (profil?.adres || '').trim();
+  const adres =
+    [detayAdres, ilce, sehir].filter(Boolean).join(', ') ||
+    (sehir === 'Istanbul' ? 'Türkiye' : sehir);
+  const tc = String(profil?.tcKimlikNo || '').replace(/\D/g, '');
+  const identityNumber = /^[1-9][0-9]{10}$/.test(tc) ? tc : '11111111111';
 
   return {
     buyer: {
@@ -54,8 +67,7 @@ export function iyzicoAdresBilgileri(uid: string, kullanici: IyzicoKullanici, re
       surname: profil?.soyad || 'Soyad belirtilmemiş',
       gsmNumber: iyzicoGsmNormalize(kullanici.telefon),
       email: kullanici.email,
-      // Sanal ürünlerde Iyzico dokümantasyonu test TC kabul eder; canlıda da yaygın kullanılır.
-      identityNumber: '11111111111',
+      identityNumber,
       registrationAddress: adres,
       ip,
       city: sehir,

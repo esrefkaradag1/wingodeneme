@@ -71,6 +71,7 @@ export default function SoruSecimModal({
         veri?: {
           eklenenAdet?: number;
           kopyalananAdet?: number;
+          paylasilanAdet?: number;
           tasinanAdet?: number;
           adminOnayiBekliyor?: boolean;
         };
@@ -78,7 +79,7 @@ export default function SoruSecimModal({
     }) => {
       const veri = res?.data?.veri;
       const eklenen = veri?.eklenenAdet ?? seciliSoruIds.filter((soruId) => !sinavdakiKonuSoruIdSet.has(soruId)).length;
-      const kopya = veri?.kopyalananAdet ?? 0;
+      const paylasilan = veri?.paylasilanAdet ?? veri?.kopyalananAdet ?? 0;
       const onayBekliyor = Boolean(veri?.adminOnayiBekliyor ?? adminOnayiGerekli);
       let mesaj: string;
       if (eklenen <= 0) {
@@ -88,13 +89,13 @@ export default function SoruSecimModal({
           eklenen === 1
             ? 'Soru sınava eklendi; admin onayından sonra öğrenciye açılır.'
             : `${eklenen} soru eklendi; admin onayından sonra öğrenciye açılır.`;
-      } else if (kopya > 0 && kopya === eklenen) {
+      } else if (paylasilan > 0 && paylasilan === eklenen) {
         mesaj =
           eklenen === 1
-            ? 'Soru kopyalanarak bu kitapçığa eklendi (önceki denemede kaldı).'
-            : `${eklenen} soru kopyalanarak eklendi (önceki kitapçıklar korundu).`;
-      } else if (kopya > 0) {
-        mesaj = `${eklenen} soru eklendi (${kopya} kopya, önceki kitapçıklar korundu).`;
+            ? 'Soru paylaşılarak bu kitapçığa eklendi (yeni kopya oluşturulmadı).'
+            : `${eklenen} soru paylaşılarak eklendi (yeni kopya oluşturulmadı).`;
+      } else if (paylasilan > 0) {
+        mesaj = `${eklenen} soru eklendi (${paylasilan} paylaşım, kopya yok).`;
       } else {
         mesaj = eklenen === 1 ? 'Seçilen soru sınava eklendi.' : `${eklenen} soru sınava eklendi.`;
       }

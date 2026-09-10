@@ -1,7 +1,13 @@
 /** @type {import('next').NextConfig} */
 const isDev = process.env.NODE_ENV !== 'production';
 
+// Yerelde YKS (3001) + KPSS (3002) aynı anda çalışınca .next çakışmasını önler.
+const distDir =
+  process.env.NEXT_DIST_DIR ||
+  (process.env.NEXT_PUBLIC_APP_MODE === 'kpss' ? '.next-kpss' : '.next');
+
 const nextConfig = {
+  distDir,
   // Standalone sadece production build'de; dev modda gereksiz yük oluşturuyordu.
   ...(process.env.VERCEL || isDev ? {} : { output: 'standalone' }),
   images: {

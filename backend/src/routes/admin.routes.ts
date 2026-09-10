@@ -72,6 +72,32 @@ import {
   ogretmenAktiviteDetayController,
   ogretmenAktiviteOzetController,
 } from '../controllers/ogretmenAktivite.controller';
+import {
+  adminKocAdaylariController,
+  adminKocGuncelleController,
+  adminKocListesiController,
+  adminKocOgrenciAtaController,
+  adminKocOgrenciKaldirController,
+  adminKocOgrencileriController,
+  adminKocYetkiKaldirController,
+  adminKocYetkiVerController,
+  adminKocOnaylaController,
+  adminKocReddetController,
+  adminKocDurumController,
+  adminKocDemoUzatController,
+  adminKurumDetayController,
+  adminKurumOlusturController,
+} from '../controllers/kocAdmin.controller';
+import {
+  adminIndirimKodlariController,
+  adminIndirimKoduGuncelleController,
+  adminIndirimKoduOlusturController,
+  adminIndirimKoduSilController,
+  adminKomisyonlarController,
+  adminKomisyonOdeController,
+  ogretmenKazancHareketController,
+  ogretmenKazancOzetController,
+} from '../controllers/indirimKodu.controller';
 import { adminPanelSayaclari } from '../services/navSayaclari.service';
 
 const router = Router();
@@ -145,7 +171,36 @@ router.post('/siparisler', siparisManuelOlusturController);
 router.get('/siparisler/:id', siparisDetayController);
 router.patch('/siparisler/:id', siparisGuncelleController);
 
+router.get('/indirim-kodlari', rolKontrol('ADMIN', 'SUPER_ADMIN'), adminIndirimKodlariController);
+router.post('/indirim-kodlari', rolKontrol('ADMIN', 'SUPER_ADMIN'), adminIndirimKoduOlusturController);
+router.patch('/indirim-kodlari/:id', rolKontrol('ADMIN', 'SUPER_ADMIN'), adminIndirimKoduGuncelleController);
+router.delete('/indirim-kodlari/:id', rolKontrol('ADMIN', 'SUPER_ADMIN'), adminIndirimKoduSilController);
+router.get('/komisyonlar', rolKontrol('ADMIN', 'SUPER_ADMIN'), adminKomisyonlarController);
+router.post('/komisyonlar/ode', rolKontrol('ADMIN', 'SUPER_ADMIN'), adminKomisyonOdeController);
+
 router.get('/analitik', genelAnalizController);
+
+// İndirim kodları ve öğretmen komisyonları
+// Öğretmen kendi kazancını görür; kod ve ödeme yönetimi yalnızca yöneticide
+router.get('/kazancim/ozet', ogretmenKazancOzetController);
+router.get('/kazancim/hareketler', ogretmenKazancHareketController);
+
+// Koç / kurumsal hesap yönetimi
+const yalnizAdmin = rolKontrol('ADMIN', 'SUPER_ADMIN');
+router.get('/koclar/adaylar', yalnizAdmin, adminKocAdaylariController);
+router.post('/kurumlar', yalnizAdmin, adminKurumOlusturController);
+router.get('/koclar', yalnizAdmin, adminKocListesiController);
+router.post('/koclar', yalnizAdmin, adminKocYetkiVerController);
+router.get('/koclar/:kocId/detay', yalnizAdmin, adminKurumDetayController);
+router.post('/koclar/:kocId/onayla', yalnizAdmin, adminKocOnaylaController);
+router.post('/koclar/:kocId/reddet', yalnizAdmin, adminKocReddetController);
+router.post('/koclar/:kocId/durum', yalnizAdmin, adminKocDurumController);
+router.post('/koclar/:kocId/demo-uzat', yalnizAdmin, adminKocDemoUzatController);
+router.get('/koclar/:kocId/ogrenciler', yalnizAdmin, adminKocOgrencileriController);
+router.post('/koclar/:kocId/ogrenciler', yalnizAdmin, adminKocOgrenciAtaController);
+router.delete('/koclar/:kocId/ogrenciler/:ogrenciId', yalnizAdmin, adminKocOgrenciKaldirController);
+router.patch('/koclar/:kocId', yalnizAdmin, adminKocGuncelleController);
+router.delete('/koclar/:kocId', yalnizAdmin, adminKocYetkiKaldirController);
 
 router.get('/ogretmen-aktivite', rolKontrol('ADMIN', 'SUPER_ADMIN'), ogretmenAktiviteOzetController);
 router.get('/ogretmen-aktivite/:kullaniciId', rolKontrol('ADMIN', 'SUPER_ADMIN'), ogretmenAktiviteDetayController);

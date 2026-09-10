@@ -12,6 +12,9 @@ import {
 } from './sinav-fiyat-kademe.service';
 import { paketSinavlariniGetir } from '../utils/paketSinavCozumle';
 import { satinAlimPaketHaklariniUygula } from './paket-erisim.service';
+import { efektifKatilimciSayisi } from '../utils/katilimciSayisi';
+import { birlesikSoruSayisi } from '../utils/sinavSoruListe';
+
 
 function ayAraligi(yil: number, ay: number) {
   const baslangic = new Date(yil, ay - 1, 1);
@@ -51,14 +54,15 @@ export async function adminSinavTakvimListele(yil: number, ay: number, platformT
     orderBy: { baslangicZamani: 'asc' },
     include: {
       grup: { select: { id: true, ad: true, tur: true } },
-      _count: { select: { sorular: true, katilimlar: true, ogrenciAtamalari: true } },
+      _count: { select: { sorular: true, soruAtamalari: true, katilimlar: true, ogrenciAtamalari: true } },
     },
   });
 
   return sinavlar.map((s) => ({
     ...s,
-    soruSayisi: s._count.sorular,
-    katilimciSayisi: s._count.katilimlar,
+    soruSayisi: birlesikSoruSayisi(s._count),
+    katilimciSayisi: efektifKatilimciSayisi(s.gosterilenKatilimciSayisi, s._count.katilimlar),
+    gercekKatilimciSayisi: s._count.katilimlar,
     atamaSayisi: s._count.ogrenciAtamalari,
     gosterilenFiyat: gosterilenFiyat(s.ucret, s.indirimliUcret),
   }));
@@ -77,6 +81,7 @@ export type SinavTakvimFormVeri = {
   takvimdeGoster?: boolean;
   satinAlinabilir?: boolean;
   yayinlandi?: boolean;
+  gosterilenKatilimciSayisi?: number | null;
 };
 
 export async function adminSinavTakvimOlustur(veri: SinavTakvimFormVeri) {
@@ -94,6 +99,7 @@ export async function adminSinavTakvimOlustur(veri: SinavTakvimFormVeri) {
       takvimdeGoster: veri.takvimdeGoster ?? true,
       satinAlinabilir: veri.satinAlinabilir ?? true,
       yayinlandi: veri.yayinlandi ?? true,
+      gosterilenKatilimciSayisi: veri.gosterilenKatilimciSayisi ?? null,
     },
     include: { grup: { select: { id: true, ad: true, tur: true } } },
   });
@@ -119,6 +125,9 @@ export async function adminSinavTakvimGuncelle(id: string, veri: Partial<SinavTa
       ...(veri.takvimdeGoster !== undefined ? { takvimdeGoster: veri.takvimdeGoster } : {}),
       ...(veri.satinAlinabilir !== undefined ? { satinAlinabilir: veri.satinAlinabilir } : {}),
       ...(veri.yayinlandi !== undefined ? { yayinlandi: veri.yayinlandi } : {}),
+      ...(veri.gosterilenKatilimciSayisi !== undefined
+        ? { gosterilenKatilimciSayisi: veri.gosterilenKatilimciSayisi }
+        : {}),
     },
     include: { grup: { select: { id: true, ad: true, tur: true } } },
   });
@@ -147,7 +156,7 @@ export async function publicSinavTakvimListele(yil: number, ay: number, isKpssPl
     orderBy: { baslangicZamani: 'asc' },
     include: {
       grup: { select: { id: true, ad: true, tur: true } },
-      _count: { select: { sorular: true } },
+      _count: { select: { sorular: true, soruAtamalari: true, katilimlar: true } },
     },
   });
 
@@ -165,7 +174,8 @@ export async function publicSinavTakvimListele(yil: number, ay: number, isKpssPl
     indirimliUcret: s.indirimliUcret,
     gosterilenFiyat: gosterilenFiyat(s.ucret, s.indirimliUcret),
     satinAlinabilir: s.satinAlinabilir,
-    soruSayisi: s._count.sorular,
+    soruSayisi: birlesikSoruSayisi(s._count),
+    katilimciSayisi: efektifKatilimciSayisi(s.gosterilenKatilimciSayisi, s._count.katilimlar),
     erisimVar: false,
     bekleyenSatinAlim: false,
     durum: simdi < s.baslangicZamani ? 'YAKINDA' : simdi > s.bitisZamani ? 'BITTI' : 'AKTIF',
@@ -194,7 +204,7 @@ export async function ogrenciSinavTakvimListele(
       orderBy: { baslangicZamani: 'asc' },
       include: {
         grup: { select: { id: true, ad: true, tur: true } },
-        _count: { select: { sorular: true } },
+        _count: { select: { sorular: true, soruAtamalari: true, katilimlar: true } },
       },
     }),
     prisma.ogrenciSinavAtama.findMany({
@@ -239,7 +249,8 @@ export async function ogrenciSinavTakvimListele(
         indirimliUcret: s.indirimliUcret,
         gosterilenFiyat: gosterilenFiyat(s.ucret, s.indirimliUcret),
         satinAlinabilir: s.satinAlinabilir,
-        soruSayisi: s._count.sorular,
+        soruSayisi: birlesikSoruSayisi(s._count),
+        katilimciSayisi: efektifKatilimciSayisi(s.gosterilenKatilimciSayisi, s._count.katilimlar),
         erisimVar: grupErisim,
         bekleyenSatinAlim: bekleyenSet.has(s.id),
         durum: simdi < s.baslangicZamani ? 'YAKINDA' : simdi > s.bitisZamani ? 'BITTI' : 'AKTIF',
@@ -349,6 +360,7 @@ async function sinavSatinAlimKaydet(
     data: {
       kullaniciId,
       sinavId: sinav.id,
+      kocProfilId: ogrenci.kocId,
       ...(opts?.paketId ? { paketId: opts.paketId } : {}),
       miktar: fiyat,
       indirimMiktari: indirim,

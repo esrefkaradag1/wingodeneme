@@ -21,18 +21,23 @@ const VARSAYILAN_IZINLER: Record<string, string[]> = {
   SUPER_ADMIN: ['*'],
   ADMIN: ['*'],
   // Sınav listesi: hoca branş sırasına göre soru atar; yayın/oluşturma admin’de kalır
-  TEACHER: ['/panel', '/panel/sorular', '/panel/ai', '/panel/sinavlar'],
+  TEACHER: ['/panel', '/panel/sorular', '/panel/ai', '/panel/sinavlar', '/panel/kazancim'],
 };
 
 /** Eski varsayılan (sinavlar menüsü yok) — soft migration */
 const ESKI_TEACHER_MENULER = ['/panel', '/panel/sorular', '/panel/ai'];
 
 function teacherMenuleriMigrate(liste: string[]): string[] {
-  if (liste.includes('*') || liste.includes('/panel/sinavlar')) return liste;
-  const sirali = [...liste].sort().join(',');
-  const eski = [...ESKI_TEACHER_MENULER].sort().join(',');
-  if (sirali === eski) return [...liste, '/panel/sinavlar'];
-  return liste;
+  if (liste.includes('*')) return liste;
+  let sonuc = [...liste];
+  if (!sonuc.includes('/panel/sinavlar')) {
+    const sirali = [...sonuc].sort().join(',');
+    const eski = [...ESKI_TEACHER_MENULER].sort().join(',');
+    if (sirali === eski) sonuc = [...sonuc, '/panel/sinavlar'];
+  }
+  // Kazanç paneli her öğretmene açıktır (kendi komisyonunu görür)
+  if (!sonuc.includes('/panel/kazancim')) sonuc = [...sonuc, '/panel/kazancim'];
+  return sonuc;
 }
 
 async function izinleriOku(): Promise<Record<string, string[]>> {

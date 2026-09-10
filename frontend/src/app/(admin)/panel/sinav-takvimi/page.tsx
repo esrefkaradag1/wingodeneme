@@ -18,6 +18,7 @@ import {
   Wallet,
   Settings2,
   Sparkles,
+  Users,
 } from 'lucide-react';
 import {
   addMonths,
@@ -70,6 +71,9 @@ type TakvimSinav = {
   satinAlinabilir: boolean;
   yayinlandi: boolean;
   soruSayisi?: number;
+  gosterilenKatilimciSayisi?: number | null;
+  katilimciSayisi?: number;
+  gercekKatilimciSayisi?: number;
 };
 
 type FormState = ReturnType<typeof bosForm>;
@@ -113,6 +117,7 @@ const bosForm = (gun?: Date, tur = 'LGS') => {
     takvimdeGoster: true,
     satinAlinabilir: true,
     yayinlandi: true,
+    gosterilenKatilimciSayisi: '',
   };
 };
 
@@ -192,6 +197,10 @@ export default function AdminSinavTakvimiSayfasi() {
         takvimdeGoster: form.takvimdeGoster,
         satinAlinabilir: form.satinAlinabilir,
         yayinlandi: form.yayinlandi,
+        gosterilenKatilimciSayisi:
+          form.gosterilenKatilimciSayisi === ''
+            ? null
+            : Math.max(0, parseInt(String(form.gosterilenKatilimciSayisi), 10) || 0),
       };
 
       if (duzenlenen) {
@@ -250,6 +259,8 @@ export default function AdminSinavTakvimiSayfasi() {
           takvimdeGoster: sinav.takvimdeGoster,
           satinAlinabilir: sinav.satinAlinabilir,
           yayinlandi: sinav.yayinlandi,
+          gosterilenKatilimciSayisi:
+            sinav.gosterilenKatilimciSayisi != null ? String(sinav.gosterilenKatilimciSayisi) : '',
         })
       );
     } else {
@@ -695,6 +706,28 @@ export default function AdminSinavTakvimiSayfasi() {
                       </div>
                     </div>
                   )}
+
+                  <div>
+                    <label className="text-xs font-semibold text-gray-600 inline-flex items-center gap-1.5">
+                      <Users className="w-3.5 h-3.5" />
+                      Gösterilen öğrenci sayısı
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      step={1}
+                      value={form.gosterilenKatilimciSayisi}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, gosterilenKatilimciSayisi: e.target.value }))
+                      }
+                      className="mt-1.5 w-full rounded-xl border border-emerald-200 bg-white px-4 py-3 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+                      placeholder="örn. 1240"
+                    />
+                    <p className="text-[11px] text-gray-500 mt-1.5">
+                      Paket listesi ve takvimde «X kişi» olarak görünür. Boş bırakılırsa gerçek katılım
+                      gösterilir. Gerçek sayı daha yüksekse otomatik olarak gerçek kullanılır.
+                    </p>
+                  </div>
                 </section>
 
                 {/* Yayın */}

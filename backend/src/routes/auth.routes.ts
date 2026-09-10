@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import {
-  ogrenciKayitController, veliKayitController, ogretmenKayitController,
+  ogrenciKayitController, veliKayitController, ogretmenKayitController, kocKayitController, kurumKayitController,
   girisController, tokenYenileController, cikisController, meGetir,
   sifremiUnuttumTalepController, sifremiUnuttumOnaylaController,
 } from '../controllers/auth.controller';
@@ -14,6 +14,11 @@ router.post('/veli/kayit', veliKayitController);
 router.post('/kayit-veli', veliKayitController);
 /** Öğretmen kaydı */
 router.post('/kayit-ogretmen', ogretmenKayitController);
+/** Koç / özel ders / kurumsal kayıt */
+router.post('/kayit-koc', kocKayitController);
+router.post('/koc/kayit', kocKayitController);
+router.post('/kayit-kurum', kurumKayitController);
+router.post('/kurum/kayit', kurumKayitController);
 router.post('/giris', girisController);
 router.post('/sifremi-unuttum', sifremiUnuttumTalepController);
 router.post('/sifremi-unuttum/onayla', sifremiUnuttumOnaylaController);

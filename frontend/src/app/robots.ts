@@ -25,6 +25,7 @@ export default function robots(): MetadataRoute.Robots {
           '/universite',
           '/duyurular',
           '/veli/',
+          '/koc/',
           '/market/odeme-',
         ],
       },

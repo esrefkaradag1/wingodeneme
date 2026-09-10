@@ -54,6 +54,7 @@ export const VARSAYILAN_SITE_ICERIK = {
           { href: '/giris', label: 'Giriş' },
           { href: '/kayit', label: 'Kayıt ol' },
           { href: '/kayit/veli', label: 'Veli kaydı' },
+          { href: '/kayit/koc', label: 'Koç / kurumsal kayıt' },
           { href: '/iletisim', label: 'İletişim' },
         ],
       },

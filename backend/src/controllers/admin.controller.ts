@@ -33,6 +33,13 @@ import {
 import { kpssKardesKonuIds, kpssKardesSayilariBirlestir } from '../utils/kpssKardesKonu';
 import { sinavdaMukerrerSoruVarMi, sinavSoruImzaHaritasi } from '../utils/sinavMukerrerSoru';
 import { soruMetinImzasi, soruMetinImzasiGecerli } from '../utils/soruMetinImza';
+import { ogrenciSinifGrupIdleri } from '../utils/sinifGrup';
+import {
+  birlesikSoruSayisi,
+  sinavSoruMaxSira,
+  sinavSorulariniGetir,
+  sinavSorulariniYenidenSirala,
+} from '../utils/sinavSoruListe';
 
 const ZORLUK_DEGERLERI: SoruZorlugu[] = ['KOLAY', 'ORTA', 'ZOR'];
 
@@ -192,7 +199,7 @@ export async function sinavlarListesiController(req: AuthRequest, res: Response,
       ? (ogretmenIcinGrupTurlari(ogrKisit) ?? [ogrKisit.ogretimTuru]).slice().sort().join(',')
       : null;
     const platformKey = isKpss ? 'KPSS' : 'YKS_LGS';
-    const cacheKey = `admin:sinavlar:${ogretmenTurKey || platformKey}:v2`;
+    const cacheKey = `admin:sinavlar:${ogretmenTurKey || platformKey}:v3`;
     const cached = await cache.al<any[]>(cacheKey);
     if (cached) {
       res.json({ basarili: true, veri: cached });
@@ -207,12 +214,21 @@ export async function sinavlarListesiController(req: AuthRequest, res: Response,
         olusturuldu: true, baslangicZamani: true, bitisZamani: true,
         ucret: true, indirimliUcret: true, satinAlinabilir: true, takvimdeGoster: true,
         grup: { select: { id: true, ad: true, tur: true } },
-        _count: { select: { sorular: true, katilimlar: true, ogrenciAtamalari: true } },
+        _count: { select: { sorular: true, soruAtamalari: true, katilimlar: true, ogrenciAtamalari: true } },
       },
     });
 
-    await cache.yaz(cacheKey, sinavlar, 30);
-    res.json({ basarili: true, veri: sinavlar });
+    const sinavlarNorm = sinavlar.map((s) => ({
+      ...s,
+      _count: {
+        sorular: birlesikSoruSayisi(s._count),
+        katilimlar: s._count.katilimlar,
+        ogrenciAtamalari: s._count.ogrenciAtamalari,
+      },
+    }));
+
+    await cache.yaz(cacheKey, sinavlarNorm, 30);
+    res.json({ basarili: true, veri: sinavlarNorm });
   } catch (err) { next(err); }
 }
 
@@ -247,13 +263,7 @@ export async function sinavDetayAdminController(req: AuthRequest, res: Response,
     const ogrKisit = await reqOgretmenKisit(req);
     const sinav = await prisma.sinav.findUnique({
       where: { id: req.params.id },
-      include: {
-        grup: true,
-        sorular: {
-          orderBy: { siraNo: 'asc' },
-          include: { konu: { select: { ad: true, ders: true } } },
-        },
-      },
+      include: { grup: true },
     });
     if (!sinav) {
       res.status(404).json({ basarili: false, mesaj: 'Sınav bulunamadı' });
@@ -265,7 +275,10 @@ export async function sinavDetayAdminController(req: AuthRequest, res: Response,
       return;
     }
 
-    res.json({ basarili: true, veri: sinav });
+    const sorular = await sinavSorulariniGetir(sinav.id, {
+      include: { konu: { select: { ad: true, ders: true } } },
+    });
+    res.json({ basarili: true, veri: { ...sinav, sorular } });
   } catch (err) { next(err); }
 }
 
@@ -334,9 +347,7 @@ export async function sinavSorulariAdminController(req: AuthRequest, res: Respon
       res.status(403).json({ basarili: false, mesaj: 'Bu sınava erişim yetkiniz yok (kademe uyuşmazlığı).' });
       return;
     }
-    const sorular = await prisma.soru.findMany({
-      where: { sinavId },
-      orderBy: { siraNo: 'asc' },
+    const sorular = await sinavSorulariniGetir(sinavId, {
       include: {
         konu: { select: { ad: true, ders: true } },
         duzenleyen: { select: soruKullaniciOzetSelect },
@@ -871,8 +882,21 @@ export async function soruOnayGuncelleController(req: AuthRequest, res: Response
       where: { id },
       data: { onayDurumu: onayDurumu as SoruOnayDurumu },
     });
-    if (mevcut.sinavId) {
-      await cache.sil(`sinav:${mevcut.sinavId}`);
+    const paylasimlar = await prisma.sinavSoru.findMany({
+      where: { soruId: id },
+      select: { sinavId: true },
+    });
+    if (paylasimlar.length > 0) {
+      await prisma.sinavSoru.updateMany({
+        where: { soruId: id },
+        data: { onayDurumu: onayDurumu as SoruOnayDurumu },
+      });
+    }
+    const etkilenen = new Set<string>();
+    if (mevcut.sinavId) etkilenen.add(mevcut.sinavId);
+    for (const p of paylasimlar) etkilenen.add(p.sinavId);
+    for (const sid of etkilenen) {
+      await cache.sil(`sinav:${sid}`);
     }
     res.json({ basarili: true, veri: soru });
   } catch (err) {
@@ -1352,6 +1376,7 @@ export async function gruplarController(req: AuthRequest, res: Response, next: N
         tur: true,
         aciklama: true,
         aktif: true,
+        sinifSeviyesi: true,
         olusturuldu: true,
         parentId: true,
         _count: { select: { uyeler: true, sinavlar: true, children: true } },
@@ -1429,9 +1454,17 @@ export async function grupBransSecenekleriController(req: AuthRequest, res: Resp
   } catch (err) { next(err); }
 }
 
+/** '' / null → seviyesiz; 6-12 → sayı; diğerleri geçersiz */
+function sinifSeviyeCoz(deger: unknown): number | null | 'GECERSIZ' {
+  if (deger === undefined || deger === null || deger === '') return null;
+  const sayi = Number(deger);
+  if (!Number.isInteger(sayi) || sayi < 6 || sayi > 12) return 'GECERSIZ';
+  return sayi;
+}
+
 export async function grupOlusturController(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   try {
-    const { ad, tur, aciklama, parentId } = req.body;
+    const { ad, tur, aciklama, parentId, sinifSeviyesi } = req.body;
     if (!ad || !tur) {
       res.status(400).json({ basarili: false, mesaj: 'ad ve tur zorunludur' });
       return;
@@ -1444,11 +1477,17 @@ export async function grupOlusturController(req: AuthRequest, res: Response, nex
       res.status(403).json({ basarili: false, mesaj: 'Bu kademe bu platformda oluşturulamaz' });
       return;
     }
+    const seviye = sinifSeviyeCoz(sinifSeviyesi);
+    if (seviye === 'GECERSIZ') {
+      res.status(400).json({ basarili: false, mesaj: 'Sınıf seviyesi 6-12 arasında olmalı' });
+      return;
+    }
     const grup = await prisma.grup.create({ 
       data: { 
         ad, 
         tur, 
         aciklama: aciklama || '',
+        sinifSeviyesi: seviye,
         parentId: parentId || null 
       } as any
     });
@@ -1459,8 +1498,16 @@ export async function grupOlusturController(req: AuthRequest, res: Response, nex
 
 export async function grupGuncelleController(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   try {
-    const { ad, tur, aciklama, aktif, parentId } = req.body;
+    const { ad, tur, aciklama, aktif, parentId, sinifSeviyesi } = req.body;
     const data: Record<string, unknown> = {};
+    if (sinifSeviyesi !== undefined) {
+      const seviye = sinifSeviyeCoz(sinifSeviyesi);
+      if (seviye === 'GECERSIZ') {
+        res.status(400).json({ basarili: false, mesaj: 'Sınıf seviyesi 6-12 arasında olmalı' });
+        return;
+      }
+      data.sinifSeviyesi = seviye;
+    }
     if (ad !== undefined) data.ad = ad;
     if (aciklama !== undefined) data.aciklama = aciklama;
     if (aktif !== undefined) data.aktif = aktif;
@@ -1767,11 +1814,19 @@ export async function kullaniciOlusturAdminController(req: AuthRequest, res: Res
           adminProfil: true,
         },
         });
-        const grup = await tx.grup.findFirst({ where: { tur: ogrenciOgretim.ogretimTuru, aktif: true } });
-        if (grup && ku.ogrenciProfil) {
-          await tx.grupUyelik.create({
-            data: { grupId: grup.id, ogrenciId: ku.ogrenciProfil.id },
+        if (ku.ogrenciProfil) {
+          // Sınıf seviyesine göre grup ataması (kayıt akışıyla aynı kural)
+          const gruplar = await tx.grup.findMany({
+            where: { tur: ogrenciOgretim.ogretimTuru, aktif: true },
+            select: { id: true, ad: true, tur: true, sinifSeviyesi: true, parentId: true },
           });
+          const grupIdleri = ogrenciSinifGrupIdleri(gruplar, ogrenciOgretim.sinif, ogrenciOgretim.ogretimTuru);
+          if (grupIdleri.length) {
+            await tx.grupUyelik.createMany({
+              data: grupIdleri.map((grupId) => ({ grupId, ogrenciId: ku.ogrenciProfil!.id })),
+              skipDuplicates: true,
+            });
+          }
         }
         if (typeof veliEmail === 'string' && veliEmail.trim() && ku.ogrenciProfil) {
           const veliProfil = await veliProfilEmailBulTx(tx, veliEmail);
@@ -2483,12 +2538,23 @@ export async function soruTopluOnayGuncelleController(req: AuthRequest, res: Res
     // Etkilenen sınav id'leri (cache silmek için)
     const sorular = await prisma.soru.findMany({
       where: { id: { in: ids } },
-      select: { sinavId: true }
+      select: { sinavId: true, sinavAtamalari: { select: { sinavId: true } } },
     });
-    const sinavIds = [...new Set(sorular.map(s => s.sinavId).filter(Boolean))];
+    const sinavIds = [
+      ...new Set(
+        sorular.flatMap((s) => [
+          ...(s.sinavId ? [s.sinavId] : []),
+          ...s.sinavAtamalari.map((a) => a.sinavId),
+        ]),
+      ),
+    ];
 
     await prisma.soru.updateMany({
       where: { id: { in: ids } },
+      data: { onayDurumu: onayDurumu as SoruOnayDurumu },
+    });
+    await prisma.sinavSoru.updateMany({
+      where: { soruId: { in: ids } },
       data: { onayDurumu: onayDurumu as SoruOnayDurumu },
     });
 
@@ -2784,8 +2850,7 @@ export async function soruGuncelleController(req: AuthRequest, res: Response, ne
 /**
  * Sınava soru ata.
  * - Kaynak banka / havuz (null veya «Soru Bankası») → taşı (move)
- * - Kaynak başka bir deneme sınavıysa → kopyala (clone); önceki kitapçık bozulmaz
- * Böylece aynı içerik KPSS Lisans + Önlisans + Ortaöğretim denemelerinde birlikte kullanılabilir.
+ * - Kaynak başka bir deneme sınavıysa → paylaş (SinavSoru link); kopya oluşturulmaz, önceki kitapçık bozulmaz
  *
  * TEACHER: yalnızca kendi branş/kendi soruları; atama sonrası onayDurumu = ONAY_BEKLIYOR
  * (öğrenci sınavında görünmez; admin onaylayınca aktif olur).
@@ -2838,9 +2903,8 @@ export async function sinavaSoruAtaController(req: AuthRequest, res: Response, n
     const mevcutlar = await prisma.soru.findMany({
       where: { id: { in: ids } },
       include: {
-        uygunGruplar: { select: { grupId: true } },
-        ekKonular: { select: { konuId: true } },
         sinav: { select: { id: true, baslik: true } },
+        sinavAtamalari: { where: { sinavId }, select: { sinavId: true } },
       },
     });
     if (mevcutlar.length === 0) {
@@ -2859,16 +2923,12 @@ export async function sinavaSoruAtaController(req: AuthRequest, res: Response, n
       }
     }
 
-    const maxSira = await prisma.soru.aggregate({
-      where: { sinavId },
-      _max: { siraNo: true },
-    });
-    let siraNo = (maxSira._max.siraNo ?? 0) + 1;
+    let siraNo = (await sinavSoruMaxSira(sinavId)) + 1;
 
     const sinavImzaHaritasi = await sinavSoruImzaHaritasi(sinavId);
 
     let tasinan = 0;
-    let kopyalanan = 0;
+    let paylasilan = 0;
     let atlanan = 0;
     const etkilenenSinavIds = new Set<string>([sinavId]);
     const ogretmenAtama = Boolean(ogrKisit);
@@ -2890,7 +2950,7 @@ export async function sinavaSoruAtaController(req: AuthRequest, res: Response, n
 
     await prismaInteraktifTransaction(async (tx) => {
       for (const orijinal of mevcutlar) {
-        if (orijinal.sinavId === sinavId) {
+        if (orijinal.sinavId === sinavId || orijinal.sinavAtamalari.length > 0) {
           atlanan++;
           continue;
         }
@@ -2929,71 +2989,41 @@ export async function sinavaSoruAtaController(req: AuthRequest, res: Response, n
           continue;
         }
 
-        // Başka denemede: kopyala — önceki kitapçıkta kalsın
+        // Başka denemede: aynı soruyu paylaş (kopya yok)
         if (orijinal.sinavId) etkilenenSinavIds.add(orijinal.sinavId);
-        const kopya = await tx.soru.create({
+        await tx.sinavSoru.create({
           data: {
             sinavId,
+            soruId: orijinal.id,
             siraNo: siraNo++,
-            konuId: hedefKonu || orijinal.konuId,
-            metinHtml: orijinal.metinHtml,
-            gorselUrl: orijinal.gorselUrl,
-            secenekler: (orijinal.secenekler as Prisma.InputJsonValue) ?? {},
-            dogruCevap: orijinal.dogruCevap,
-            zorluk: orijinal.zorluk,
-            kazanim: orijinal.kazanim,
-            onayDurumu: ogretmenAtama
-              ? SoruOnayDurumu.ONAY_BEKLIYOR
-              : orijinal.onayDurumu,
-            aiUretildi: orijinal.aiUretildi,
-            aiModeli: orijinal.aiModeli,
-            aiMeta: ogretmenAtama
-              ? atamaAiMeta(orijinal.aiMeta)
-              : orijinal.aiMeta === null
-                ? Prisma.JsonNull
-                : (orijinal.aiMeta as Prisma.InputJsonValue),
-            ogretmenGuncelledi: orijinal.ogretmenGuncelledi,
-            olusturanId: orijinal.olusturanId,
-            duzenleyenId: orijinal.duzenleyenId,
+            // İçerik zaten onaylıysa paylaşım da onaylı; aksi halde sınav bazlı onay bekler
+            onayDurumu:
+              ogretmenAtama && orijinal.onayDurumu !== SoruOnayDurumu.ONAYLANDI
+                ? SoruOnayDurumu.ONAY_BEKLIYOR
+                : SoruOnayDurumu.ONAYLANDI,
           },
         });
 
         if (soruMetinImzasiGecerli(imza)) {
-          sinavImzaHaritasi.set(imza, { siraNo: kopya.siraNo, soruId: kopya.id });
+          sinavImzaHaritasi.set(imza, { siraNo: siraNo - 1, soruId: orijinal.id });
         }
-
-        if (orijinal.uygunGruplar.length > 0) {
-          await tx.soruUygunGrup.createMany({
-            data: orijinal.uygunGruplar.map((u) => ({
-              soruId: kopya.id,
-              grupId: u.grupId,
-            })),
-            skipDuplicates: true,
-          });
-        }
-        if (orijinal.ekKonular.length > 0) {
-          await tx.soruKonuEtiket.createMany({
-            data: orijinal.ekKonular.map((e) => ({
-              soruId: kopya.id,
-              konuId: e.konuId,
-            })),
-            skipDuplicates: true,
-          });
-        }
-        kopyalanan++;
+        paylasilan++;
       }
     });
 
     for (const sid of etkilenenSinavIds) {
       await cache.sil(`sinav:${sid}`);
     }
+    await sinavListesiCacheTemizle();
 
     res.json({
       basarili: true,
       veri: {
-        eklenenAdet: tasinan + kopyalanan,
+        eklenenAdet: tasinan + paylasilan,
         tasinanAdet: tasinan,
-        kopyalananAdet: kopyalanan,
+        paylasilanAdet: paylasilan,
+        /** Geriye dönük uyumluluk — artık kopya üretilmiyor */
+        kopyalananAdet: 0,
         atlananAdet: atlanan,
         adminOnayiBekliyor: ogretmenAtama,
       },
@@ -3036,7 +3066,17 @@ export async function sinavdanSoruKaldirController(req: AuthRequest, res: Respon
         konu: { select: { ders: true, ogretimTuru: true } },
       },
     });
-    if (!soru || soru.sinavId !== sinavId) {
+    if (!soru) {
+      res.status(404).json({ basarili: false, mesaj: 'Soru bulunamadı' });
+      return;
+    }
+
+    const paylasim = await prisma.sinavSoru.findUnique({
+      where: { sinavId_soruId: { sinavId, soruId } },
+      select: { soruId: true },
+    });
+    const birincilSahip = soru.sinavId === sinavId;
+    if (!birincilSahip && !paylasim) {
       res.status(404).json({ basarili: false, mesaj: 'Soru bu sınavda bulunamadı' });
       return;
     }
@@ -3050,7 +3090,16 @@ export async function sinavdanSoruKaldirController(req: AuthRequest, res: Respon
     const bankaId = await ensureGrupBankaSinavi(sinav.grupId);
 
     await prismaInteraktifTransaction(async (tx) => {
-      // 1) Soruyu sınavdan çıkarıp grubun havuz sınavına geri taşı
+      if (paylasim && !birincilSahip) {
+        // Yalnızca paylaşım bağlantısını kaldır — soru kaydı ve diğer denemeler korunur
+        await tx.sinavSoru.delete({
+          where: { sinavId_soruId: { sinavId, soruId } },
+        });
+        await sinavSorulariniYenidenSirala(sinavId, tx);
+        return;
+      }
+
+      // Birincil sahiplik: bankaya taşı (diğer denemelerdeki SinavSoru linkleri kalır)
       let yeniSinavId: string | null = null;
       let yeniSiraNo: number | null = null;
       if (bankaId) {
@@ -3059,29 +3108,27 @@ export async function sinavdanSoruKaldirController(req: AuthRequest, res: Respon
         yeniSiraNo = (maxSira._max.siraNo ?? 0) + 1;
       }
 
+      // Bu sınavdaki paylaşım satırı varsa (nadir) temizle
+      if (paylasim) {
+        await tx.sinavSoru.delete({
+          where: { sinavId_soruId: { sinavId, soruId } },
+        });
+      }
+
       await tx.soru.update({
         where: { id: soruId },
         data: {
           sinavId: yeniSinavId,
           siraNo: yeniSiraNo ?? 0,
-          // Öğretmen çıkardıysa bankada tekrar içerik onayı gerekmesin diye ONAYLANDI bırakılabilir;
-          // admin zaten onaylamadıysa ONAY_BEKLIYOR kalır — durumu koru.
         },
       });
 
-      // 2) Kalan soruları sınav içinde yeniden sırala
-      const kalan = await tx.soru.findMany({
-        where: { sinavId },
-        orderBy: { siraNo: 'asc' },
-        select: { id: true },
-      });
-      for (let i = 0; i < kalan.length; i++) {
-        await tx.soru.update({ where: { id: kalan[i]!.id }, data: { siraNo: i + 1 } });
-      }
+      await sinavSorulariniYenidenSirala(sinavId, tx);
     });
 
     await cache.sil(`sinav:${sinavId}`);
     if (bankaId) await cache.sil(`sinav:${bankaId}`);
+    await sinavListesiCacheTemizle();
 
     res.json({ basarili: true, veri: { kaldirildi: true } });
   } catch (err) {
@@ -3094,7 +3141,6 @@ export async function sinavBankadanOtomatikDoldurController(req: Request, res: R
     const { id } = req.params;
     const sinav = await prisma.sinav.findUnique({
       where: { id },
-      include: { sorular: true }
     });
 
     if (!sinav) {
@@ -3108,6 +3154,10 @@ export async function sinavBankadanOtomatikDoldurController(req: Request, res: R
       return;
     }
 
+    const mevcutSorular = await sinavSorulariniGetir(sinav.id, {
+      select: { id: true, siraNo: true, konuId: true },
+    });
+
     const dagilim = flatKonuDagilimSatirlari(sinav.konuDagilimi);
     let toplamEklenen = 0;
 
@@ -3117,7 +3167,7 @@ export async function sinavBankadanOtomatikDoldurController(req: Request, res: R
       if (!konuId || hedefAdet <= 0) continue;
 
       const kardesIds = await kpssKardesKonuIds(konuId);
-      const gerekenAdet = hedefAdet - mevcutSayiManual(sinav.sorular, kardesIds);
+      const gerekenAdet = hedefAdet - mevcutSayiManual(mevcutSorular, kardesIds);
       
       if (gerekenAdet <= 0) continue;
 
@@ -3135,12 +3185,7 @@ export async function sinavBankadanOtomatikDoldurController(req: Request, res: R
       if (adaylar.length > 0) {
         const adayIdleri = adaylar.map(a => a.id);
         
-        // Son sıra numarasını bul
-        const maxSira = await prisma.soru.aggregate({
-          where: { sinavId: sinav.id },
-          _max: { siraNo: true }
-        });
-        let sira = (maxSira._max.siraNo ?? 0) + 1;
+        let sira = (await sinavSoruMaxSira(sinav.id)) + 1;
 
         await prisma.$transaction(
           adayIdleri.map(aid => prisma.soru.update({
@@ -3149,11 +3194,27 @@ export async function sinavBankadanOtomatikDoldurController(req: Request, res: R
             data: { sinavId: sinav.id, siraNo: sira++, konuId }
           }))
         );
+        for (const a of adaylar) {
+          mevcutSorular.push({
+            id: a.id,
+            siraNo: 0,
+            sinavId: sinav.id,
+            konuId,
+            metinHtml: '',
+            gorselUrl: null,
+            secenekler: {},
+            dogruCevap: '',
+            zorluk: 'ORTA',
+            onayDurumu: SoruOnayDurumu.ONAYLANDI,
+            paylasimMi: false,
+          });
+        }
         toplamEklenen += adaylar.length;
       }
     }
 
     await cache.sil(`sinav:${id}`);
+    await sinavListesiCacheTemizle();
     res.json({ basarili: true, veri: { eklenenAdet: toplamEklenen } });
   } catch (err) { next(err); }
 }

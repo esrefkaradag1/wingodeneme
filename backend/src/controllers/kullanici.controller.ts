@@ -5,12 +5,25 @@ import { prisma } from '../config/database';
 import { AppHatasi } from '../middlewares/hata.middleware';
 import { ogretimTuruBelirle } from '../utils/ogretimTuru';
 import { ogrenciNavSayaclari } from '../services/navSayaclari.service';
+import { tcKimlikNoGecerliMi, tcKimlikNoNormalize } from '../utils/tcKimlik';
 
 export async function profilGetirController(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   try {
     const profil = await prisma.ogrenciProfil.findUnique({
       where: { kullaniciId: req.kullanici!.userId },
-      include: { kullanici: { select: { email: true, telefon: true } } },
+      include: {
+        kullanici: { select: { email: true, telefon: true } },
+        koc: {
+          select: {
+            id: true,
+            ad: true,
+            soyad: true,
+            tip: true,
+            kurumAdi: true,
+            referansKod: true,
+          },
+        },
+      },
     });
     res.json({ basarili: true, veri: profil });
   } catch (err) { next(err); }
@@ -18,7 +31,10 @@ export async function profilGetirController(req: AuthRequest, res: Response, nex
 
 export async function profilGuncelleController(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   try {
-    const { ad, soyad, telefon, okul, sehir, ilce, sinif, hedefUniversite, hedefBolum } = req.body;
+    const {
+      ad, soyad, telefon, okul, sehir, ilce, adres, tcKimlikNo,
+      sinif, hedefUniversite, hedefBolum,
+    } = req.body;
     const kullaniciId = req.kullanici!.userId;
     const mevcut = await prisma.ogrenciProfil.findUnique({
       where: { kullaniciId },
@@ -37,6 +53,18 @@ export async function profilGuncelleController(req: AuthRequest, res: Response, 
       if (baska) throw new AppHatasi('Bu telefon numarası başka bir hesapta kayıtlı', 400);
     }
 
+    let tcNorm: string | null | undefined = undefined;
+    if (tcKimlikNo !== undefined) {
+      if (tcKimlikNo === null || String(tcKimlikNo).trim() === '') {
+        tcNorm = null;
+      } else {
+        tcNorm = tcKimlikNoNormalize(tcKimlikNo);
+        if (!tcKimlikNoGecerliMi(tcNorm)) {
+          throw new AppHatasi('Geçerli bir TC kimlik numarası girin', 400);
+        }
+      }
+    }
+
     await prisma.ogrenciProfil.update({
       where: { kullaniciId },
       data: {
@@ -45,6 +73,10 @@ export async function profilGuncelleController(req: AuthRequest, res: Response, 
         okul,
         sehir,
         ilce,
+        ...(adres !== undefined
+          ? { adres: typeof adres === 'string' ? adres.trim() || null : null }
+          : {}),
+        ...(tcNorm !== undefined ? { tcKimlikNo: tcNorm } : {}),
         sinif,
         hedefUniversite,
         hedefBolum,
@@ -180,6 +212,17 @@ export async function studyGorevDurumGuncelleController(req: AuthRequest, res: R
 export async function navSayaclariController(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   try {
     const veri = await ogrenciNavSayaclari(req.kullanici!.userId);
+    res.json({ basarili: true, veri });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function kocReferansBaglaController(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { ogrenciKocReferansBagla } = await import('../services/koc.service');
+    const kod = typeof req.body?.referansKod === 'string' ? req.body.referansKod : '';
+    const veri = await ogrenciKocReferansBagla(req.kullanici!.userId, kod);
     res.json({ basarili: true, veri });
   } catch (err) {
     next(err);

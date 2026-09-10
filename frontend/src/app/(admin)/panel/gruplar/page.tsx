@@ -23,6 +23,8 @@ interface Grup {
   tur: string;
   aciklama?: string;
   aktif: boolean;
+  /** 6-12 arası sınıf seviyesi; boşsa kademenin tamamına açık */
+  sinifSeviyesi?: number | null;
   parentId: string | null;
   _count: { sinavlar: number; children: number };
   /** Bu gruptaki sınavlara bağlı toplam soru */
@@ -91,8 +93,8 @@ export default function GruplarSayfasi() {
   const [hizliAltGrupId, setHizliAltGrupId] = useState<string | null>(null);
   const [hizliAltAd, setHizliAltAd] = useState('');
   
-  const [form, setForm] = useState({ ad: '', tur: 'YKS', aciklama: '', parentId: '' });
-  const [duzenleForm, setDuzenleForm] = useState({ ad: '', tur: 'YKS', aciklama: '', parentId: '' });
+  const [form, setForm] = useState({ ad: '', tur: 'YKS', aciklama: '', parentId: '', sinifSeviyesi: '' });
+  const [duzenleForm, setDuzenleForm] = useState({ ad: '', tur: 'YKS', aciklama: '', parentId: '', sinifSeviyesi: '' });
   const [ogretimTuruSecenekleri, setOgretimTuruSecenekleri] = useState<any[]>([]);
 
   useEffect(() => {
@@ -125,13 +127,14 @@ export default function GruplarSayfasi() {
   };
 
   const grupOlustur = useMutation({
-    mutationFn: (veri?: { ad: string; tur: string; aciklama?: string; parentId?: string | null }) => {
+    mutationFn: (veri?: { ad: string; tur: string; aciklama?: string; parentId?: string | null; sinifSeviyesi?: string }) => {
       const kaynak = veri || form;
       return api.post('/admin/gruplar', {
         ad: kaynak.ad.trim(),
         tur: kaynak.tur,
         aciklama: kaynak.aciklama?.trim() || '',
         parentId: kaynak.parentId || null,
+        sinifSeviyesi: kaynak.sinifSeviyesi ? Number(kaynak.sinifSeviyesi) : null,
       });
     },
     onSuccess: () => {
@@ -141,7 +144,7 @@ export default function GruplarSayfasi() {
       setUstGrupKilitli(false);
       setHizliAltGrupId(null);
       setHizliAltAd('');
-      setForm({ ad: '', tur: 'YKS', aciklama: '', parentId: '' });
+      setForm({ ad: '', tur: 'YKS', aciklama: '', parentId: '', sinifSeviyesi: '' });
       toast.basarili('Grup oluşturuldu!');
     },
     onError: (err: unknown) => {
@@ -186,7 +189,7 @@ export default function GruplarSayfasi() {
   const altGrupFormAc = (ust: Grup) => {
     const ustTur = grupKonuOgretimTuru(ust) || ust.tur;
     setUstGrupKilitli(true);
-    setForm({ ad: '', tur: ustTur, aciklama: '', parentId: ust.id });
+    setForm({ ad: '', tur: ustTur, aciklama: '', parentId: ust.id, sinifSeviyesi: '' });
     setYeniGrupForm(true);
     setExpandedIds((prev) => new Set(prev).add(ust.id));
   };
@@ -248,8 +251,30 @@ export default function GruplarSayfasi() {
                     <option key={s.value} value={s.value}>{s.label}</option>
                   ))}
                 </select>
+                <select
+                  value={duzenleForm.sinifSeviyesi}
+                  onChange={(e) => setDuzenleForm({ ...duzenleForm, sinifSeviyesi: e.target.value })}
+                  className="px-3 py-1.5 rounded-lg border border-indigo-300 focus:ring-2 focus:ring-indigo-500 outline-none text-sm"
+                  title="Sınıf seviyesi"
+                >
+                  <option value="">Tüm kademe</option>
+                  {[6, 7, 8, 9, 10, 11, 12].map((sv) => (
+                    <option key={sv} value={sv}>{sv}. sınıf</option>
+                  ))}
+                </select>
                 <div className="flex gap-1 shrink-0">
-                  <button onClick={() => grupGuncelle.mutate({ id: grup.id, veri: duzenleForm })} className="p-1.5 bg-green-500 text-white rounded-lg hover:bg-green-600">
+                  <button
+                    onClick={() =>
+                      grupGuncelle.mutate({
+                        id: grup.id,
+                        veri: {
+                          ...duzenleForm,
+                          sinifSeviyesi: duzenleForm.sinifSeviyesi ? Number(duzenleForm.sinifSeviyesi) : null,
+                        },
+                      })
+                    }
+                    className="p-1.5 bg-green-500 text-white rounded-lg hover:bg-green-600"
+                  >
                     <Check className="w-4 h-4" />
                   </button>
                   <button onClick={() => setDuzenleGrupId(null)} className="p-1.5 bg-gray-200 text-gray-600 rounded-lg">
@@ -263,6 +288,11 @@ export default function GruplarSayfasi() {
                 <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${grupTurRenk(grup)}`}>
                   {grupTurEtiketi(grup)}
                 </span>
+                {grup.sinifSeviyesi != null && (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-amber-50 text-amber-700 border border-amber-100">
+                    {grup.sinifSeviyesi}. sınıf{grup.sinifSeviyesi === 12 ? ' / mezun' : ''}
+                  </span>
+                )}
                 {grup.aciklama && <p className="text-xs text-gray-400 w-full italic">{grup.aciklama}</p>}
               </div>
             )}
@@ -292,6 +322,7 @@ export default function GruplarSayfasi() {
                   tur: grupKonuOgretimTuru(grup) || grup.tur,
                   aciklama: grup.aciklama || '',
                   parentId: grup.parentId || '',
+                  sinifSeviyesi: grup.sinifSeviyesi != null ? String(grup.sinifSeviyesi) : '',
                 });
               }}
               className="p-2 rounded-xl hover:bg-blue-50 text-blue-600"
@@ -388,7 +419,7 @@ export default function GruplarSayfasi() {
         <button
           onClick={() => {
             setUstGrupKilitli(false);
-            setForm({ ad: '', tur: 'YKS', aciklama: '', parentId: '' });
+            setForm({ ad: '', tur: 'YKS', aciklama: '', parentId: '', sinifSeviyesi: '' });
             setYeniGrupForm(true);
           }}
           className="px-8 py-3 bg-indigo-600 text-white rounded-2xl font-bold flex items-center gap-2 hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-100 grow-0 shrink-0"
@@ -487,6 +518,25 @@ export default function GruplarSayfasi() {
                       </div>
                     )}
 
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                        Sınıf seviyesi
+                      </label>
+                      <select
+                        value={form.sinifSeviyesi}
+                        onChange={(e) => setForm({ ...form, sinifSeviyesi: e.target.value })}
+                        className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-medium"
+                      >
+                        <option value="">Kademenin tamamı</option>
+                        {[6, 7, 8, 9, 10, 11, 12].map((s) => (
+                          <option key={s} value={s}>{s}. sınıf{s === 12 ? ' / mezun' : ''}</option>
+                        ))}
+                      </select>
+                      <p className="text-[10px] text-gray-400">
+                        Seviye seçilirse yalnızca o sınıftaki öğrenciler bu grubun denemelerini görür.
+                      </p>
+                    </div>
+
                     <div className="col-span-2 space-y-2">
                       <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Açıklama</label>
                       <textarea 
@@ -501,7 +551,7 @@ export default function GruplarSayfasi() {
                   <div className="flex gap-4 pt-4">
                      <button onClick={() => { setYeniGrupForm(false); setUstGrupKilitli(false); }} className="flex-1 py-3 font-bold text-gray-500 hover:bg-gray-50 rounded-2xl transition-all">İptal</button>
                      <button 
-                       onClick={() => grupOlustur.mutate()}
+                       onClick={() => grupOlustur.mutate(undefined)}
                        disabled={!form.ad || grupOlustur.isPending}
                        className="flex-[2] py-3 bg-indigo-600 text-white font-bold rounded-2xl hover:bg-indigo-700 shadow-lg shadow-indigo-100 disabled:opacity-50"
                      >

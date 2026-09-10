@@ -39,7 +39,11 @@ function ortaokulSinif(tur: 'SINIF_6' | 'SINIF_7', ders: string, ad: string): Ko
   };
 }
 
-function liseSinif(tur: 'SINIF_9', ders: string, ad: string): KonuAgaciKayit {
+function liseSinif(
+  tur: 'SINIF_9' | 'SINIF_10' | 'SINIF_11',
+  ders: string,
+  ad: string,
+): KonuAgaciKayit {
   const id = konuIdStable([tur, ders, ad]);
   return {
     id,
@@ -356,6 +360,237 @@ const SINIF9_EN = [
   'Bridging Cultures',
 ];
 
+// ————— 10. SINIF (MEB müfredatı üniteleri) —————
+const SINIF10_MAT = [
+  'Sayma ve Olasılık — Sıralama ve Seçme',
+  'Sayma ve Olasılık — Basit Olayların Olasılıkları',
+  'Fonksiyonlar — Fonksiyon Kavramı ve Gösterimi',
+  'Fonksiyonlar — İki Fonksiyonun Bileşkesi ve Ters Fonksiyon',
+  'Fonksiyonlarla İşlemler ve Uygulamaları',
+  'Polinomlar — Polinom Kavramı ve İşlemler',
+  'Polinomlarda Çarpanlara Ayırma',
+  'İkinci Dereceden Denklemler',
+  'Dörtgenler ve Çokgenler — Çokgenler',
+  'Dörtgenler ve Çokgenler — Dörtgenler ve Özellikleri',
+  'Dörtgenler ve Çokgenler — Paralelkenar, Eşkenar Dörtgen, Deltoid',
+  'Dörtgenler ve Çokgenler — Dikdörtgen, Kare, Yamuk',
+  'Uzay Geometri — Katı Cisimler (Prizma, Piramit, Küre)',
+];
+
+const SINIF10_FIZIK = [
+  'Elektrik ve Manyetizma — Elektrik Akımı, Potansiyel Fark ve Direnç',
+  'Elektrik ve Manyetizma — Elektrik Devreleri',
+  'Elektrik ve Manyetizma — Mıknatıs ve Manyetik Alan',
+  'Basınç ve Kaldırma Kuvveti — Basınç',
+  'Basınç ve Kaldırma Kuvveti — Kaldırma Kuvveti',
+  'Dalgalar — Dalgalar Hakkında Temel Kavramlar',
+  'Dalgalar — Yay ve Su Dalgaları',
+  'Dalgalar — Ses ve Deprem Dalgaları',
+  'Optik — Aydınlanma ve Gölge',
+  'Optik — Düzlem Ayna ve Küresel Aynalar',
+  'Optik — Işığın Kırılması ve Mercekler',
+];
+
+const SINIF10_KIMYA = [
+  'Kimyanın Temel Kanunları',
+  'Mol Kavramı ve Kimyasal Hesaplamalar',
+  'Kimyasal Tepkimeler ve Denklemler',
+  'Karışımlar — Homojen ve Heterojen Karışımlar',
+  'Karışımların Ayrılması',
+  'Asitler, Bazlar ve Tuzlar',
+  'Kimya Her Yerde — Temizlik Maddeleri ve Polimerler',
+];
+
+const SINIF10_BIYOLOJI = [
+  'Hücre Bölünmeleri — Mitoz ve Eşeysiz Üreme',
+  'Hücre Bölünmeleri — Mayoz ve Eşeyli Üreme',
+  'Kalıtımın Genel İlkeleri — Kalıtım ve Biyolojik Çeşitlilik',
+  'Kalıtımın Genel İlkeleri — Genetik Uygulamalar ve Biyoteknoloji',
+  'Ekosistem Ekolojisi — Madde ve Enerji Akışı',
+  'Ekosistem Ekolojisi — Güncel Çevre Sorunları',
+];
+
+const SINIF10_TRDEB = [
+  'Hikâye (Olay Çevresinde Gelişen Metinler)',
+  'Şiir — Nazım Biçimleri ve Ölçü',
+  'Destan / Efsane',
+  'Roman',
+  'Tiyatro',
+  'Biyografi ve Otobiyografi',
+  'Mektup ve E-Posta',
+  'Günlük ve Blog',
+  'Dil Bilgisi — Sözcük Türleri ve Yapısı',
+];
+
+const SINIF10_TARIH = [
+  'Selçuklu Türkiyesi — Yerleşme ve Devletleşme',
+  'Beylikten Devlete Osmanlı Siyaseti (1302-1453)',
+  'Devletleşme Sürecinde Savaşçılar ve Askerler',
+  'Beylikten Devlete Osmanlı Medeniyeti',
+  'Dünya Gücü Osmanlı Devleti (1453-1595)',
+  'Sultan ve Osmanlı Merkez Teşkilatı',
+  'Klasik Çağda Osmanlı Toplum Düzeni',
+];
+
+const SINIF10_COGRAFYA = [
+  'Doğal Sistemler — Yer Şekilleri ve Oluşum Süreçleri',
+  'Doğal Sistemler — Kayaçlar ve Yer Kabuğu',
+  'Doğal Sistemler — Su Kaynakları',
+  'Doğal Sistemler — Toprak ve Bitki Örtüsü',
+  'Beşeri Sistemler — Nüfus Politikaları ve Özellikleri',
+  'Beşeri Sistemler — Göçlerin Nedenleri ve Sonuçları',
+  'Küresel Ortam — Bölgeler ve Ülkeler',
+  'Çevre ve Toplum — Doğal Afetler',
+];
+
+const SINIF10_FELSEFE = [
+  'Felsefeyi Tanıma',
+  'Felsefe ile Düşünme',
+  'Felsefenin Temel Konuları — Varlık ve Bilgi',
+  'Felsefenin Temel Konuları — Ahlak ve Siyaset',
+  'Felsefenin Temel Konuları — Sanat, Din ve Bilim',
+];
+
+const SINIF10_DIN = [
+  'Allah-İnsan İlişkisi',
+  'Hz. Muhammed ve Gençlik',
+  'Din ve Hayat',
+  'Ahlaki Tutum ve Davranışlar',
+  'İslam Düşüncesinde İtikadi ve Amelî Yorumlar',
+];
+
+const SINIF10_EN = [
+  'School Life',
+  'Plans',
+  'Legendary Figures',
+  'Traditions',
+  'Travel',
+  'Helpful Tips',
+  'Food and Festivals',
+  'Digital Era',
+  'Modern Heroes',
+  'Shopping',
+];
+
+// ————— 11. SINIF (MEB müfredatı üniteleri) —————
+const SINIF11_MAT = [
+  'Trigonometri — Yönlü Açılar ve Birim Çember',
+  'Trigonometri — Trigonometrik Fonksiyonlar',
+  'Trigonometri — Toplam-Fark ve İki Kat Açı Formülleri',
+  'Trigonometri — Trigonometrik Denklemler',
+  'Analitik Geometri — Doğrunun Analitik İncelenmesi',
+  'Fonksiyonlarda Uygulamalar — Fonksiyonlarla İlgili Uygulamalar',
+  'Fonksiyonlarda Uygulamalar — İkinci Dereceden Fonksiyonlar ve Grafikleri',
+  'Denklem ve Eşitsizlik Sistemleri',
+  'Çember ve Daire — Çemberin Temel Elemanları',
+  'Çember ve Daire — Çemberde Açılar ve Uzunluk',
+  'Çember ve Daire — Dairenin Alanı',
+  'Uzay Geometri — Katı Cisimlerin Yüzey Alanı ve Hacmi',
+  'Olasılık — Koşullu Olasılık ve Bağımsız Olaylar',
+];
+
+const SINIF11_FIZIK = [
+  'Kuvvet ve Hareket — Vektörler',
+  'Kuvvet ve Hareket — Bağıl Hareket',
+  'Kuvvet ve Hareket — Newton\'ın Hareket Yasaları',
+  'Kuvvet ve Hareket — Bir Boyutta Sabit İvmeli Hareket',
+  'Kuvvet ve Hareket — İki Boyutta Hareket (Atışlar)',
+  'Kuvvet ve Hareket — Enerji ve Hareket',
+  'Kuvvet ve Hareket — İtme ve Çizgisel Momentum',
+  'Kuvvet ve Hareket — Tork, Denge ve Basit Makineler',
+  'Elektrik ve Manyetizma — Elektriksel Kuvvet ve Elektrik Alan',
+  'Elektrik ve Manyetizma — Elektriksel Potansiyel',
+  'Elektrik ve Manyetizma — Düzgün Elektrik Alan ve Sığa',
+  'Elektrik ve Manyetizma — Manyetik Alan ve Manyetik Kuvvet',
+  'Elektrik ve Manyetizma — İndüksiyon ve Alternatif Akım',
+];
+
+const SINIF11_KIMYA = [
+  'Modern Atom Teorisi — Atomun Kuantum Modeli',
+  'Modern Atom Teorisi — Periyodik Sistem ve Özellikler',
+  'Modern Atom Teorisi — Kimyasal Türler Arası Etkileşimler',
+  'Gazlar — Gaz Yasaları ve İdeal Gaz Denklemi',
+  'Gazlar — Gaz Karışımları ve Kısmi Basınç',
+  'Sıvı Çözeltiler ve Çözünürlük',
+  'Kimyasal Tepkimelerde Enerji',
+  'Kimyasal Tepkimelerde Hız',
+  'Kimyasal Tepkimelerde Denge',
+  'Sulu Çözelti Dengeleri — Asit-Baz ve Çözünürlük Dengesi',
+];
+
+const SINIF11_BIYOLOJI = [
+  'İnsan Fizyolojisi — Denetleyici ve Düzenleyici Sistemler',
+  'İnsan Fizyolojisi — Duyu Organları',
+  'İnsan Fizyolojisi — Destek ve Hareket Sistemi',
+  'İnsan Fizyolojisi — Sindirim Sistemi',
+  'İnsan Fizyolojisi — Dolaşım ve Bağışıklık Sistemi',
+  'İnsan Fizyolojisi — Solunum Sistemi',
+  'İnsan Fizyolojisi — Üriner Sistem (Boşaltım)',
+  'İnsan Fizyolojisi — Üreme Sistemi ve Embriyonik Gelişim',
+  'Komünite ve Popülasyon Ekolojisi',
+];
+
+const SINIF11_TRDEB = [
+  'Hikâye — Cumhuriyet Dönemi Türk Hikâyeciliği',
+  'Şiir — Divan Şiiri ve Halk Şiiri',
+  'Makale',
+  'Sohbet ve Fıkra',
+  'Roman — Tanzimat ve Servetifünun Romanı',
+  'Tiyatro — Modern Türk Tiyatrosu',
+  'Eleştiri',
+  'Mülakat ve Röportaj',
+  'Dil Bilgisi — Cümle Türleri ve Ögeleri',
+];
+
+const SINIF11_TARIH = [
+  'Değişen Dünya Dengeleri Karşısında Osmanlı Siyaseti (1595-1774)',
+  'Değişim Çağında Avrupa ve Osmanlı',
+  'Uluslararası İlişkilerde Denge Stratejisi (1774-1914)',
+  'Devrimler Çağında Değişen Devlet-Toplum İlişkileri',
+  'Sermaye ve Emek',
+  'XIX. ve XX. Yüzyılda Değişen Gündelik Hayat',
+];
+
+const SINIF11_COGRAFYA = [
+  'Doğal Sistemler — Biyoçeşitlilik ve Ekosistem',
+  'Doğal Sistemler — Madde Döngüleri ve Enerji Akışı',
+  'Beşeri Sistemler — Şehirler ve Etki Alanları',
+  'Beşeri Sistemler — Ekonomik Faaliyetler',
+  'Beşeri Sistemler — Türkiye Ekonomisi (Tarım, Sanayi, Hizmet)',
+  'Küresel Ortam — Bölge Türleri ve Ülkeler Arası Etkileşim',
+  'Çevre ve Toplum — Doğal Kaynaklar ve Çevre Sorunları',
+];
+
+const SINIF11_FELSEFE = [
+  'MÖ 6. Yüzyıl - MS 2. Yüzyıl Felsefesi',
+  'MS 2. Yüzyıl - MS 15. Yüzyıl Felsefesi',
+  '15. Yüzyıl - 17. Yüzyıl Felsefesi',
+  '18. Yüzyıl - 19. Yüzyıl Felsefesi',
+  '20. Yüzyıl Felsefesi',
+];
+
+const SINIF11_DIN = [
+  'Dünya ve Ahiret',
+  'Kur\'an\'a Göre Hz. Muhammed',
+  'Kur\'an\'da Bazı Kavramlar',
+  'İnançla İlgili Meseleler',
+  'Yahudilik ve Hristiyanlık',
+];
+
+const SINIF11_EN = [
+  'Future Jobs',
+  'Hobbies and Skills',
+  'Hard Times',
+  'What a Life',
+  'Back to the Past',
+  'Open Your Heart',
+  'Facts About Turkey',
+  'Sports',
+  'My Friends',
+  'Values and Norms',
+];
+
+
 function tytMatGrup(unite: string, ads: string[]): KonuAgaciKayit[] {
   return ads.map((ad) => yks('Matematik', ad, unite, YksKonuSegmenti.TYT));
 }
@@ -438,6 +673,28 @@ export const KONU_AGACI: KonuAgaciKayit[] = [
   ...SINIF9_COGRAFYA.map((ad) => liseSinif(OgretimTuru.SINIF_9, 'Coğrafya', ad)),
   ...SINIF9_DIN.map((ad) => liseSinif(OgretimTuru.SINIF_9, 'Din Kültürü ve Ahlak Bilgisi', ad)),
   ...SINIF9_EN.map((ad) => liseSinif(OgretimTuru.SINIF_9, 'İngilizce', ad)),
+
+  ...SINIF10_MAT.map((ad) => liseSinif(OgretimTuru.SINIF_10, 'Matematik', ad)),
+  ...SINIF10_FIZIK.map((ad) => liseSinif(OgretimTuru.SINIF_10, 'Fizik', ad)),
+  ...SINIF10_KIMYA.map((ad) => liseSinif(OgretimTuru.SINIF_10, 'Kimya', ad)),
+  ...SINIF10_BIYOLOJI.map((ad) => liseSinif(OgretimTuru.SINIF_10, 'Biyoloji', ad)),
+  ...SINIF10_TRDEB.map((ad) => liseSinif(OgretimTuru.SINIF_10, 'Türk Dili ve Edebiyatı', ad)),
+  ...SINIF10_TARIH.map((ad) => liseSinif(OgretimTuru.SINIF_10, 'Tarih', ad)),
+  ...SINIF10_COGRAFYA.map((ad) => liseSinif(OgretimTuru.SINIF_10, 'Coğrafya', ad)),
+  ...SINIF10_FELSEFE.map((ad) => liseSinif(OgretimTuru.SINIF_10, 'Felsefe', ad)),
+  ...SINIF10_DIN.map((ad) => liseSinif(OgretimTuru.SINIF_10, 'Din Kültürü ve Ahlak Bilgisi', ad)),
+  ...SINIF10_EN.map((ad) => liseSinif(OgretimTuru.SINIF_10, 'İngilizce', ad)),
+
+  ...SINIF11_MAT.map((ad) => liseSinif(OgretimTuru.SINIF_11, 'Matematik', ad)),
+  ...SINIF11_FIZIK.map((ad) => liseSinif(OgretimTuru.SINIF_11, 'Fizik', ad)),
+  ...SINIF11_KIMYA.map((ad) => liseSinif(OgretimTuru.SINIF_11, 'Kimya', ad)),
+  ...SINIF11_BIYOLOJI.map((ad) => liseSinif(OgretimTuru.SINIF_11, 'Biyoloji', ad)),
+  ...SINIF11_TRDEB.map((ad) => liseSinif(OgretimTuru.SINIF_11, 'Türk Dili ve Edebiyatı', ad)),
+  ...SINIF11_TARIH.map((ad) => liseSinif(OgretimTuru.SINIF_11, 'Tarih', ad)),
+  ...SINIF11_COGRAFYA.map((ad) => liseSinif(OgretimTuru.SINIF_11, 'Coğrafya', ad)),
+  ...SINIF11_FELSEFE.map((ad) => liseSinif(OgretimTuru.SINIF_11, 'Felsefe', ad)),
+  ...SINIF11_DIN.map((ad) => liseSinif(OgretimTuru.SINIF_11, 'Din Kültürü ve Ahlak Bilgisi', ad)),
+  ...SINIF11_EN.map((ad) => liseSinif(OgretimTuru.SINIF_11, 'İngilizce', ad)),
 
   ...tytMatGrup('Sayılar', [
     'Temel Kavramlar',

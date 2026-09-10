@@ -10,6 +10,7 @@ import { Ozellikler } from '@/components/landing/Ozellikler';
 import { Istatistikler } from '@/components/landing/Istatistikler';
 import { Paketler } from '@/components/landing/Paketler';
 import { LandingNasil } from '@/components/landing/LandingNasil';
+import { LandingBizimleCalisin } from '@/components/landing/LandingBizimleCalisin';
 import { LandingFooter } from '@/components/landing/LandingFooter';
 import { LandingNav } from '@/components/landing/LandingNav';
 
@@ -24,6 +25,7 @@ function LandingIcerik() {
       <LandingNasil />
       <Ozellikler />
       <Paketler />
+      <LandingBizimleCalisin />
 
       {/* Final CTA */}
       <section className="relative py-20 md:py-32 px-4 sm:px-6 lg:px-8 bg-[#090F22] overflow-hidden">

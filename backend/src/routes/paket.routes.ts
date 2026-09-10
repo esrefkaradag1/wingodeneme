@@ -11,6 +11,7 @@ import {
   paketIciSinavSatinAlimOlustur,
   iyzicoCallback,
 } from '../controllers/paket.controller';
+import { indirimKoduDogrulaController } from '../controllers/indirimKodu.controller';
 import {
   aktifPaketKategorileriGetir,
   paketKategorileriGetir,
@@ -30,6 +31,8 @@ router.get('/kategoriler/aktif', aktifPaketKategorileriGetir);
 router.get('/aktif', aktifPaketleriGetir);
 router.get('/aktif/:id', aktifPaketDetayGetir);
 
+// İndirim kodu doğrulama (ödeme öncesi önizleme)
+router.post('/indirim-kodu/dogrula', kimlikDogrula, indirimKoduDogrulaController);
 router.post('/satin-al', kimlikDogrula, paketSatinAlimOlustur);
 router.post('/:id/sinavlar/satin-al', kimlikDogrula, rolKontrol('OGRENCI'), paketIciSinavSatinAlimOlustur);
 

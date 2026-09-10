@@ -1,6 +1,7 @@
 import { Router, Response, NextFunction } from 'express';
 import { kimlikDogrula, rolKontrol, AuthRequest } from '../middlewares/auth.middleware';
 import {
+  duyuruAliciOnizleme,
   duyuruOlustur,
   duyurularim,
   duyuruOku,
@@ -27,9 +28,25 @@ router.patch('/benim/:id/oku', async (req: AuthRequest, res: Response, next: Nex
 // Admin: duyuru gönder
 router.post('/', rolKontrol('ADMIN', 'SUPER_ADMIN'), async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const { baslik, mesaj, hedefTuru, hedefRoller, kullaniciIds } = req.body || {};
-    const sonuc = await duyuruOlustur(req.kullanici!.userId, { baslik, mesaj, hedefTuru, hedefRoller, kullaniciIds });
+    const { baslik, mesaj, hedefTuru, hedefRoller, hedefOgretimTurleri, kullaniciIds } = req.body || {};
+    const sonuc = await duyuruOlustur(req.kullanici!.userId, {
+      baslik,
+      mesaj,
+      hedefTuru,
+      hedefRoller,
+      hedefOgretimTurleri,
+      kullaniciIds,
+    });
     res.status(201).json({ basarili: true, veri: sonuc });
+  } catch (e) { next(e); }
+});
+
+// Admin: gönderim öncesi alıcı sayısı önizlemesi
+router.post('/onizleme', rolKontrol('ADMIN', 'SUPER_ADMIN'), async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { hedefTuru, hedefRoller, hedefOgretimTurleri, kullaniciIds } = req.body || {};
+    const sonuc = await duyuruAliciOnizleme({ hedefTuru, hedefRoller, hedefOgretimTurleri, kullaniciIds });
+    res.json({ basarili: true, veri: sonuc });
   } catch (e) { next(e); }
 });
 

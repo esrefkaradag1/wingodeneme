@@ -20,9 +20,12 @@ import {
   ArrowLeft,
   CreditCard,
   Ban,
+  Landmark,
+  Send,
 } from 'lucide-react';
 import { kullaniciApi } from '@/lib/api';
 import { IyzicoCheckoutModal } from '@/components/payment/IyzicoCheckoutModal';
+import { HavaleOdemeKarti } from '@/components/payment/HavaleOdemeKarti';
 import { iyzicoOdemeBaslat } from '@/lib/iyzicoCheckout';
 import { toast } from '@/store/toast.store';
 import { confirmAsk } from '@/store/confirm-dialog.store';
@@ -34,11 +37,21 @@ type Siparis = {
   durum: string;
   referansNo: string | null;
   odemeMetodu: string | null;
+  notlar?: string | null;
   olusturuldu: string;
   odemeZamani: string | null;
   paket?: { id: string; ad: string; sinavSayisi?: number } | null;
   sinav?: { id: string; baslik: string; tur?: string; baslangicZamani?: string } | null;
 };
+
+function odemeBildirimiVarMi(notlar?: string | null) {
+  return Boolean(notlar && notlar.includes('ÖDEME_BİLDİRİMİ'));
+}
+
+function havaleSiparisiMi(s: Siparis) {
+  const m = (s.odemeMetodu || '').toUpperCase();
+  return m.includes('HAVALE') || m.includes('EFT') || m === 'MANUEL';
+}
 
 const DURUM_ETIKET: Record<string, string> = {
   BEKLEMEDE: 'Ödeme bekliyor',
@@ -106,6 +119,10 @@ export default function SiparislerimSayfasi() {
 
   const [iptalId, setIptalId] = useState<string | null>(null);
   const [kapaliGunler, setKapaliGunler] = useState<Set<string>>(new Set());
+  const [havaleAcikId, setHavaleAcikId] = useState<string | null>(null);
+  const [bildirimSiparisId, setBildirimSiparisId] = useState<string | null>(null);
+  const [gonderenAd, setGonderenAd] = useState('');
+  const [bildirimAciklama, setBildirimAciklama] = useState('');
 
   const gunGruplari = useMemo(() => {
     const map = new Map<string, { anahtar: string; tarih: Date; siparisler: Siparis[] }>();
@@ -161,6 +178,24 @@ export default function SiparislerimSayfasi() {
       toast.hata(err?.response?.data?.mesaj || 'Ödeme başlatılamadı');
     },
     onSettled: () => setOdemeSiparisId(null),
+  });
+
+  const odemeBildirimMutation = useMutation({
+    mutationFn: (siparisId: string) =>
+      kullaniciApi.siparisOdemeBildirim(siparisId, {
+        gonderenAd: gonderenAd.trim() || undefined,
+        aciklama: bildirimAciklama.trim() || undefined,
+      }),
+    onSuccess: (res) => {
+      toast.basarili(res?.data?.mesaj || 'Ödeme bildiriminiz alındı');
+      setBildirimSiparisId(null);
+      setGonderenAd('');
+      setBildirimAciklama('');
+      queryClient.invalidateQueries({ queryKey: ['ogrenci-siparisler'] });
+    },
+    onError: (err: { response?: { data?: { mesaj?: string } } }) => {
+      toast.hata(err?.response?.data?.mesaj || 'Ödeme bildirimi gönderilemedi');
+    },
   });
 
   return (
@@ -252,10 +287,15 @@ export default function SiparislerimSayfasi() {
                     {grup.siparisler.map((siparis) => {
                       const DurumIkon = DURUM_IKON[siparis.durum] || Clock;
                       const tamamlandi = siparis.durum === 'TAMAMLANDI';
+                      const beklemede = siparis.durum === 'BEKLEMEDE' && siparis.miktar > 0;
+                      const havaleTercihli = havaleSiparisiMi(siparis);
+                      const bildirimGonderildi = odemeBildirimiVarMi(siparis.notlar);
                       const iptalEdilebilir =
                         siparis.durum === 'BEKLEMEDE' &&
                         !!siparis.sinav?.baslangicZamani &&
                         new Date(siparis.sinav.baslangicZamani).getTime() > Date.now();
+                      const havalePanelAcik =
+                        beklemede && (havaleTercihli || havaleAcikId === siparis.id);
                       return (
                         <article
                           key={siparis.id}
@@ -280,7 +320,9 @@ export default function SiparislerimSayfasi() {
                         className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border ${DURUM_STIL[siparis.durum] || DURUM_STIL.BEKLEMEDE}`}
                       >
                         <DurumIkon className="w-3.5 h-3.5" />
-                        {DURUM_ETIKET[siparis.durum] || siparis.durum}
+                        {bildirimGonderildi && beklemede
+                          ? 'Onay bekliyor'
+                          : DURUM_ETIKET[siparis.durum] || siparis.durum}
                       </span>
                     </div>
 
@@ -297,6 +339,14 @@ export default function SiparislerimSayfasi() {
                           {format(new Date(siparis.olusturuldu), 'd MMM yyyy HH:mm', { locale: tr })}
                         </strong>
                       </span>
+                      {siparis.odemeMetodu ? (
+                        <span>
+                          Yöntem:{' '}
+                          <strong className="text-gray-700">
+                            {havaleSiparisiMi(siparis) ? 'Havale / EFT' : siparis.odemeMetodu}
+                          </strong>
+                        </span>
+                      ) : null}
                       {siparis.odemeZamani ? (
                         <span>
                           Ödeme:{' '}
@@ -334,7 +384,19 @@ export default function SiparislerimSayfasi() {
                             Pakete git →
                           </Link>
                         ) : null}
-                        {siparis.durum === 'BEKLEMEDE' ? (
+                        {beklemede && !havaleTercihli ? (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setHavaleAcikId((prev) => (prev === siparis.id ? null : siparis.id))
+                            }
+                            className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-700 hover:text-emerald-900"
+                          >
+                            <Landmark className="w-3.5 h-3.5" />
+                            {havaleAcikId === siparis.id ? 'Havale bilgisini gizle' : 'Havale / EFT'}
+                          </button>
+                        ) : null}
+                        {beklemede ? (
                           <button
                             type="button"
                             disabled={odemeBaslatMutation.isPending && odemeSiparisId === siparis.id}
@@ -349,7 +411,7 @@ export default function SiparislerimSayfasi() {
                             ) : (
                               <CreditCard className="w-3.5 h-3.5" />
                             )}
-                            Ödemeyi tamamla →
+                            Kart ile öde →
                           </button>
                         ) : null}
                         {iptalEdilebilir ? (
@@ -380,6 +442,71 @@ export default function SiparislerimSayfasi() {
                         ) : null}
                       </div>
                     </div>
+
+                    {beklemede && havalePanelAcik ? (
+                      <div className="pt-3 space-y-3">
+                        <HavaleOdemeKarti
+                          tutar={siparis.miktar}
+                          referansNo={siparis.referansNo}
+                          siparisId={siparis.id}
+                          kompakt
+                        />
+                        {bildirimGonderildi ? (
+                          <div className="rounded-xl border border-amber-100 bg-amber-50 px-3 py-2.5 text-xs font-semibold text-amber-900">
+                            Ödeme bildiriminiz alındı. Admin onayından sonra erişiminiz açılacaktır.
+                          </div>
+                        ) : bildirimSiparisId === siparis.id ? (
+                          <div className="rounded-xl border border-gray-100 bg-gray-50 p-3 space-y-2">
+                            <p className="text-xs font-bold text-gray-800">Ödeme bildirimi</p>
+                            <input
+                              type="text"
+                              value={gonderenAd}
+                              onChange={(e) => setGonderenAd(e.target.value)}
+                              placeholder="Havale gönderen ad soyad (opsiyonel)"
+                              className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm"
+                            />
+                            <textarea
+                              value={bildirimAciklama}
+                              onChange={(e) => setBildirimAciklama(e.target.value)}
+                              placeholder="Ek not (opsiyonel)"
+                              rows={2}
+                              className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm resize-none"
+                            />
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                onClick={() => setBildirimSiparisId(null)}
+                                className="flex-1 rounded-xl border border-gray-200 py-2 text-xs font-bold text-gray-600"
+                              >
+                                Vazgeç
+                              </button>
+                              <button
+                                type="button"
+                                disabled={odemeBildirimMutation.isPending}
+                                onClick={() => odemeBildirimMutation.mutate(siparis.id)}
+                                className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl bg-emerald-600 py-2 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
+                              >
+                                {odemeBildirimMutation.isPending ? (
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                ) : (
+                                  <Send className="w-3.5 h-3.5" />
+                                )}
+                                Bildirim gönder
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setBildirimSiparisId(siparis.id)}
+                            className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 py-2.5 text-xs font-bold text-white hover:bg-emerald-700"
+                          >
+                            <Send className="w-3.5 h-3.5" />
+                            Ödeme bildirimi gönder
+                          </button>
+                        )}
+                      </div>
+                    ) : null}
                   </div>
                 </div>
                         </article>

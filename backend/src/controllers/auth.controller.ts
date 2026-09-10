@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { ogrenciKayit, veliKayit, ogretmenKayit, girisYap, tokenYenile, cikisYap, sifremiUnuttumTalep, sifremiUnuttumOnayla } from '../services/auth.service';
+import { ogrenciKayit, veliKayit, ogretmenKayit, kocKayit, girisYap, tokenYenile, cikisYap, sifremiUnuttumTalep, sifremiUnuttumOnayla } from '../services/auth.service';
 import { AuthRequest } from '../middlewares/auth.middleware';
 import { prisma } from '../config/database';
 
@@ -20,6 +20,22 @@ export async function veliKayitController(req: Request, res: Response, next: Nex
 export async function ogretmenKayitController(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   try {
     const sonuc = await ogretmenKayit(req.body, req.platformTurleri);
+    res.status(201).json({ basarili: true, veri: sonuc });
+  } catch (err) { next(err); }
+}
+
+export async function kocKayitController(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    // Bireysel koç kaydı — tip gönderilmese de BIREYSEL kabul edilir
+    const sonuc = await kocKayit({ ...req.body, tip: req.body?.tip || 'BIREYSEL' });
+    res.status(201).json({ basarili: true, veri: sonuc });
+  } catch (err) { next(err); }
+}
+
+/** Kurumsal başvuru — süper admin onayı ile aktifleşir */
+export async function kurumKayitController(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const sonuc = await kocKayit({ ...req.body, tip: 'KURUMSAL' });
     res.status(201).json({ basarili: true, veri: sonuc });
   } catch (err) { next(err); }
 }
@@ -59,6 +75,16 @@ export async function meGetir(req: AuthRequest, res: Response, next: NextFunctio
                 kullanici: { select: { email: true } },
               },
             },
+            koc: {
+              select: {
+                id: true,
+                ad: true,
+                soyad: true,
+                tip: true,
+                kurumAdi: true,
+                referansKod: true,
+              },
+            },
           },
         },
         veliProfil: {
@@ -71,6 +97,7 @@ export async function meGetir(req: AuthRequest, res: Response, next: NextFunctio
           },
         },
         adminProfil: true,
+        kocProfil: true,
       },
     });
     res.json({ basarili: true, veri: kullanici });

@@ -1,7 +1,11 @@
+import { komisyonHakedisiOnayla } from './indirimKodu.service';
 import { prisma } from '../config/database';
 
 /** Sipariş tamamlandığında paket veya tek sınav haklarını öğrenciye uygular */
 export async function satinAlimPaketHaklariniUygula(satinAlimId: string): Promise<void> {
+  // Sipariş tamamlandığında indirim kodu komisyonunu hakediş olarak işaretle
+  await komisyonHakedisiOnayla(satinAlimId);
+
   const sa = await prisma.satinAlim.findUnique({
     where: { id: satinAlimId },
     include: {

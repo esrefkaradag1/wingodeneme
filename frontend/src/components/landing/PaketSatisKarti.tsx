@@ -5,6 +5,7 @@ import { motion } from 'framer-motion';
 import {
   ArrowRight,
   Check,
+  ExternalLink,
   Gift,
   Sparkles,
   Star,
@@ -24,6 +25,8 @@ export type PaketSatisVeri = {
   sinavSayisi: number;
   ozellikler: string[];
   populer: boolean;
+  /** Doluysa satın alma Wingolink'te yapılır */
+  disUrl?: string | null;
 };
 
 type PaketSatisKartiProps = {
@@ -75,7 +78,13 @@ export function PaketSatisKarti({
 }: PaketSatisKartiProps) {
   const { efektif, ucretsiz, indirimVar, indirimYuzde, denemeBasi } = paketFiyat(paket);
   const ozellikler = (Array.isArray(paket.ozellikler) ? paket.ozellikler : []).slice(0, 4);
-  const detayHref = kpssModu && paket.id.includes('kpss-') ? '/kayit' : `/paket/${encodeURIComponent(paket.id)}`;
+  const wingolinkUrl = (paket.disUrl || '').trim();
+  const wingolinkMi = wingolinkUrl.length > 0;
+  const detayHref = wingolinkMi
+    ? wingolinkUrl
+    : kpssModu && paket.id.includes('kpss-')
+      ? '/kayit'
+      : `/paket/${encodeURIComponent(paket.id)}`;
 
   const sinavMetni =
     paket.sinavSayisi === 0
@@ -225,7 +234,17 @@ export function PaketSatisKarti({
 
         {/* CTA */}
         <div className="mt-auto space-y-2.5">
-          {ucretsiz && onUcretsizAl ? (
+          {wingolinkMi ? (
+            <a
+              href={wingolinkUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-orange-500 to-amber-500 py-3.5 text-sm font-black text-white shadow-lg shadow-orange-600/25 transition-all hover:brightness-110"
+            >
+              Wingolink&apos;te Satın Al
+              <ExternalLink className="h-4 w-4" />
+            </a>
+          ) : ucretsiz && onUcretsizAl ? (
             <button
               type="button"
               disabled={ucretsizYukleniyor}
@@ -255,7 +274,7 @@ export function PaketSatisKarti({
             </Link>
           )}
 
-          {!kpssModu ? (
+          {!kpssModu && !wingolinkMi ? (
             <Link
               href={`/paket/${encodeURIComponent(paket.id)}`}
               className="flex w-full items-center justify-center gap-1 py-2 text-xs font-bold text-slate-500 transition-colors hover:text-[#2ABBA7]"
@@ -263,6 +282,11 @@ export function PaketSatisKarti({
               Paketi incele
               <ArrowRight className="h-3 w-3" />
             </Link>
+          ) : null}
+          {wingolinkMi ? (
+            <p className="text-center text-[11px] text-slate-500">
+              Satın alma Wingolink üzerinde tamamlanır
+            </p>
           ) : null}
         </div>
       </div>

@@ -58,7 +58,14 @@ const ogretmenSchema = z.object({
   soyad: z.string().min(2, 'Soyad en az 2 karakter'),
   email: z.string().email('Geçerli e-posta girin'),
   sifre: z.string().min(8, 'Şifre en az 8 karakter').regex(/[A-Z]/, 'Büyük harf içermeli').regex(/[0-9]/, 'Rakam içermeli'),
-  telefon: z.string().optional(),
+  telefon: z
+    .string()
+    .min(1, 'Telefon zorunlu')
+    .refine((v) => {
+      const r = v.replace(/\D/g, '');
+      const son = r.startsWith('90') && r.length === 12 ? r.slice(2) : r.startsWith('0') ? r.slice(1) : r;
+      return son.length === 10 && son.startsWith('5');
+    }, 'Geçerli cep telefonu girin (5XX XXX XX XX)'),
   ogretimTurleri: z.array(z.enum(['YKS', 'LGS', 'KPSS_LISANS', 'KPSS_ONLISANS', 'KPSS_ORTAOGRETIM'])).min(1, 'En az bir kademe seçin'),
   branslarByTur: z.record(z.array(z.string())).default({}),
 }).superRefine((v, ctx) => {
@@ -172,8 +179,9 @@ export default function OgretmenKayitSayfasi() {
             </div>
 
             <div>
-              <label className="block text-sm text-gray-300 mb-1.5">Telefon <span className="text-gray-500">(opsiyonel)</span></label>
-              <input {...register('telefon')} className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="05xx..." />
+              <label className="block text-sm text-gray-300 mb-1.5">Telefon <span className="text-red-400">*</span></label>
+              <input {...register('telefon')} type="tel" inputMode="numeric" className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="05XX XXX XX XX" />
+              {errors.telefon && <p className="mt-1 text-xs text-red-400">{errors.telefon.message}</p>}
             </div>
 
             <div>

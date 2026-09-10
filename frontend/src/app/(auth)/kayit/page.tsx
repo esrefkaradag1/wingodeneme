@@ -9,7 +9,7 @@ import dynamic from 'next/dynamic';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   Loader2, ChevronRight, ChevronLeft, Users, GraduationCap,
-  User, School, Mail, Lock, MapPin, Building2, Target, BookOpen, Phone,
+  User, School, Mail, Lock, MapPin, Building2, Target, BookOpen, Phone, CreditCard,
   Eye, EyeOff, CheckCircle2, AlertCircle, Sparkles,
 } from 'lucide-react';
 import { authApi } from '@/lib/api';
@@ -31,12 +31,34 @@ const sifreKurali = (etiket: string) =>
     .refine((v) => /[A-Z]/.test(v), `${etiket} en az bir büyük harf içermeli`)
     .refine((v) => /[0-9]/.test(v), `${etiket} en az bir rakam içermeli`);
 
+/** TC kimlik no algoritmik doğrulama (sunucu tarafıyla aynı kural) */
+function tcKimlikGecerli(deger: string): boolean {
+  const tc = (deger || '').replace(/\D/g, '');
+  if (!/^[1-9][0-9]{10}$/.test(tc)) return false;
+  const d = tc.split('').map((c) => parseInt(c, 10));
+  const tek = d[0] + d[2] + d[4] + d[6] + d[8];
+  const cift = d[1] + d[3] + d[5] + d[7];
+  if (((tek * 7 - cift) % 10 + 10) % 10 !== d[9]) return false;
+  return d.slice(0, 10).reduce((a, b) => a + b, 0) % 10 === d[10];
+}
+
 const kayitSchema = z.object({
   ad: z.string().min(2, 'Ad en az 2 karakter'),
   soyad: z.string().min(2, 'Soyad en az 2 karakter'),
   email: z.string().email('Geçerli e-posta girin'),
   sifre: sifreKurali('Şifre'),
-  telefon: z.string().optional(),
+  telefon: z
+    .string()
+    .min(1, 'Telefon zorunlu')
+    .refine((v) => {
+      const r = v.replace(/\D/g, '');
+      const son = r.startsWith('90') && r.length === 12 ? r.slice(2) : r.startsWith('0') ? r.slice(1) : r;
+      return son.length === 10 && son.startsWith('5');
+    }, 'Geçerli cep telefonu girin (5XX XXX XX XX)'),
+  tcKimlikNo: z
+    .string()
+    .min(1, 'TC kimlik numarası zorunlu')
+    .refine((v) => tcKimlikGecerli(v), 'Geçerli bir TC kimlik numarası girin'),
   okul: z.string().optional(),
   sehir: z.string().optional(),
   sinif: z.string().min(1, 'Seçim yapın'),
@@ -49,6 +71,7 @@ const kayitSchema = z.object({
   veliSoyad: z.string().optional(),
   veliSifre: z.string().optional(),
   veliMevcutHesap: z.boolean().optional(),
+  kocReferansKod: z.string().optional(),
 }).superRefine((veri, ctx) => {
   const veliEmail = (veri.veliEmail || '').trim();
   if (!veliEmail) return;
@@ -103,7 +126,7 @@ const POPULER_BOLUMLER = [
 
 type KayitFormu = z.infer<typeof kayitSchema>;
 
-const ADIM1_ALANLARI = ['ad', 'soyad', 'email', 'sifre'] as const;
+const ADIM1_ALANLARI = ['ad', 'soyad', 'email', 'telefon', 'tcKimlikNo', 'sifre'] as const;
 const ADIM2_ALANLARI = ['sinif'] as const;
 const ADIM3_ALANLARI = ['veliAd', 'veliSoyad', 'veliEmail', 'veliTelefon', 'veliSifre'] as const;
 
@@ -117,6 +140,8 @@ const ALAN_ETIKET: Record<string, string> = {
   veliSoyad: 'Veli soyadı',
   veliEmail: 'Veli e-posta',
   veliTelefon: 'Veli telefon',
+  telefon: 'Telefon',
+  tcKimlikNo: 'TC kimlik no',
   veliSifre: 'Veli şifresi',
 };
 
@@ -291,9 +316,14 @@ function KayitSayfasiIcerik() {
     formState: { errors },
   } = useForm<KayitFormu>({
     resolver: zodResolver(kayitSchema),
-    defaultValues: { sinif: '', veliMevcutHesap: false },
+    defaultValues: { sinif: '', veliMevcutHesap: false, kocReferansKod: '' },
     mode: 'onTouched',
   });
+
+  useEffect(() => {
+    const ref = (searchParams.get('ref') || searchParams.get('koc') || '').trim();
+    if (ref) setValue('kocReferansKod', ref.toUpperCase());
+  }, [searchParams, setValue]);
 
   // KPSS adayları yetişkin olduğundan veli adımı gösterilmez (2 adımlı akış).
   const gorunurAdimlar = useMemo<readonly AdimBilgi[]>(
@@ -322,6 +352,16 @@ function KayitSayfasiIcerik() {
 
   const apiHatasiniAlanaYaz = (mesaj: string) => {
     const m = mesaj.toLowerCase();
+    if (/tc kimlik|kimlik numaras/.test(m)) {
+      setError('tcKimlikNo', { type: 'server', message: mesaj });
+      setAdim(1);
+      return true;
+    }
+    if (/telefon/.test(m) && !/veli/.test(m)) {
+      setError('telefon', { type: 'server', message: mesaj });
+      setAdim(1);
+      return true;
+    }
     if (/e-posta.*kayıtlı|email.*kayıtlı|zaten kayıtlı/.test(m)) {
       setError('email', { type: 'server', message: mesaj });
       setAdim(1);
@@ -425,6 +465,12 @@ function KayitSayfasiIcerik() {
       if (veri.ogretimTuru === 'LGS') {
         delete payload.hedefBolum;
       }
+      const kocKod = typeof veri.kocReferansKod === 'string' ? veri.kocReferansKod.trim() : '';
+      if (kocKod) {
+        payload.kocReferansKod = kocKod.toUpperCase();
+      } else {
+        delete payload.kocReferansKod;
+      }
       const yanit = await authApi.kayit(payload);
       const { kullanici, token, refreshToken } = yanit.data.veri;
       girisYap({ kullanici, token, refreshToken });
@@ -475,6 +521,12 @@ function KayitSayfasiIcerik() {
               <Link href="/kayit/veli" className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-slate-400 text-xs font-medium hover:text-white hover:bg-white/5 transition-colors">
                 <Users className="w-3.5 h-3.5" /> Veli
               </Link>
+              <Link href="/kayit/kurum" className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-slate-400 text-xs font-medium hover:text-white hover:bg-white/5 transition-colors">
+                Kurum Başvurusu
+              </Link>
+              <Link href="/kayit/koc" className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-slate-400 text-xs font-medium hover:text-white hover:bg-white/5 transition-colors">
+                <Users className="w-3.5 h-3.5" /> Koç
+              </Link>
               <Link href="/kayit/ogretmen" className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-slate-400 text-xs font-medium hover:text-white hover:bg-white/5 transition-colors">
                 <BookOpen className="w-3.5 h-3.5" /> Öğretmen
               </Link>
@@ -511,6 +563,46 @@ function KayitSayfasiIcerik() {
 
                   <FormAlan label="E-posta" required error={errors.email?.message} icon={Mail}>
                     <input {...register('email')} type="email" className={inputSinifi(!!errors.email)} placeholder="ornek@email.com" aria-invalid={!!errors.email} />
+                  </FormAlan>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <FormAlan label="Cep telefonu" required error={errors.telefon?.message} icon={Phone}>
+                      <input
+                        {...register('telefon')}
+                        type="tel"
+                        inputMode="numeric"
+                        maxLength={14}
+                        className={inputSinifi(!!errors.telefon)}
+                        placeholder="05XX XXX XX XX"
+                        aria-invalid={!!errors.telefon}
+                      />
+                    </FormAlan>
+                    <FormAlan label="TC kimlik no" required error={errors.tcKimlikNo?.message} icon={CreditCard}>
+                      <input
+                        {...register('tcKimlikNo')}
+                        inputMode="numeric"
+                        maxLength={11}
+                        className={inputSinifi(!!errors.tcKimlikNo)}
+                        placeholder="11 haneli kimlik numaranız"
+                        aria-invalid={!!errors.tcKimlikNo}
+                        onInput={(e) => {
+                          const hedef = e.currentTarget;
+                          hedef.value = hedef.value.replace(/\D/g, '').slice(0, 11);
+                        }}
+                      />
+                    </FormAlan>
+                  </div>
+                  <p className="-mt-2 text-[11px] text-slate-500">
+                    TC kimlik numarası fatura ve sınav kimlik doğrulaması için zorunludur; üçüncü kişilerle paylaşılmaz.
+                  </p>
+
+                  <FormAlan label="Koç / kurum referans kodu (isteğe bağlı)" error={errors.kocReferansKod?.message} icon={Users}>
+                    <input
+                      {...register('kocReferansKod')}
+                      className={inputSinifi(!!errors.kocReferansKod)}
+                      placeholder="WINGO-XXXXXX"
+                      aria-invalid={!!errors.kocReferansKod}
+                    />
                   </FormAlan>
 
                   <FormAlan label="Şifre" required error={errors.sifre?.message} icon={Lock}>

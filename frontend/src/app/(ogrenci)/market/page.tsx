@@ -20,6 +20,9 @@ import { motion } from 'framer-motion';
 import { toast } from '@/store/toast.store';
 import { OdemeGuvenRozetleri } from '@/components/landing/OdemeGuvenRozetleri';
 import { IyzicoCheckoutModal } from '@/components/payment/IyzicoCheckoutModal';
+import { HavaleSonucModal } from '@/components/payment/HavaleSonucModal';
+import { OdemeYontemiSecici, type OdemeYontemi } from '@/components/payment/OdemeYontemiSecici';
+import { IndirimKoduKutusu, type UygulananKod } from '@/components/odeme/IndirimKoduKutusu';
 import { iyzicoOdemeBaslat } from '@/lib/iyzicoCheckout';
 import {
   kategoriHaritasi,
@@ -59,10 +62,24 @@ const VARSAYILAN_WINGOLINK_KATEGORI = [
   },
 ] as const;
 
+function paketFiyat(paket: { fiyat: number; indirimliFiyat?: number | null }) {
+  return paket.indirimliFiyat != null && paket.indirimliFiyat > 0
+    ? paket.indirimliFiyat
+    : paket.fiyat;
+}
+
 export default function MarketSayfasi() {
   const [secilenPaket, setSecilenPaket] = useState<any>(null);
   const [checkoutForm, setCheckoutForm] = useState<string | null>(null);
   const [kategoriFiltre, setKategoriFiltre] = useState<string | 'TUMU'>('TUMU');
+  const [odemeYontemi, setOdemeYontemi] = useState<OdemeYontemi>('KREDI_KARTI');
+  const [odemeModalPaket, setOdemeModalPaket] = useState<any>(null);
+  const [indirimKodu, setIndirimKodu] = useState<UygulananKod | null>(null);
+  const [havaleModal, setHavaleModal] = useState<{
+    tutar?: number;
+    referansNo?: string | null;
+    siparisId?: string;
+  } | null>(null);
   const kullanici = useAuthStore((s) => s.kullanici);
   const kpssModu = kpssOrtami(kullanici?.ogretimTuru);
   const queryClient = useQueryClient();
@@ -80,10 +97,21 @@ export default function MarketSayfasi() {
   const kategoriHarita = useMemo(() => kategoriHaritasi(kategoriler), [kategoriler]);
 
   const satinAlMutation = useMutation({
-    mutationFn: (paketId: string) => 
-      paketApi.satinAl({ paketId, odemeYontemi: 'KREDI_KARTI' }),
+    mutationFn: ({ paketId, yontem }: { paketId: string; yontem: OdemeYontemi }) =>
+      paketApi.satinAl({ paketId, odemeYontemi: yontem, indirimKodu: indirimKodu?.kod }),
     onSuccess: (response) => {
       const data = response.data.veri;
+      setOdemeModalPaket(null);
+      setIndirimKodu(null);
+      if (data?.odemeYontemi === 'HAVALE' || data?.havale) {
+        setHavaleModal({
+          tutar: data.havale?.tutar ?? data?.miktar,
+          referansNo: data.referansNo,
+          siparisId: data.id,
+        });
+        toast.basarili('Havale siparişiniz oluşturuldu.');
+        return;
+      }
       const acildi = iyzicoOdemeBaslat(data, setCheckoutForm);
       if (!acildi) {
         if (data?.ucretsiz) {
@@ -96,8 +124,19 @@ export default function MarketSayfasi() {
     },
     onError: (error: any) => {
       toast.hata(error.response?.data?.mesaj || 'Ödeme başlatılamadı');
-    }
+    },
   });
+
+  const paketSatinAlBaslat = (paket: any) => {
+    setSecilenPaket(paket);
+    const fiyat = paketFiyat(paket);
+    if (fiyat <= 0) {
+      satinAlMutation.mutate({ paketId: paket.id, yontem: 'KREDI_KARTI' });
+      return;
+    }
+    setOdemeYontemi('KREDI_KARTI');
+    setOdemeModalPaket(paket);
+  };
 
   const paketler = paketlerData?.data?.veri || [];
 
@@ -361,10 +400,7 @@ export default function MarketSayfasi() {
                             Denemeleri Seç
                           </Link>
                           <button
-                            onClick={() => {
-                              setSecilenPaket(paket);
-                              satinAlMutation.mutate(paket.id);
-                            }}
+                            onClick={() => paketSatinAlBaslat(paket)}
                             disabled={satinAlMutation.isPending}
                             className={`py-4 rounded-2xl font-black text-sm flex items-center justify-center gap-2 transition-all active:scale-95 ${
                               paket.populer
@@ -376,11 +412,7 @@ export default function MarketSayfasi() {
                               <Loader2 className="w-4 h-4 animate-spin" />
                             ) : (
                               <>
-                                {(paket.indirimliFiyat != null && paket.indirimliFiyat > 0
-                                  ? paket.indirimliFiyat
-                                  : paket.fiyat) <= 0
-                                  ? 'Ücretsiz Al'
-                                  : 'Tüm Paket'}{' '}
+                                {paketFiyat(paket) <= 0 ? 'Ücretsiz Al' : 'Tüm Paket'}{' '}
                                 <ArrowRight className="w-4 h-4" />
                               </>
                             )}
@@ -472,7 +504,7 @@ export default function MarketSayfasi() {
                       rel="noopener noreferrer"
                       className="w-full py-4 rounded-2xl font-black text-sm flex items-center justify-center gap-2 transition-all active:scale-95 bg-orange-500 text-white hover:bg-orange-600 shadow-lg shadow-orange-500/20"
                     >
-                      WingoLink'te İncele <ArrowRight className="w-4 h-4" />
+                      Wingolink&apos;te Satın Al <ExternalLink className="w-4 h-4" />
                     </a>
                   </div>
                 </motion.div>
@@ -532,6 +564,80 @@ export default function MarketSayfasi() {
         </div>
         <OdemeGuvenRozetleri className="shrink-0" />
       </div>
+
+      {odemeModalPaket ? (
+        <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/50"
+            aria-label="Kapat"
+            onClick={() => {
+              setOdemeModalPaket(null);
+              setIndirimKodu(null);
+            }}
+          />
+          <div className="relative w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl bg-white p-5 sm:p-6 shadow-2xl space-y-4">
+            <div>
+              <h2 className="text-lg font-black text-gray-900">{odemeModalPaket.ad}</h2>
+              <p className="text-sm text-gray-500 mt-1">
+                {indirimKodu ? (
+                  <>
+                    <span className="line-through">{paketFiyat(odemeModalPaket).toLocaleString('tr-TR')} ₺</span>{' '}
+                    <span className="font-black text-emerald-600">
+                      {indirimKodu.netTutar.toLocaleString('tr-TR')} ₺
+                    </span>
+                  </>
+                ) : (
+                  `${paketFiyat(odemeModalPaket).toLocaleString('tr-TR')} ₺`
+                )}{' '}
+                · ödeme yöntemini seçin
+              </p>
+            </div>
+            <IndirimKoduKutusu
+              tutar={paketFiyat(odemeModalPaket)}
+              uygulanan={indirimKodu}
+              onDegisim={setIndirimKodu}
+            />
+            <OdemeYontemiSecici deger={odemeYontemi} onChange={setOdemeYontemi} />
+            <div className="flex gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setOdemeModalPaket(null)}
+                className="flex-1 rounded-2xl border border-gray-200 py-3 text-sm font-bold text-gray-700 hover:bg-gray-50"
+              >
+                Vazgeç
+              </button>
+              <button
+                type="button"
+                disabled={satinAlMutation.isPending}
+                onClick={() =>
+                  satinAlMutation.mutate({
+                    paketId: odemeModalPaket.id,
+                    yontem: odemeYontemi,
+                  })
+                }
+                className="flex-1 inline-flex items-center justify-center gap-2 rounded-2xl bg-indigo-600 py-3 text-sm font-bold text-white hover:bg-indigo-700 disabled:opacity-50"
+              >
+                {satinAlMutation.isPending ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : odemeYontemi === 'HAVALE' ? (
+                  'Havale ile devam'
+                ) : (
+                  'Kart ile öde'
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      <HavaleSonucModal
+        open={Boolean(havaleModal)}
+        onClose={() => setHavaleModal(null)}
+        tutar={havaleModal?.tutar}
+        referansNo={havaleModal?.referansNo}
+        siparisId={havaleModal?.siparisId}
+      />
 
       <IyzicoCheckoutModal
         open={Boolean(checkoutForm)}

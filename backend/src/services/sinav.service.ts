@@ -2,9 +2,15 @@ import { prisma } from '../config/database';
 import { cache } from '../config/redis';
 import { AppHatasi } from '../middlewares/hata.middleware';
 import { analizHesapla } from './analiz.service';
-import { KatilimDurumu, CevapYontemi, SoruOnayDurumu, SinavTuru } from '@prisma/client';
+import { KatilimDurumu, CevapYontemi, SinavTuru } from '@prisma/client';
 import { parseKayitliOturumlar } from '../utils/sinavOturum';
 import { netHesapla, platformSinavTurleri } from '../utils/netHesapla';
+import { efektifKatilimciSayisi } from '../utils/katilimciSayisi';
+import {
+  birlesikSoruSayisi,
+  sinavSoruIdSeti,
+  sinavSorulariniGetir,
+} from '../utils/sinavSoruListe';
 
 /**
  * Öğrencinin bir sınava erişimi var mı?
@@ -114,7 +120,7 @@ export async function sinavListesiGetir(ogrenciId: string, isKpssPlatform = fals
           where: { grupId: { in: grupIdleri }, yayinlandi: true, ...turWhere },
           orderBy: { baslangicZamani: 'desc' },
           include: {
-            _count: { select: { sorular: true, katilimlar: true } },
+            _count: { select: { sorular: true, soruAtamalari: true, katilimlar: true } },
           },
         })
       : [],
@@ -141,7 +147,7 @@ export async function sinavListesiGetir(ogrenciId: string, isKpssPlatform = fals
           where: { id: { in: tumEkIdler }, ...turWhere },
           orderBy: { baslangicZamani: 'desc' },
           include: {
-            _count: { select: { sorular: true, katilimlar: true } },
+            _count: { select: { sorular: true, soruAtamalari: true, katilimlar: true } },
           },
         })
       : [];
@@ -178,8 +184,8 @@ export async function sinavListesiGetir(ogrenciId: string, isKpssPlatform = fals
     return {
       ...s,
       durum: simdi < s.baslangicZamani ? 'YAKINDA' : simdi > s.bitisZamani ? 'BITTI' : 'AKTIF',
-      soruSayisi: s._count.sorular,
-      katilimciSayisi: s._count.katilimlar,
+      soruSayisi: birlesikSoruSayisi(s._count),
+      katilimciSayisi: efektifKatilimciSayisi(s.gosterilenKatilimciSayisi, s._count.katilimlar),
       katilimId: k?.id ?? null,
       katilimDurumu: k?.durum ?? null,
     };
@@ -197,7 +203,7 @@ export async function sinavDetayGetir(sinavId: string, ogrenciId?: string) {
     where: { id: sinavId },
     include: {
       grup: true,
-      _count: { select: { sorular: true } },
+      _count: { select: { sorular: true, soruAtamalari: true } },
     },
   });
 
@@ -213,9 +219,8 @@ export async function sinavDetayGetir(sinavId: string, ogrenciId?: string) {
 
   let sorular = null;
   if (sinavAktif && ogrenciId && erisim) {
-    sorular = await prisma.soru.findMany({
-      where: { sinavId, onayDurumu: SoruOnayDurumu.ONAYLANDI },
-      orderBy: { siraNo: 'asc' },
+    sorular = await sinavSorulariniGetir(sinavId, {
+      sadeceOnayli: true,
       select: {
         id: true,
         siraNo: true,
@@ -228,7 +233,13 @@ export async function sinavDetayGetir(sinavId: string, ogrenciId?: string) {
     });
   }
 
-  const sonuc = { ...sinav, sinavAktif, sorular, erisim: !!ogrenciId && erisim };
+  const sonuc = {
+    ...sinav,
+    _count: { sorular: birlesikSoruSayisi(sinav._count) },
+    sinavAktif,
+    sorular,
+    erisim: !!ogrenciId && erisim,
+  };
   if (!ogrenciId && !sinavAktif) await cache.yaz(cacheAnahtar, sonuc, 300);
 
   return sonuc;
@@ -260,9 +271,8 @@ export async function sinavaKatil(sinavId: string, ogrenciId: string) {
   };
 
   if (mevcutKatilim?.durum === KatilimDurumu.TAMAMLANDI) {
-    const sorular = await prisma.soru.findMany({
-      where: { sinavId, onayDurumu: SoruOnayDurumu.ONAYLANDI },
-      orderBy: { siraNo: 'asc' },
+    const sorular = await sinavSorulariniGetir(sinavId, {
+      sadeceOnayli: true,
       select: {
         id: true,
         siraNo: true,
@@ -312,9 +322,8 @@ export async function sinavaKatil(sinavId: string, ogrenciId: string) {
     },
   });
 
-  const sorular = await prisma.soru.findMany({
-    where: { sinavId, onayDurumu: SoruOnayDurumu.ONAYLANDI },
-    orderBy: { siraNo: 'asc' },
+  const sorular = await sinavSorulariniGetir(sinavId, {
+    sadeceOnayli: true,
     select: {
       id: true,
       siraNo: true,
@@ -349,7 +358,7 @@ export async function cevapTaslakKaydet(
 ) {
   const katilim = await prisma.sinavKatilim.findUnique({
     where: { id: katilimId },
-    include: { sinav: { select: { sorular: { select: { id: true } } } } },
+    select: { id: true, ogrenciId: true, durum: true, sinavId: true },
   });
 
   if (!katilim) throw new AppHatasi('Katılım bulunamadı', 404);
@@ -358,7 +367,7 @@ export async function cevapTaslakKaydet(
     throw new AppHatasi('Sınav zaten tamamlandı', 400);
   }
 
-  const gecerliSoruIds = new Set(katilim.sinav.sorular.map((s) => s.id));
+  const gecerliSoruIds = await sinavSoruIdSeti(katilim.sinavId, prisma, { sadeceOnayli: true });
   const kayitlar = cevaplar.filter((c) => gecerliSoruIds.has(c.soruId));
   if (kayitlar.length === 0) return { kaydedildi: 0 };
 
@@ -393,18 +402,23 @@ export async function cevapGonder(
 ) {
   const katilim = await prisma.sinavKatilim.findUnique({
     where: { id: katilimId },
-    include: { sinav: { include: { sorular: true } } },
+    include: { sinav: { select: { id: true, tur: true, sureDakika: true } } },
   });
 
   if (!katilim) throw new AppHatasi('Katılım bulunamadı', 404);
   if (katilim.ogrenciId !== ogrenciId) throw new AppHatasi('Yetkisiz erişim', 403);
   if (katilim.durum === KatilimDurumu.TAMAMLANDI) throw new AppHatasi('Sınav zaten tamamlandı', 400);
 
+  const sinavSorulari = await sinavSorulariniGetir(katilim.sinavId, {
+    sadeceOnayli: true,
+    select: { id: true, siraNo: true, dogruCevap: true },
+  });
+
   const cevapMap = new Map(cevaplar.map((c) => [c.soruId, c]));
 
   const oneriMs =
-    katilim.sinav.sorular.length > 0
-      ? (katilim.sinav.sureDakika * 60 * 1000) / katilim.sinav.sorular.length
+    sinavSorulari.length > 0
+      ? (katilim.sinav.sureDakika * 60 * 1000) / sinavSorulari.length
       : 60_000;
   const maxSoruSureMs = Math.min(8 * 60 * 1000, Math.max(90_000, Math.round(oneriMs * 3)));
 
@@ -418,7 +432,7 @@ export async function cevapGonder(
   const cevapKayitlari = [];
 
   // Tüm sınav sorularını dolaş — gönderilmeyen cevaplar boş sayılır (eksik gönderimde net şişmesin)
-  for (const soru of katilim.sinav.sorular) {
+  for (const soru of sinavSorulari) {
     const cevap = cevapMap.get(soru.id);
     const secilen = cevap?.secilen ?? null;
     const sureMsRaw =
@@ -452,7 +466,7 @@ export async function cevapGonder(
   }
 
   const net = netHesapla(dogru, yanlis, katilim.sinav.tur);
-  const toplamSoru = katilim.sinav.sorular.length;
+  const toplamSoru = sinavSorulari.length;
   const ham = toplamSoru > 0 ? (dogru / toplamSoru) * 100 : 0;
 
   await prisma.$transaction([
@@ -507,17 +521,17 @@ export async function sinavSureAnaliziGetir(sinavId: string) {
       id: true,
       baslik: true,
       sureDakika: true,
-      sorular: {
-        orderBy: { siraNo: 'asc' },
-        select: {
-          id: true,
-          siraNo: true,
-          konu: { select: { ad: true, ders: true } },
-        },
-      },
     },
   });
   if (!sinav) throw new AppHatasi('Sınav bulunamadı', 404);
+
+  const sorular = await sinavSorulariniGetir(sinavId, {
+    select: {
+      id: true,
+      siraNo: true,
+      konu: { select: { ad: true, ders: true } },
+    },
+  });
 
   const katilimlar = await prisma.sinavKatilim.findMany({
     where: { sinavId, durum: KatilimDurumu.TAMAMLANDI },
@@ -529,7 +543,7 @@ export async function sinavSureAnaliziGetir(sinavId: string) {
   });
 
   const soruSureMap = new Map<string, number[]>();
-  for (const soru of sinav.sorular) {
+  for (const soru of sorular) {
     soruSureMap.set(soru.id, []);
   }
 
@@ -560,15 +574,16 @@ export async function sinavSureAnaliziGetir(sinavId: string) {
     });
   }
 
-  const soruAnalizi = sinav.sorular.map((soru) => {
+  const soruAnalizi = sorular.map((soru) => {
     const sureler = soruSureMap.get(soru.id) || [];
     const ortalamaSureMs =
       sureler.length > 0 ? Math.round(sureler.reduce((a, b) => a + b, 0) / sureler.length) : null;
+    const konu = soru.konu as { ad?: string; ders?: string } | undefined;
     return {
       soruId: soru.id,
       siraNo: soru.siraNo,
-      ders: soru.konu.ders,
-      konu: soru.konu.ad,
+      ders: konu?.ders,
+      konu: konu?.ad,
       katilimSayisi: sureler.length,
       ortalamaSureMs,
       minSureMs: sureler.length > 0 ? Math.min(...sureler) : null,
@@ -579,7 +594,7 @@ export async function sinavSureAnaliziGetir(sinavId: string) {
   soruAnalizi.sort((a, b) => (b.ortalamaSureMs ?? 0) - (a.ortalamaSureMs ?? 0));
   ogrenciOzetleri.sort((a, b) => b.toplamSureMs - a.toplamSureMs);
 
-  const soruSayisi = sinav.sorular.length;
+  const soruSayisi = sorular.length;
   const oneriSureMsPerSoru =
     soruSayisi > 0 ? Math.round((sinav.sureDakika * 60 * 1000) / soruSayisi) : null;
 

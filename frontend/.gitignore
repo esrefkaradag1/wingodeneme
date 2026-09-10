@@ -1,5 +1,6 @@
 node_modules
 .next
+.next-kpss
 deploy_package
 *.zip
 .env.local

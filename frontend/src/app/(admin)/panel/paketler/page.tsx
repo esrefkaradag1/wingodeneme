@@ -1518,13 +1518,18 @@ export default function PaketYonetimiSayfasi() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Dış Bağlantı (WingoLink URL)</label>
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   value={form.disUrl}
                   onChange={e => setForm({...form, disUrl: e.target.value})}
-                  className="input-field" 
-                  placeholder="https://wingolink.com.tr/..." 
+                  className="input-field"
+                  placeholder="https://wingolink.com.tr/packages/..."
                 />
+                <p className="mt-1.5 text-xs text-slate-500 leading-relaxed">
+                  Doldurulursa bu paket Wingo Deneme&apos;de satılmaz; kullanıcı tıklayınca doğrudan
+                  Wingolink sayfasına gider ve satın almayı orada tamamlar. Kurs/paket satışı için
+                  Wingolink paket linkini buraya yapıştırın.
+                </p>
               </div>
 
               <div>

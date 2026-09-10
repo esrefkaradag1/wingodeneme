@@ -4,9 +4,77 @@ import { useMemo, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { api, adminApi } from '@/lib/api';
 import { toast } from '@/store/toast.store';
-import { Loader2, Send, Users, Shield, Globe, Search, Eye } from 'lucide-react';
+import { Loader2, Send, Users, Shield, Globe, Search, Eye, GraduationCap } from 'lucide-react';
 
 type Rol = 'OGRENCI' | 'VELI' | 'TEACHER' | 'ADMIN' | 'SUPER_ADMIN';
+
+type Kademe =
+  | 'YKS'
+  | 'SINIF_9'
+  | 'SINIF_10'
+  | 'SINIF_11'
+  | 'LGS'
+  | 'SINIF_6'
+  | 'SINIF_7'
+  | 'KPSS'
+  | 'KPSS_LISANS'
+  | 'KPSS_ONLISANS'
+  | 'KPSS_ORTAOGRETIM';
+
+/** Kademe grupları — üst başlığa tıklayınca altındakiler birlikte seçilir */
+const KADEME_GRUPLARI: Array<{ baslik: string; renk: string; kademeler: Array<{ deger: Kademe; etiket: string }> }> = [
+  {
+    baslik: 'YKS',
+    renk: 'indigo',
+    kademeler: [
+      { deger: 'YKS', etiket: 'YKS (12 / mezun)' },
+      { deger: 'SINIF_11', etiket: '11. sınıf' },
+      { deger: 'SINIF_10', etiket: '10. sınıf' },
+      { deger: 'SINIF_9', etiket: '9. sınıf' },
+    ],
+  },
+  {
+    baslik: 'LGS',
+    renk: 'emerald',
+    kademeler: [
+      { deger: 'LGS', etiket: 'LGS (8. sınıf)' },
+      { deger: 'SINIF_7', etiket: '7. sınıf' },
+      { deger: 'SINIF_6', etiket: '6. sınıf' },
+    ],
+  },
+  {
+    baslik: 'KPSS',
+    renk: 'teal',
+    kademeler: [
+      { deger: 'KPSS_LISANS', etiket: 'Lisans' },
+      { deger: 'KPSS_ONLISANS', etiket: 'Ön lisans' },
+      { deger: 'KPSS_ORTAOGRETIM', etiket: 'Ortaöğretim' },
+      { deger: 'KPSS', etiket: 'KPSS (genel)' },
+    ],
+  },
+];
+
+const ROL_ETIKET: Record<string, string> = {
+  OGRENCI: 'Öğrenci',
+  VELI: 'Veli',
+  TEACHER: 'Öğretmen',
+  ADMIN: 'Yönetici',
+  SUPER_ADMIN: 'Süper yönetici',
+};
+
+const KADEME_ETIKET: Record<string, string> = {
+  YKS: 'YKS',
+  SINIF_11: '11. sınıf',
+  SINIF_10: '10. sınıf',
+  SINIF_9: '9. sınıf',
+  LGS: 'LGS',
+  SINIF_7: '7. sınıf',
+  SINIF_6: '6. sınıf',
+  KPSS: 'KPSS',
+  KPSS_LISANS: 'KPSS Lisans',
+  KPSS_ONLISANS: 'KPSS Ön lisans',
+  KPSS_ORTAOGRETIM: 'KPSS Ortaöğretim',
+};
 
 type Kullanici = {
   id: string;
@@ -24,6 +92,7 @@ export default function DuyurularAdminSayfasi() {
   const [roller, setRoller] = useState<Rol[]>(['OGRENCI']);
   const [q, setQ] = useState('');
   const [seciliIds, setSeciliIds] = useState<string[]>([]);
+  const [kademeler, setKademeler] = useState<Kademe[]>([]);
 
   const { data: kullanicilarData, isLoading: kullaniciYukleniyor, isPlaceholderData: kullaniciPlaceholder } = useQuery({
     queryKey: ['admin-kullanicilar-duyuru', q],
@@ -49,6 +118,7 @@ export default function DuyurularAdminSayfasi() {
         mesaj,
         hedefTuru: hedef,
         hedefRoller: hedef === 'ROL' ? roller : undefined,
+        hedefOgretimTurleri: hedef === 'KULLANICI' ? undefined : kademeler,
         kullaniciIds: hedef === 'KULLANICI' ? seciliIds : undefined,
       }),
     onSuccess: (r) => {
@@ -76,6 +146,34 @@ export default function DuyurularAdminSayfasi() {
     placeholderData: (prev) => prev,
   });
   const alicilar: any[] = aliciData?.data?.veri || [];
+
+  const { data: onizlemeData, isFetching: onizlemeYukleniyor } = useQuery({
+    queryKey: ['duyuru-onizleme', hedef, roller, kademeler, seciliIds.length],
+    queryFn: async () => {
+      const r = await api.post('/duyurular/onizleme', {
+        hedefTuru: hedef,
+        hedefRoller: hedef === 'ROL' ? roller : undefined,
+        hedefOgretimTurleri: hedef === 'KULLANICI' ? undefined : kademeler,
+        kullaniciIds: hedef === 'KULLANICI' ? seciliIds : undefined,
+      });
+      return r.data.veri as { aliciSayisi: number; rolDagilimi: Array<{ rol: string; adet: number }> };
+    },
+    enabled: hedef !== 'KULLANICI' || seciliIds.length > 0,
+    placeholderData: (prev) => prev,
+  });
+
+  const kademeSec = (k: Kademe) => {
+    setKademeler((prev) => (prev.includes(k) ? prev.filter((x) => x !== k) : [...prev, k]));
+  };
+
+  const grupSec = (grupKademeleri: Kademe[]) => {
+    const hepsiSecili = grupKademeleri.every((k) => kademeler.includes(k));
+    setKademeler((prev) =>
+      hepsiSecili
+        ? prev.filter((x) => !grupKademeleri.includes(x))
+        : [...new Set([...prev, ...grupKademeleri])],
+    );
+  };
 
   const rolSec = (rol: Rol) => {
     setRoller((prev) => (prev.includes(rol) ? prev.filter((x) => x !== rol) : [...prev, rol]));
@@ -133,6 +231,74 @@ export default function DuyurularAdminSayfasi() {
           </div>
         )}
 
+        {hedef !== 'KULLANICI' && (
+          <div className="rounded-xl border border-gray-100 p-4">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs font-black text-gray-600 flex items-center gap-2">
+                <GraduationCap className="w-4 h-4 text-indigo-600" /> Kademe
+                <span className="font-medium text-gray-400">
+                  (seçilmezse tüm kademelere gider)
+                </span>
+              </p>
+              {kademeler.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setKademeler([])}
+                  className="text-[11px] font-black text-gray-400 hover:text-gray-700"
+                >
+                  Temizle
+                </button>
+              )}
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-3">
+              {KADEME_GRUPLARI.map((grup) => {
+                const grupDegerleri = grup.kademeler.map((k) => k.deger);
+                const hepsi = grupDegerleri.every((k) => kademeler.includes(k));
+                const bazi = !hepsi && grupDegerleri.some((k) => kademeler.includes(k));
+                return (
+                  <div key={grup.baslik} className="rounded-xl border border-gray-100 p-3">
+                    <button
+                      type="button"
+                      onClick={() => grupSec(grupDegerleri)}
+                      className={`w-full rounded-lg px-3 py-2 text-xs font-black transition ${
+                        hepsi
+                          ? 'bg-indigo-600 text-white'
+                          : bazi
+                            ? 'bg-indigo-50 text-indigo-700 ring-1 ring-indigo-200'
+                            : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
+                      }`}
+                    >
+                      {grup.baslik}
+                    </button>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {grup.kademeler.map((k) => (
+                        <button
+                          key={k.deger}
+                          type="button"
+                          onClick={() => kademeSec(k.deger)}
+                          className={`rounded-lg border px-2 py-1 text-[11px] font-bold transition ${
+                            kademeler.includes(k.deger)
+                              ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
+                              : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
+                          }`}
+                        >
+                          {k.etiket}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <p className="mt-3 text-[11px] text-gray-500">
+              Öğrenciler kendi kademesinden, veliler bağlı oldukları öğrencinin kademesinden, öğretmenler
+              yetkili oldukları kademeden eşleşir. Yöneticiler kademe ayrımı olmadan duyuruyu alır.
+            </p>
+          </div>
+        )}
+
         {hedef === 'KULLANICI' && (
           <div className="rounded-xl border border-gray-100 p-4 space-y-3">
             <div className="flex items-center gap-2">
@@ -158,10 +324,33 @@ export default function DuyurularAdminSayfasi() {
           </div>
         )}
 
-        <div className="flex justify-end">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="text-xs font-bold text-gray-600">
+            {onizlemeYukleniyor ? (
+              <span className="inline-flex items-center gap-2 text-gray-400">
+                <Loader2 className="w-3.5 h-3.5 animate-spin" /> Alıcılar hesaplanıyor…
+              </span>
+            ) : onizlemeData ? (
+              <span className="inline-flex flex-wrap items-center gap-2">
+                <span className="rounded-lg bg-indigo-50 px-2.5 py-1 font-black text-indigo-700">
+                  {onizlemeData.aliciSayisi} alıcı
+                </span>
+                {onizlemeData.rolDagilimi.map((r) => (
+                  <span key={r.rol} className="rounded-lg bg-gray-100 px-2 py-1 text-[11px] text-gray-600">
+                    {ROL_ETIKET[r.rol] ?? r.rol}: {r.adet}
+                  </span>
+                ))}
+                {kademeler.length > 0 && (
+                  <span className="text-[11px] text-gray-400">
+                    · {kademeler.map((k) => KADEME_ETIKET[k] ?? k).join(', ')}
+                  </span>
+                )}
+              </span>
+            ) : null}
+          </div>
           <button
             onClick={() => gonderMut.mutate()}
-            disabled={gonderMut.isPending || baslik.trim().length < 3 || mesaj.trim().length < 2 || (hedef === 'ROL' && roller.length === 0) || (hedef === 'KULLANICI' && seciliIds.length === 0)}
+            disabled={gonderMut.isPending || baslik.trim().length < 3 || mesaj.trim().length < 2 || (hedef === 'ROL' && roller.length === 0) || (hedef === 'KULLANICI' && seciliIds.length === 0) || onizlemeData?.aliciSayisi === 0}
             className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-sm font-black inline-flex items-center gap-2"
           >
             {gonderMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
@@ -185,6 +374,23 @@ export default function DuyurularAdminSayfasi() {
               <div key={d.id} className="px-5 py-4 flex items-start justify-between gap-4">
                 <div className="min-w-0">
                   <p className="text-sm font-black text-gray-900 truncate">{d.baslik}</p>
+                  <div className="mt-1 flex flex-wrap items-center gap-1">
+                    {(d.hedefRoller || []).map((r: string) => (
+                      <span key={r} className="rounded-md bg-gray-100 px-1.5 py-0.5 text-[10px] font-bold text-gray-600">
+                        {ROL_ETIKET[r] ?? r}
+                      </span>
+                    ))}
+                    {(d.hedefOgretimTurleri || []).map((k: string) => (
+                      <span key={k} className="rounded-md bg-indigo-50 px-1.5 py-0.5 text-[10px] font-bold text-indigo-700">
+                        {KADEME_ETIKET[k] ?? k}
+                      </span>
+                    ))}
+                    {d.hedefTuru === 'TUMU' && (d.hedefOgretimTurleri || []).length === 0 && (
+                      <span className="rounded-md bg-gray-100 px-1.5 py-0.5 text-[10px] font-bold text-gray-600">
+                        Tüm sistem
+                      </span>
+                    )}
+                  </div>
                   <p className="text-[11px] text-gray-500 mt-1 line-clamp-1">{d.mesaj}</p>
                   <p className="text-[11px] text-gray-400 mt-1">
                     Okundu: <b className="text-emerald-700">{d.okundu}</b> · Okunmadı: <b className="text-amber-700">{d.okunmadi}</b> · Toplam: <b>{d.aliciToplam}</b>

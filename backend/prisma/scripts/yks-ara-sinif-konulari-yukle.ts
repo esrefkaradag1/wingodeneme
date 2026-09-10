@@ -1,5 +1,5 @@
 /**
- * YKS ara sınıf (şu an 9. sınıf) konu ağacını veritabanına yükler.
+ * YKS ara sınıf (9, 10 ve 11. sınıf) konu ağacını veritabanına yükler.
  * Kullanım: npm run seed:yks-ara-sinif
  */
 import { OgretimTuru, PrismaClient } from '@prisma/client';
@@ -8,7 +8,8 @@ import { KONU_AGACI } from '../data/konuAgaci';
 const prisma = new PrismaClient();
 
 async function main() {
-  const hedef = KONU_AGACI.filter((konu) => konu.ogretimTuru === OgretimTuru.SINIF_9);
+  const araSiniflar = [OgretimTuru.SINIF_9, OgretimTuru.SINIF_10, OgretimTuru.SINIF_11];
+  const hedef = KONU_AGACI.filter((konu) => araSiniflar.includes(konu.ogretimTuru as OgretimTuru));
 
   const chunk = 25;
   for (let i = 0; i < hedef.length; i += chunk) {

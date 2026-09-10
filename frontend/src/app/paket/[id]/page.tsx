@@ -22,12 +22,17 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronDown,
+  ExternalLink,
+  Users,
 } from 'lucide-react';
 import { MarketingShell } from '@/components/layout/MarketingShell';
 import { IyzicoCheckoutModal } from '@/components/payment/IyzicoCheckoutModal';
+import { HavaleSonucModal } from '@/components/payment/HavaleSonucModal';
+import { OdemeYontemiSecici, type OdemeYontemi } from '@/components/payment/OdemeYontemiSecici';
 import { iyzicoOdemeBaslat } from '@/lib/iyzicoCheckout';
 import { paketKategoriEtiket, paketKategoriRenk } from '@/lib/paketKategori';
 import { toast } from '@/store/toast.store';
+import { IndirimKoduKutusu, type UygulananKod } from '@/components/odeme/IndirimKoduKutusu';
 import { usePaketSepetStore } from '@/store/paket-sepet.store';
 import { girisUrlWithReturn, kayitUrlWithReturn } from '@/lib/returnUrl';
 import { erisimSonrasiYenile } from '@/lib/erisimYenile';
@@ -42,6 +47,7 @@ type PaketSinav = {
   gosterilenFiyat: number | null;
   satinAlinabilir?: boolean;
   soruSayisi?: number;
+  katilimciSayisi?: number;
   durum: string;
   grup?: { ad: string };
   ucretsiz?: boolean;
@@ -58,6 +64,7 @@ type PaketDetay = {
   sinavSayisi: number;
   ozellikler: string[];
   populer: boolean;
+  disUrl?: string | null;
   sinavlar?: PaketSinav[];
   ucretsizSinavlar?: PaketSinav[];
   kademeliFiyatlandirma?: SinavSepetFiyatAyarlari;
@@ -86,6 +93,13 @@ export default function PaketDetaySayfasi() {
   const [sinavListesiGenis, setSinavListesiGenis] = useState(false);
   const [checkoutForm, setCheckoutForm] = useState<string | null>(null);
   const [checkoutAltBaslik, setCheckoutAltBaslik] = useState<string | undefined>();
+  const [odemeYontemi, setOdemeYontemi] = useState<OdemeYontemi>('KREDI_KARTI');
+  const [indirimKodu, setIndirimKodu] = useState<UygulananKod | null>(null);
+  const [havaleModal, setHavaleModal] = useState<{
+    tutar?: number;
+    referansNo?: string | null;
+    siparisId?: string;
+  } | null>(null);
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['paket-detay', id],
@@ -232,13 +246,29 @@ export default function PaketDetaySayfasi() {
 
   const satinAlMutation = useMutation({
     mutationFn: (sinavIds: string[]) =>
-      paketApi.seciliSinavlariSatinAl(id!, { sinavIds, odemeYontemi: 'KREDI_KARTI' }),
+      paketApi.seciliSinavlariSatinAl(id!, { sinavIds, odemeYontemi }),
     onSuccess: (res) => {
       const data = res?.data?.veri;
       const adet = data?.adet ?? seciliIds.length;
       setCheckoutAltBaslik(
         adet > 1 ? `${paket?.ad} · ${adet} deneme` : `${paket?.ad} · 1 deneme`
       );
+      if (data?.odemeYontemi === 'HAVALE' || data?.havale) {
+        sepetTemizle();
+        queryClient.invalidateQueries({ queryKey: ['paket-detay', id] });
+        const ana = data?.olusturulan?.[0];
+        setHavaleModal({
+          tutar: data.havale?.tutar ?? data?.toplamTutar,
+          referansNo: ana?.referansNo,
+          siparisId: ana?.id,
+        });
+        toast.basarili(
+          adet > 1
+            ? `${adet} deneme için havale siparişi oluşturuldu.`
+            : 'Havale siparişiniz oluşturuldu.'
+        );
+        return;
+      }
       const acildi = iyzicoOdemeBaslat(data, setCheckoutForm);
       if (acildi) {
         sepetTemizle();
@@ -272,10 +302,22 @@ export default function PaketDetaySayfasi() {
   });
 
   const paketSatinAlMutation = useMutation({
-    mutationFn: () => paketApi.satinAl({ paketId: id!, odemeYontemi: 'KREDI_KARTI' }),
+    mutationFn: () =>
+      paketApi.satinAl({ paketId: id!, odemeYontemi, indirimKodu: indirimKodu?.kod }),
     onSuccess: (response) => {
       const data = response.data.veri;
       setCheckoutAltBaslik(paket?.ad);
+      if (data?.odemeYontemi === 'HAVALE' || data?.havale) {
+        sepetTemizle();
+        queryClient.invalidateQueries({ queryKey: ['paket-detay', id] });
+        setHavaleModal({
+          tutar: data.havale?.tutar ?? data?.miktar,
+          referansNo: data.referansNo,
+          siparisId: data.id,
+        });
+        toast.basarili('Havale siparişiniz oluşturuldu.');
+        return;
+      }
       const acildi = iyzicoOdemeBaslat(data, setCheckoutForm);
       if (!acildi) {
         if (data?.ucretsiz) {
@@ -396,7 +438,12 @@ export default function PaketDetaySayfasi() {
               <span className="inline-flex items-center gap-1">
                 {s.sureDakika} dk
               </span>
-              {s.soruSayisi != null && <span>{s.soruSayisi} soru</span>}
+              {s.katilimciSayisi != null && s.katilimciSayisi > 0 && (
+                <span className="inline-flex items-center gap-1 text-emerald-300/90">
+                  <Users className="w-3 h-3" />
+                  {s.katilimciSayisi.toLocaleString('tr-TR')} kişi
+                </span>
+              )}
             </div>
           </div>
           <div className="text-right shrink-0">
@@ -413,6 +460,11 @@ export default function PaketDetaySayfasi() {
                 <p className="text-lg font-black text-emerald-400">
                   {s.gosterilenFiyat!.toLocaleString('tr-TR')} ₺
                 </p>
+                {s.katilimciSayisi != null && s.katilimciSayisi > 0 ? (
+                  <p className="text-[10px] font-bold text-slate-400 mt-1 tabular-nums">
+                    {s.katilimciSayisi.toLocaleString('tr-TR')} katılımcı
+                  </p>
+                ) : null}
               </>
             )}
           </div>
@@ -439,7 +491,12 @@ export default function PaketDetaySayfasi() {
             {s.grup?.ad && <span>{s.grup.ad}</span>}
             <span>{format(new Date(s.baslangicZamani), 'd MMM yyyy HH:mm', { locale: tr })}</span>
             <span>{s.sureDakika} dk</span>
-            {s.soruSayisi != null && <span>{s.soruSayisi} soru</span>}
+            {s.katilimciSayisi != null && s.katilimciSayisi > 0 && (
+              <span className="inline-flex items-center gap-1">
+                <Users className="w-3 h-3" />
+                {s.katilimciSayisi.toLocaleString('tr-TR')} kişi
+              </span>
+            )}
           </div>
           <p className="text-xs text-emerald-100/80 mt-2">
             Paket satin almadan gorulebilir. Cozmek icin giris yapmaniz yeterlidir.
@@ -489,6 +546,26 @@ export default function PaketDetaySayfasi() {
                   Sınav takvimi
                 </Link>
               </div>
+            </div>
+          ) : paket.disUrl ? (
+            <div className="mx-auto max-w-lg rounded-3xl border border-orange-400/20 bg-gradient-to-br from-orange-500/10 to-amber-500/5 p-8 text-center">
+              <p className="text-xs font-black uppercase tracking-widest text-orange-300">Wingolink paketi</p>
+              <h1 className="mt-3 text-2xl font-black text-white">{paket.ad}</h1>
+              {paket.aciklama && (
+                <p className="mt-2 text-sm leading-relaxed text-slate-400">{paket.aciklama}</p>
+              )}
+              <p className="mt-4 text-sm text-slate-400">
+                Bu paket Wingolink üzerinden satılır. Satın almak için aşağıdaki butona tıklayın.
+              </p>
+              <a
+                href={paket.disUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-orange-500 px-6 py-4 text-sm font-black text-white shadow-lg shadow-orange-600/20 transition hover:bg-orange-600"
+              >
+                Wingolink&apos;te Satın Al
+                <ExternalLink className="h-4 w-4" />
+              </a>
             </div>
           ) : (
             <div className="space-y-8">
@@ -786,6 +863,13 @@ export default function PaketDetaySayfasi() {
                             </p>
                           )}
                         </div>
+                        {token && kademeSonuc.toplam > 0 ? (
+                          <OdemeYontemiSecici
+                            deger={odemeYontemi}
+                            onChange={setOdemeYontemi}
+                            koyu
+                          />
+                        ) : null}
                         {token ? (
                           <button
                             type="button"
@@ -802,9 +886,13 @@ export default function PaketDetaySayfasi() {
                               ? satinAlIds.length > 1
                                 ? `${satinAlIds.length} Ücretsiz Denemeyi Edin`
                                 : 'Ücretsiz Denemeyi Edin'
-                              : satinAlIds.length > 1
-                                ? `${satinAlIds.length} Denemeyi Satın Al · Ödeme`
-                                : 'Seçili Denemeyi Satın Al · Ödeme'}
+                              : odemeYontemi === 'HAVALE'
+                                ? satinAlIds.length > 1
+                                  ? `${satinAlIds.length} Deneme · Havale ile Al`
+                                  : 'Havale / EFT ile Al'
+                                : satinAlIds.length > 1
+                                  ? `${satinAlIds.length} Denemeyi Satın Al · Kart`
+                                  : 'Kart ile Öde'}
                           </button>
                         ) : (
                           <div className="space-y-2">
@@ -874,12 +962,32 @@ export default function PaketDetaySayfasi() {
                         <span className="text-2xl font-black text-white">
                           {paketUcretsiz
                             ? 'Ücretsiz'
-                            : `${(paket.indirimliFiyat ?? paket.fiyat).toLocaleString('tr-TR')} ₺`}
+                            : `${(indirimKodu
+                                ? indirimKodu.netTutar
+                                : paket.indirimliFiyat ?? paket.fiyat
+                              ).toLocaleString('tr-TR')} ₺`}
                         </span>
-                        {!paketUcretsiz && paket.indirimliFiyat != null && (
-                          <span className="text-slate-500 line-through">{paket.fiyat} ₺</span>
+                        {!paketUcretsiz && (indirimKodu || paket.indirimliFiyat != null) && (
+                          <span className="text-slate-500 line-through">
+                            {(indirimKodu ? paket.indirimliFiyat ?? paket.fiyat : paket.fiyat).toLocaleString('tr-TR')} ₺
+                          </span>
                         )}
                       </div>
+                      {token && !paketUcretsiz && satinAlIds.length === 0 && (
+                        <IndirimKoduKutusu
+                          tutar={paket.indirimliFiyat ?? paket.fiyat}
+                          uygulanan={indirimKodu}
+                          onDegisim={setIndirimKodu}
+                          koyuTema
+                        />
+                      )}
+                      {token && !paketUcretsiz && satinAlIds.length === 0 ? (
+                        <OdemeYontemiSecici
+                          deger={odemeYontemi}
+                          onChange={setOdemeYontemi}
+                          koyu
+                        />
+                      ) : null}
                       {token ? (
                         <button
                           type="button"
@@ -892,7 +1000,11 @@ export default function PaketDetaySayfasi() {
                           ) : (
                             <ShoppingBag className="w-4 h-4" />
                           )}
-                          {paketUcretsiz ? 'Tüm Paketi Ücretsiz Al' : 'Tüm Paketi Satın Al'}
+                          {paketUcretsiz
+                            ? 'Tüm Paketi Ücretsiz Al'
+                            : odemeYontemi === 'HAVALE'
+                              ? 'Tüm Paket · Havale'
+                              : 'Tüm Paket · Kart'}
                         </button>
                       ) : (
                         <div className="space-y-2">
@@ -918,6 +1030,14 @@ export default function PaketDetaySayfasi() {
           )}
         </div>
       </div>
+      <HavaleSonucModal
+        open={Boolean(havaleModal)}
+        onClose={() => setHavaleModal(null)}
+        tutar={havaleModal?.tutar}
+        referansNo={havaleModal?.referansNo}
+        siparisId={havaleModal?.siparisId}
+      />
+
       <IyzicoCheckoutModal
         open={Boolean(checkoutForm)}
         checkoutForm={checkoutForm}

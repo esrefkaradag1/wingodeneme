@@ -116,7 +116,7 @@ export async function paketSinavlariniGetir(paket: {
     orderBy: { baslangicZamani: 'asc' },
     include: {
       grup: { select: { id: true, ad: true, tur: true } },
-      _count: { select: { sorular: true } },
+      _count: { select: { sorular: true, soruAtamalari: true, katilimlar: true } },
     },
   });
 

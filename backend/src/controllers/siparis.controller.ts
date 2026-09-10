@@ -2,7 +2,9 @@ import { Response, NextFunction } from 'express';
 import { OdemeDurumu, Prisma } from '@prisma/client';
 import { prisma } from '../config/database';
 import type { AuthRequest } from '../middlewares/auth.middleware';
-import { bildirimGonder } from '../services/bildirim.service';
+import { bildirimGonder, adminlereBildirimGonder } from '../services/bildirim.service';
+import { havaleBilgiPaketi } from '../utils/havaleHesap';
+import { komisyonIptalEt } from '../services/indirimKodu.service';
 import { satinAlimPaketHaklariniUygula } from '../services/paket-erisim.service';
 import { bekleyenSinavSepetiYenidenFiyatla } from '../services/sinav-takvim.service';
 import { iyzicoService } from '../services/iyzico.service';
@@ -234,6 +236,9 @@ export async function siparisGuncelleController(req: AuthRequest, res: Response,
       );
       if (yeniDurum === 'TAMAMLANDI' && mevcut.durum !== 'TAMAMLANDI') {
         await satinAlimPaketHaklariniUygula(id);
+      }
+      if (yeniDurum === 'IPTAL_EDILDI' || yeniDurum === 'IADE_EDILDI') {
+        await komisyonIptalEt(id);
       }
     }
 
@@ -565,6 +570,109 @@ export async function ogrenciSiparisOdemeBaslatController(
         token: iyzicoYanit.token,
         siparisId: anaSiparis.id,
         adet: odenecek.length,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+const ODEME_BILDIRIMI_ISARET = 'ÖDEME_BİLDİRİMİ';
+
+/** Öğrenci havale/EFT yaptıktan sonra ödeme bildirimi gönderir */
+export async function ogrenciSiparisOdemeBildirimController(
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const uid = req.kullanici?.id;
+    if (!uid) {
+      res.status(401).json({ basarili: false, mesaj: 'Oturum gerekli' });
+      return;
+    }
+
+    const { id } = req.params;
+    const aciklama = typeof req.body?.aciklama === 'string' ? req.body.aciklama.trim() : '';
+    const gonderenAd = typeof req.body?.gonderenAd === 'string' ? req.body.gonderenAd.trim() : '';
+
+    const siparis = await prisma.satinAlim.findFirst({
+      where: { id, kullaniciId: uid, durum: 'BEKLEMEDE' },
+      include: {
+        paket: { select: { ad: true } },
+        sinav: { select: { baslik: true } },
+        kullanici: {
+          select: {
+            email: true,
+            ogrenciProfil: { select: { ad: true, soyad: true } },
+          },
+        },
+      },
+    });
+
+    if (!siparis) {
+      res.status(404).json({ basarili: false, mesaj: 'Bekleyen sipariş bulunamadı' });
+      return;
+    }
+
+    if ((siparis.miktar || 0) <= 0) {
+      res.status(400).json({ basarili: false, mesaj: 'Bu sipariş için ödeme bildirimi gerekmez' });
+      return;
+    }
+
+    const mevcutNot = siparis.notlar?.trim() || '';
+    if (mevcutNot.includes(ODEME_BILDIRIMI_ISARET)) {
+      res.status(400).json({
+        basarili: false,
+        mesaj: 'Bu sipariş için ödeme bildirimi zaten gönderilmiş. Onay bekleniyor.',
+      });
+      return;
+    }
+
+    const zaman = new Date().toLocaleString('tr-TR');
+    const ekstra: string[] = [`${ODEME_BILDIRIMI_ISARET} (${zaman})`];
+    if (gonderenAd) ekstra.push(`Gönderen: ${gonderenAd}`);
+    if (aciklama) ekstra.push(`Not: ${aciklama}`);
+
+    const guncel = await prisma.satinAlim.update({
+      where: { id: siparis.id },
+      data: {
+        odemeMetodu: siparis.odemeMetodu || 'HAVALE',
+        notlar: mevcutNot ? `${mevcutNot} | ${ekstra.join(' | ')}` : ekstra.join(' | '),
+      },
+    });
+
+    const urunAd = siparis.sinav?.baslik || siparis.paket?.ad || 'Sipariş';
+    const profil = siparis.kullanici.ogrenciProfil;
+    const ogrenciAd =
+      [profil?.ad, profil?.soyad].filter(Boolean).join(' ').trim() || siparis.kullanici.email;
+
+    await bildirimGonder({
+      kullaniciId: uid,
+      baslik: 'Ödeme bildiriminiz alındı',
+      mesaj: `«${urunAd}» için ödeme bildiriminiz alındı. Onaylandıktan sonra erişiminiz açılacaktır.`,
+      tur: 'odeme_bildirim',
+      veriJson: { siparisId: siparis.id },
+    });
+
+    await adminlereBildirimGonder({
+      baslik: 'Havale ödeme bildirimi',
+      mesaj: `${ogrenciAd}, «${urunAd}» için ${(siparis.miktar || 0).toLocaleString('tr-TR')} ₺ havale bildirimi gönderdi. Siparişler panelinden onaylayın.`,
+      tur: 'siparis_admin',
+      veriJson: { siparisId: siparis.id, kullaniciId: uid, odemeBildirimi: true },
+    });
+
+    res.json({
+      basarili: true,
+      mesaj: 'Ödeme bildiriminiz alındı. Onay sonrası erişiminiz açılacaktır.',
+      veri: {
+        ...guncel,
+        odemeBildirimiGonderildi: true,
+        havale: havaleBilgiPaketi({
+          tutar: siparis.miktar || 0,
+          referansNo: siparis.referansNo,
+          siparisId: siparis.id,
+        }),
       },
     });
   } catch (err) {

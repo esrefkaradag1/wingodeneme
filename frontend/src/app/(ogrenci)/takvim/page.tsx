@@ -15,6 +15,7 @@ import {
   CheckCircle2,
   Loader2,
   X,
+  Users,
 } from 'lucide-react';
 import {
   format,
@@ -48,6 +49,7 @@ type TakvimSinav = {
   bitisZamani: string;
   sureDakika: number;
   soruSayisi?: number;
+  katilimciSayisi?: number;
   ucret?: number | null;
   indirimliUcret?: number | null;
   gosterilenFiyat?: number | null;
@@ -287,6 +289,11 @@ export default function TakvimSayfasi() {
                         <Zap className="w-3 h-3 text-indigo-400" /> {s.soruSayisi} Soru
                       </div>
                     )}
+                    {s.katilimciSayisi != null && s.katilimciSayisi > 0 && (
+                      <div className="flex items-center gap-1 text-[9px] font-bold text-emerald-600">
+                        <Users className="w-3 h-3" /> {s.katilimciSayisi.toLocaleString('tr-TR')} kişi
+                      </div>
+                    )}
                     {s.gosterilenFiyat != null && (
                       <span className="text-[9px] font-bold text-emerald-600">
                         {s.gosterilenFiyat > 0 ? `${s.gosterilenFiyat.toLocaleString('tr-TR')} ₺` : 'Ücretsiz'}
@@ -378,6 +385,12 @@ export default function TakvimSayfasi() {
               <div className="flex flex-wrap gap-3 text-xs text-gray-500">
                 <span>{seciliSinav.sureDakika} dk</span>
                 {seciliSinav.soruSayisi != null && <span>{seciliSinav.soruSayisi} soru</span>}
+                {seciliSinav.katilimciSayisi != null && seciliSinav.katilimciSayisi > 0 && (
+                  <span className="inline-flex items-center gap-1 text-emerald-700 font-semibold">
+                    <Users className="w-3.5 h-3.5" />
+                    {seciliSinav.katilimciSayisi.toLocaleString('tr-TR')} kişi
+                  </span>
+                )}
                 {seciliSinav.grup?.ad && <span>{seciliSinav.grup.ad}</span>}
               </div>
               {seciliSinav.gosterilenFiyat != null && (
