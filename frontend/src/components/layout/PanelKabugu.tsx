@@ -16,6 +16,7 @@ import {
   School,
   ShieldAlert,
   Users,
+  Wallet,
   X,
   type LucideIcon,
 } from 'lucide-react';
@@ -177,90 +178,108 @@ export function PanelKabugu({ kapsam, children }: { kapsam: Kapsam; children: Re
             id: 'genel',
             baslik: 'Genel',
             ogeler: [
-              {
-                href: '/kurum/dashboard',
-                etiket: 'Öğrencilerim',
-                ikon: Users,
-                renk: 'from-indigo-500 to-blue-600 shadow-indigo-500/35',
-              },
-              {
-                href: '/kurum/toplu',
-                etiket: 'Sınıf analizi',
-                ikon: BarChart3,
-                renk: 'from-violet-500 to-purple-600 shadow-violet-500/35',
-              },
-            ],
-          },
-        ];
-      }
-
-      return [
-        {
-          id: 'genel',
-          baslik: 'Genel',
-          ogeler: [
-            {
-              href: '/kurum/dashboard',
-              etiket: 'Genel bakış',
-              ikon: LayoutDashboard,
-              renk: 'from-blue-500 to-indigo-600 shadow-blue-500/35',
-            },
-            {
-              href: '/kurum/toplu',
-              etiket: 'Toplu analiz',
-              ikon: BarChart3,
-              renk: 'from-violet-500 to-purple-600 shadow-violet-500/35',
-            },
-          ],
-        },
-        {
-          id: 'yonetim',
-          baslik: 'Kurum Yönetimi',
-          ogeler: [
-            {
-              href: '/kurum/ogrenciler',
-              etiket: 'Öğrenciler',
-              ikon: Users,
-              renk: 'from-indigo-500 to-blue-600 shadow-indigo-500/35',
-            },
-            {
-              href: '/kurum/siniflar',
-              etiket: 'Sınıflar',
-              ikon: School,
-              renk: 'from-cyan-500 to-blue-600 shadow-cyan-500/35',
-            },
-            {
-              href: '/kurum/ogretmenler',
-              etiket: 'Öğretmenler',
-              ikon: GraduationCap,
-              renk: 'from-emerald-500 to-teal-600 shadow-emerald-500/35',
-            },
-          ],
-        },
-      ];
-    }
-
-    return [
-      {
-        id: 'genel',
-        baslik: 'Genel',
-        ogeler: [
           {
-            href: '/koc/dashboard',
+            href: '/kurum/dashboard',
             etiket: 'Öğrencilerim',
             ikon: Users,
-            renk: 'from-teal-500 to-emerald-600 shadow-teal-500/35',
+            renk: 'from-indigo-500 to-blue-600 shadow-indigo-500/35',
           },
           {
-            href: '/koc/toplu',
-            etiket: 'Toplu analiz',
+            href: '/kurum/toplu',
+            etiket: 'Analiz & sonuçlar',
             ikon: BarChart3,
             renk: 'from-violet-500 to-purple-600 shadow-violet-500/35',
+          },
+          {
+            href: '/kurum/kazancim',
+            etiket: 'Kazançlarım',
+            ikon: Wallet,
+            renk: 'from-teal-500 to-cyan-600 shadow-teal-500/35',
           },
         ],
       },
     ];
-  }, [erisimVar, kapsam, kurumYoneticisi]);
+  }
+
+  return [
+    {
+      id: 'genel',
+      baslik: 'Genel',
+      ogeler: [
+        {
+          href: '/kurum/dashboard',
+          etiket: 'Genel bakış',
+          ikon: LayoutDashboard,
+          renk: 'from-blue-500 to-indigo-600 shadow-blue-500/35',
+        },
+        {
+          href: '/kurum/toplu',
+          etiket: 'Analiz & sonuçlar',
+          ikon: BarChart3,
+          renk: 'from-violet-500 to-purple-600 shadow-violet-500/35',
+        },
+        {
+          href: '/kurum/kazancim',
+          etiket: 'Kazançlarım',
+          ikon: Wallet,
+          renk: 'from-teal-500 to-cyan-600 shadow-teal-500/35',
+        },
+      ],
+    },
+    {
+      id: 'yonetim',
+      baslik: 'Kurum Yönetimi',
+      ogeler: [
+        {
+          href: '/kurum/ogrenciler',
+          etiket: 'Öğrenciler',
+          ikon: Users,
+          renk: 'from-indigo-500 to-blue-600 shadow-indigo-500/35',
+        },
+        {
+          href: '/kurum/siniflar',
+          etiket: 'Sınıflar',
+          ikon: School,
+          renk: 'from-cyan-500 to-blue-600 shadow-cyan-500/35',
+        },
+        {
+          href: '/kurum/ogretmenler',
+          etiket: 'Öğretmenler',
+          ikon: GraduationCap,
+          renk: 'from-emerald-500 to-teal-600 shadow-emerald-500/35',
+        },
+      ],
+    },
+  ];
+}
+
+return [
+  {
+    id: 'genel',
+    baslik: 'Genel',
+    ogeler: [
+      {
+        href: '/koc/dashboard',
+        etiket: 'Öğrencilerim',
+        ikon: Users,
+        renk: 'from-teal-500 to-emerald-600 shadow-teal-500/35',
+      },
+      {
+        href: '/koc/toplu',
+        etiket: 'Analiz & sonuçlar',
+        ikon: BarChart3,
+        renk: 'from-violet-500 to-purple-600 shadow-violet-500/35',
+      },
+      {
+        href: '/koc/kazancim',
+        etiket: 'Kazançlarım',
+        ikon: Wallet,
+        renk: 'from-teal-500 to-cyan-600 shadow-teal-500/35',
+      },
+    ],
+  },
+];
+}, [erisimVar, kapsam, kurumYoneticisi]);
 
   const baslik = kapsam === 'KURUM' ? durum?.koc?.kurumAdi || 'Kurum paneli' : 'Koç paneli';
   const rozet =

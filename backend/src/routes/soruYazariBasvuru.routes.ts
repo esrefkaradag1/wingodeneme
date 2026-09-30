@@ -3,6 +3,7 @@ import rateLimit from 'express-rate-limit';
 import { kimlikDogrula, rolKontrol, AuthRequest } from '../middlewares/auth.middleware';
 import {
   adminBasvuruDurumGuncelle,
+  adminBasvuruKabulEt,
   adminBasvuruListesi,
   adminBasvuruSil,
   basvuruBranslariGetir,
@@ -56,6 +57,19 @@ router.get('/admin', async (req: AuthRequest, res: Response, next: NextFunction)
       brans: typeof req.query.brans === 'string' ? req.query.brans : undefined,
     });
     res.json({ basarili: true, veri });
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.post('/admin/:id/kabul', async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const veri = await adminBasvuruKabulEt(req.params.id, req.body || {});
+    res.json({
+      basarili: true,
+      veri,
+      mesaj: veri.yeniHesap ? 'Hesap açıldı, indirim kodu ve komisyon tanımlandı' : 'İndirim kodu ve komisyon tanımlandı',
+    });
   } catch (e) {
     next(e);
   }

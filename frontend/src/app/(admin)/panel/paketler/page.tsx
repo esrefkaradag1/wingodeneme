@@ -6,7 +6,7 @@ import { adminApi } from '@/lib/api';
 import { isKpssMode } from '@/lib/platform';
 import { 
   CreditCard, Plus, Loader2, Edit2, Trash2, 
-  Check, X, Star, ShoppingBag, ClipboardList, Users, Tag, Layers, Calendar,
+  Check, X, Star, ShoppingBag, ClipboardList, Users, Tag, Layers, Calendar, ImageIcon,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { tr } from 'date-fns/locale';
@@ -50,6 +50,7 @@ interface Paket {
   oneCikan: boolean;
   etiketler: string[] | null;
   disUrl: string | null;
+  gorselUrl?: string | null;
   sinavIds?: string[];
   ucretsizSinavIds?: string[];
   grupIds?: string[];
@@ -96,6 +97,7 @@ function bosPaketForm(kategori: string) {
     etiketler: [] as string[],
     etiket: '',
     disUrl: '',
+    gorselUrl: '',
     oneCikan: false,
     sinavIds: [] as string[],
     ucretsizSinavIds: [] as string[],
@@ -402,6 +404,7 @@ export default function PaketYonetimiSayfasi() {
         etiketler: Array.isArray(paket.etiketler) ? paket.etiketler : [],
         etiket: '',
         disUrl: paket.disUrl || '',
+        gorselUrl: paket.gorselUrl || '',
         oneCikan: paket.oneCikan || false,
         sinavIds: Array.isArray(paket.sinavIds) ? [...paket.sinavIds] : [],
         ucretsizSinavIds: Array.isArray(paket.ucretsizSinavIds) ? [...paket.ucretsizSinavIds] : [],
@@ -577,6 +580,7 @@ export default function PaketYonetimiSayfasi() {
     ozellikler: form.ozellikler,
     etiketler: form.etiketler,
     disUrl: form.disUrl,
+    gorselUrl: form.gorselUrl,
     oneCikan: form.oneCikan,
     aktif: form.aktif,
     populer: form.populer,
@@ -1104,6 +1108,50 @@ export default function PaketYonetimiSayfasi() {
                   className="input-field" 
                   placeholder="Örn: VIP Başlangıç Paketi" 
                 />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Paket görseli</label>
+                <div className="flex items-start gap-3">
+                  {form.gorselUrl ? (
+                    <img src={form.gorselUrl} alt="" className="h-20 w-32 rounded-xl object-cover border border-gray-200 bg-gray-50" />
+                  ) : (
+                    <div className="h-20 w-32 rounded-xl border border-dashed border-gray-200 bg-gray-50 flex items-center justify-center text-gray-400">
+                      <ImageIcon className="w-5 h-5" />
+                    </div>
+                  )}
+                  <div className="flex-1 space-y-2">
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp"
+                      className="block w-full text-xs text-gray-600"
+                      onChange={(e) => {
+                        const dosya = e.target.files?.[0];
+                        e.target.value = '';
+                        if (!dosya) return;
+                        if (dosya.size > 2 * 1024 * 1024) {
+                          toast.hata('Görsel en fazla 2 MB olabilir');
+                          return;
+                        }
+                        const reader = new FileReader();
+                        reader.onload = () => setForm((f) => ({ ...f, gorselUrl: String(reader.result || '') }));
+                        reader.readAsDataURL(dosya);
+                      }}
+                    />
+                    <input
+                      type="text"
+                      value={form.gorselUrl.startsWith('data:') ? '' : form.gorselUrl}
+                      onChange={(e) => setForm({ ...form, gorselUrl: e.target.value })}
+                      className="input-field"
+                      placeholder="veya görsel URL"
+                    />
+                    {form.gorselUrl ? (
+                      <button type="button" className="text-xs font-semibold text-rose-600" onClick={() => setForm({ ...form, gorselUrl: '' })}>
+                        Görseli kaldır
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
               </div>
               
               <div className="space-y-3">

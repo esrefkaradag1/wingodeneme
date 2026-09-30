@@ -624,6 +624,19 @@ export const SiteIcerikFormu = forwardRef<
                       <Giris value={icerik.paketBolum.tumPaketler} onChange={(v) => set((p) => ({ ...p, paketBolum: { ...p.paketBolum, tumPaketler: v } }))} />
                    </div>
                    <div>
+                      <Etiket>Tüm Paketler linki</Etiket>
+                      <Giris
+                        value={icerik.paketBolum.tumPaketlerHref || '/paketler'}
+                        onChange={(v) =>
+                          set((p) => ({
+                            ...p,
+                            paketBolum: { ...p.paketBolum, tumPaketlerHref: v.trim() || '/paketler' },
+                          }))
+                        }
+                      />
+                      <p className="mt-1 text-xs text-slate-500">Örn. /paketler — /market, /kayit veya /iletisim yazmayın</p>
+                   </div>
+                   <div>
                       <Etiket>Buton: Ücretsiz Dene</Etiket>
                       <Giris value={icerik.paketBolum.ucretsizDene} onChange={(v) => set((p) => ({ ...p, paketBolum: { ...p.paketBolum, ucretsizDene: v } }))} />
                    </div>

@@ -18,6 +18,7 @@ export const VARSAYILAN_SITE_ICERIK = {
       { href: '#ozellikler', label: 'Özellikler' },
       { href: '#nasil', label: 'Nasıl çalışır?' },
       { href: '/iletisim', label: 'İletişim' },
+      { href: '/#bizimle-calisin', label: 'Öğretmen başvurusu' },
     ],
     girisMetni: 'Giriş',
     kayitCta: 'Ücretsiz dene',

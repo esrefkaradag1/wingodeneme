@@ -87,12 +87,14 @@ import {
   adminKocDemoUzatController,
   adminKurumDetayController,
   adminKurumOlusturController,
+  adminKurumSifreSifirlaController,
 } from '../controllers/kocAdmin.controller';
 import {
   adminIndirimKodlariController,
   adminIndirimKoduGuncelleController,
   adminIndirimKoduOlusturController,
   adminIndirimKoduSilController,
+  adminKomisyonSahibiAdaylariController,
   adminKomisyonlarController,
   adminKomisyonOdeController,
   ogretmenKazancHareketController,
@@ -172,6 +174,7 @@ router.get('/siparisler/:id', siparisDetayController);
 router.patch('/siparisler/:id', siparisGuncelleController);
 
 router.get('/indirim-kodlari', rolKontrol('ADMIN', 'SUPER_ADMIN'), adminIndirimKodlariController);
+router.get('/indirim-kodlari/sahip-adaylari', rolKontrol('ADMIN', 'SUPER_ADMIN'), adminKomisyonSahibiAdaylariController);
 router.post('/indirim-kodlari', rolKontrol('ADMIN', 'SUPER_ADMIN'), adminIndirimKoduOlusturController);
 router.patch('/indirim-kodlari/:id', rolKontrol('ADMIN', 'SUPER_ADMIN'), adminIndirimKoduGuncelleController);
 router.delete('/indirim-kodlari/:id', rolKontrol('ADMIN', 'SUPER_ADMIN'), adminIndirimKoduSilController);
@@ -196,6 +199,7 @@ router.post('/koclar/:kocId/onayla', yalnizAdmin, adminKocOnaylaController);
 router.post('/koclar/:kocId/reddet', yalnizAdmin, adminKocReddetController);
 router.post('/koclar/:kocId/durum', yalnizAdmin, adminKocDurumController);
 router.post('/koclar/:kocId/demo-uzat', yalnizAdmin, adminKocDemoUzatController);
+router.post('/koclar/:kocId/sifre-sifirla', yalnizAdmin, adminKurumSifreSifirlaController);
 router.get('/koclar/:kocId/ogrenciler', yalnizAdmin, adminKocOgrencileriController);
 router.post('/koclar/:kocId/ogrenciler', yalnizAdmin, adminKocOgrenciAtaController);
 router.delete('/koclar/:kocId/ogrenciler/:ogrenciId', yalnizAdmin, adminKocOgrenciKaldirController);

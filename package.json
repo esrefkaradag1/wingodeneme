@@ -34,7 +34,10 @@
     "vercel:prod": "cd frontend && npx vercel --prod",
     "vercel:preview": "cd frontend && npx vercel",
     "vercel:backend:prod": "cd backend && npx vercel --prod",
-    "db:migrate:prod": "cd backend && npx prisma migrate deploy"
+    "db:migrate:prod": "cd backend && npx prisma migrate deploy",
+    "mobile": "cd mobile && npx expo start",
+    "mobile:ios": "cd mobile && npx expo start --ios",
+    "mobile:android": "cd mobile && npx expo start --android"
   },
   "devDependencies": {
     "concurrently": "^9.2.1"

@@ -282,9 +282,10 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
     queryKey: ['admin-panel-sayaclari'],
     queryFn: () => api.get('/admin/panel-sayaclari').then((r) => r.data),
     enabled: Boolean(token),
-    refetchInterval: 15_000,
-    staleTime: 10_000,
-    refetchOnWindowFocus: true,
+    // Dev’de uzak DB (Supabase JP) ile 15sn polling paneli gereksiz yavaşlatır
+    refetchInterval: process.env.NODE_ENV === 'development' ? 60_000 : 15_000,
+    staleTime: process.env.NODE_ENV === 'development' ? 30_000 : 10_000,
+    refetchOnWindowFocus: process.env.NODE_ENV !== 'development',
   });
 
   const sayacVeri = (panelSayacData?.veri ?? {}) as PanelSayacVeri;

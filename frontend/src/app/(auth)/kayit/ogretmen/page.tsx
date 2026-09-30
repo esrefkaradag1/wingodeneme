@@ -5,7 +5,6 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import Link from 'next/link';
-import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { Loader2, GraduationCap, Home } from 'lucide-react';
 import { authApi } from '@/lib/api';
@@ -13,11 +12,6 @@ import { useAuthStore } from '@/store/auth.store';
 import { toast } from '@/store/toast.store';
 import AnaSiteyeDonButonu from '@/components/auth/AnaSiteyeDonButonu';
 import { isKpssMode } from '@/lib/platform';
-
-const AuthThreeBackground = dynamic(() => import('@/components/auth/AuthThreeBackground'), {
-  ssr: false,
-  loading: () => <div className="absolute inset-0 -z-10 bg-[#070713]" />,
-});
 
 const LGS_BRANSLARI = [
   'Matematik', 'Fen Bilimleri', 'Türkçe',
@@ -129,58 +123,65 @@ export default function OgretmenKayitSayfasi() {
 
   return (
     <div className="min-h-screen relative overflow-hidden flex items-center justify-center p-4">
-      <AuthThreeBackground mode={kpssModu ? 'kpss' : 'yks_lgs'} />
-      <div className="pointer-events-none absolute inset-0 -z-[5] bg-[radial-gradient(ellipse_at_center,transparent_30%,rgba(7,7,19,0.6)_100%)]" />
+      <div
+        className="pointer-events-none absolute inset-0 -z-10"
+        style={{
+          background:
+            'radial-gradient(circle at 12% 10%, rgba(13, 148, 136, 0.12) 0, transparent 32%), radial-gradient(circle at 90% 8%, rgba(234, 88, 12, 0.08) 0, transparent 28%), #F3FAF8',
+        }}
+        aria-hidden
+      />
+      
       <AnaSiteyeDonButonu />
       <div className="relative z-10 w-full max-w-md">
         <div className="mb-4">
-          <Link href="/" className="inline-flex items-center gap-2 text-sm text-gray-400 hover:text-white transition-colors">
+          <Link href="/" className="inline-flex items-center gap-2 text-sm text-gray-400 hover:text-edu-ink transition-colors">
             <Home className="w-4 h-4" /> Ana sayfa
           </Link>
         </div>
         <div className="text-center mb-8">
           <div className="inline-flex items-center gap-2 mb-4">
             <div className="w-10 h-10 bg-amber-500 rounded-xl flex items-center justify-center">
-              <GraduationCap className="w-5 h-5 text-white" />
+              <GraduationCap className="w-5 h-5 text-edu-ink" />
             </div>
-            <span className="text-white font-bold text-2xl">WingoSınav</span>
+            <span className="text-edu-ink font-bold text-2xl">WingoSınav</span>
           </div>
-          <h1 className="text-2xl font-bold text-white">Öğretmen Kaydı</h1>
+          <h1 className="text-2xl font-bold text-edu-ink">Öğretmen Kaydı</h1>
           <p className="text-gray-400 mt-2 text-sm leading-relaxed">
             Soru üretmek, sınav hazırlamak ve öğrenci performansı takip etmek için öğretmen panelinize erişin.
           </p>
         </div>
 
-        <div className="bg-slate-900/70 border border-white/10 rounded-2xl p-8 backdrop-blur-xl shadow-2xl shadow-black/20">
+        <div className="bg-white border border-edu-line rounded-2xl p-8 backdrop-blur-xl shadow-2xl shadow-slate-200/70">
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm text-gray-300 mb-1.5">Ad</label>
-                <input {...register('ad')} className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                <input {...register('ad')} className="w-full px-4 py-3 bg-slate-50 border border-edu-line rounded-lg text-edu-ink placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-wingo-400" />
                 {errors.ad && <p className="mt-1 text-xs text-red-400">{errors.ad.message}</p>}
               </div>
               <div>
                 <label className="block text-sm text-gray-300 mb-1.5">Soyad</label>
-                <input {...register('soyad')} className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                <input {...register('soyad')} className="w-full px-4 py-3 bg-slate-50 border border-edu-line rounded-lg text-edu-ink placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-wingo-400" />
                 {errors.soyad && <p className="mt-1 text-xs text-red-400">{errors.soyad.message}</p>}
               </div>
             </div>
 
             <div>
               <label className="block text-sm text-gray-300 mb-1.5">E-posta</label>
-              <input {...register('email')} type="email" className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="ornek@email.com" />
+              <input {...register('email')} type="email" className="w-full px-4 py-3 bg-slate-50 border border-edu-line rounded-lg text-edu-ink placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-wingo-400" placeholder="ornek@email.com" />
               {errors.email && <p className="mt-1 text-xs text-red-400">{errors.email.message}</p>}
             </div>
 
             <div>
               <label className="block text-sm text-gray-300 mb-1.5">Şifre</label>
-              <input {...register('sifre')} type="password" autoComplete="new-password" className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="En az 8 karakter, büyük harf ve rakam" />
+              <input {...register('sifre')} type="password" autoComplete="new-password" className="w-full px-4 py-3 bg-slate-50 border border-edu-line rounded-lg text-edu-ink placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-wingo-400" placeholder="En az 8 karakter, büyük harf ve rakam" />
               {errors.sifre && <p className="mt-1 text-xs text-red-400">{errors.sifre.message}</p>}
             </div>
 
             <div>
               <label className="block text-sm text-gray-300 mb-1.5">Telefon <span className="text-red-400">*</span></label>
-              <input {...register('telefon')} type="tel" inputMode="numeric" className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="05XX XXX XX XX" />
+              <input {...register('telefon')} type="tel" inputMode="numeric" className="w-full px-4 py-3 bg-slate-50 border border-edu-line rounded-lg text-edu-ink placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-wingo-400" placeholder="05XX XXX XX XX" />
               {errors.telefon && <p className="mt-1 text-xs text-red-400">{errors.telefon.message}</p>}
             </div>
 
@@ -195,7 +196,7 @@ export default function OgretmenKayitSayfasi() {
                       className={`flex flex-col items-center justify-center px-4 py-3 rounded-lg border cursor-pointer transition-all ${
                         secili
                           ? 'border-amber-400 bg-amber-500/15 text-amber-200'
-                          : 'border-white/10 bg-white/5 text-gray-400 hover:bg-white/10'
+                          : 'border-edu-line bg-slate-50 text-gray-400 hover:bg-white/10'
                       }`}
                     >
                       <input
@@ -225,7 +226,7 @@ export default function OgretmenKayitSayfasi() {
                   <span className="text-gray-500">({branslarSayisi} seçili)</span>
                 )}
               </label>
-              <div className="rounded-lg border border-white/10 bg-white/5 p-3 max-h-72 overflow-y-auto space-y-4">
+              <div className="rounded-lg border border-edu-line bg-slate-50 p-3 max-h-72 overflow-y-auto space-y-4">
                 {ogretimTurleri.length === 0 ? (
                   <p className="text-xs text-gray-400">Önce kademe seçin.</p>
                 ) : ogretimTurleri.map((tur) => {
@@ -245,7 +246,7 @@ export default function OgretmenKayitSayfasi() {
                             <label
                               key={b}
                               className={`flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer text-sm ${
-                                secili ? 'bg-amber-500/20 text-amber-100' : 'text-gray-300 hover:bg-white/5'
+                                secili ? 'bg-amber-500/20 text-amber-100' : 'text-gray-300 hover:bg-slate-50'
                               }`}
                             >
                               <input
@@ -271,7 +272,7 @@ export default function OgretmenKayitSayfasi() {
             <button
               type="submit"
               disabled={yukleniyor}
-              className="w-full bg-amber-500 hover:bg-amber-400 disabled:bg-amber-700 text-white font-semibold py-3 rounded-lg flex items-center justify-center gap-2 mt-2"
+              className="w-full bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 text-white font-semibold py-3 rounded-lg flex items-center justify-center gap-2 mt-2"
             >
               {yukleniyor && <Loader2 className="w-4 h-4 animate-spin" />}
               Öğretmen Hesabı Oluştur
@@ -281,14 +282,14 @@ export default function OgretmenKayitSayfasi() {
           <div className="mt-6 text-center text-sm text-gray-400 space-y-2">
             <p>
               Öğrenci misiniz?{' '}
-              <Link href="/kayit" className="text-indigo-400 hover:text-indigo-300 font-medium">Öğrenci kaydı</Link>
+              <Link href="/kayit" className="text-indigo-400 hover:text-wingo-700 font-medium">Öğrenci kaydı</Link>
             </p>
             <p>
               Zaten hesabınız var mı?{' '}
-              <Link href="/giris" className="text-indigo-400 hover:text-indigo-300 font-medium">Giriş</Link>
+              <Link href="/giris" className="text-indigo-400 hover:text-wingo-700 font-medium">Giriş</Link>
             </p>
             <p>
-              <Link href="/sifremi-unuttum" className="text-indigo-300 hover:text-indigo-200 font-medium">
+              <Link href="/sifremi-unuttum" className="text-wingo-700 hover:text-indigo-200 font-medium">
                 Şifremi unuttum
               </Link>
             </p>

@@ -97,8 +97,8 @@ export default function SifremiUnuttumSayfasi() {
       solFiligranSag="Sıfırla"
     >
       <div className="w-full max-w-md mx-auto lg:mx-0">
-        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">Şifremi Unuttum</h1>
-        <p className="mt-2 text-sm text-white/45 leading-relaxed">
+        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-edu-ink">Şifremi Unuttum</h1>
+        <p className="mt-2 text-sm text-edu-muted leading-relaxed">
           {adim === 'talep'
             ? 'Hesabınıza kayıtlı e-posta adresine sıfırlama kodu gönderilir.'
             : 'Kodunuzu girin ve yeni şifrenizi belirleyin.'}
@@ -108,7 +108,7 @@ export default function SifremiUnuttumSayfasi() {
           {adim === 'talep' ? (
             <form onSubmit={talepForm.handleSubmit(talepGonder)} className="space-y-5">
               <div>
-                <label htmlFor="sifre-email" className="mb-1.5 block text-sm font-medium text-white/70">
+                <label htmlFor="sifre-email" className="mb-1.5 block text-sm font-medium text-edu-muted">
                   E-posta Adresi
                 </label>
                 <input
@@ -132,7 +132,7 @@ export default function SifremiUnuttumSayfasi() {
             <form onSubmit={onayForm.handleSubmit(onayGonder)} className="space-y-4">
               <input type="hidden" {...onayForm.register('email')} />
               <div>
-                <label htmlFor="sifre-kod" className="mb-1.5 block text-sm font-medium text-white/70">
+                <label htmlFor="sifre-kod" className="mb-1.5 block text-sm font-medium text-edu-muted">
                   Doğrulama kodu
                 </label>
                 <input
@@ -148,7 +148,7 @@ export default function SifremiUnuttumSayfasi() {
                 )}
               </div>
               <div>
-                <label htmlFor="sifre-yeni" className="mb-1.5 block text-sm font-medium text-white/70">
+                <label htmlFor="sifre-yeni" className="mb-1.5 block text-sm font-medium text-edu-muted">
                   Yeni şifre
                 </label>
                 <input
@@ -163,7 +163,7 @@ export default function SifremiUnuttumSayfasi() {
                 )}
               </div>
               <div>
-                <label htmlFor="sifre-tekrar" className="mb-1.5 block text-sm font-medium text-white/70">
+                <label htmlFor="sifre-tekrar" className="mb-1.5 block text-sm font-medium text-edu-muted">
                   Yeni şifre (tekrar)
                 </label>
                 <input
@@ -184,7 +184,7 @@ export default function SifremiUnuttumSayfasi() {
               <button
                 type="button"
                 onClick={() => setAdim('talep')}
-                className="w-full text-sm text-white/40 hover:text-white/70 transition-colors cursor-pointer"
+                className="w-full text-sm text-edu-muted hover:text-edu-muted transition-colors cursor-pointer"
               >
                 Kodu tekrar gönder
               </button>
@@ -192,7 +192,7 @@ export default function SifremiUnuttumSayfasi() {
           )}
         </div>
 
-        <p className="mt-8 text-center text-sm text-white/40">
+        <p className="mt-8 text-center text-sm text-edu-muted">
           <Link href="/giris" className={`font-semibold ${vurgu}`}>
             Giriş sayfasına dön
           </Link>

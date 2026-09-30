@@ -8,9 +8,13 @@ import { LandingFooter } from '@/components/landing/LandingFooter';
 export function MarketingShell({ children }: { children: React.ReactNode }) {
   return (
     <SiteIcerikProvider>
-      <div className="min-h-screen bg-[#050816] text-white selection:bg-indigo-500/40 flex flex-col">
+      <div className="min-h-screen bg-edu-bg text-edu-ink selection:bg-wingo-200/60 flex flex-col font-body">
         <div
-          className="fixed inset-0 pointer-events-none bg-gradient-to-b from-indigo-950/40 via-transparent to-slate-950/80 z-0"
+          className="fixed inset-0 pointer-events-none z-0"
+          style={{
+            background:
+              'radial-gradient(circle at 8% 0%, rgba(13, 148, 136, 0.07) 0, transparent 28%), radial-gradient(circle at 96% 4%, rgba(234, 88, 12, 0.05) 0, transparent 26%)',
+          }}
           aria-hidden
         />
         <LandingNav />

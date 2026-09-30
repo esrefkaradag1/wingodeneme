@@ -18,6 +18,7 @@ import {
   UserCog,
   Heart,
   Shield,
+  Building2,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format } from 'date-fns';
@@ -87,6 +88,14 @@ interface OgrenciProfil {
   sehir?: string | null;
   sinif?: string | null;
   ogretimTuru: string;
+  koc?: {
+    id: string;
+    tip?: string | null;
+    kurumAdi?: string | null;
+    referansKod?: string | null;
+    ad?: string | null;
+    soyad?: string | null;
+  } | null;
   veli?: {
     ad: string;
     soyad: string;
@@ -160,7 +169,12 @@ const SEKME_AKTIF_SINIF: Record<string, string> = {
 
 const KADEME_SECENEKLERI = [
   { value: 'YKS', label: 'YKS (TYT/AYT)' },
+  { value: 'SINIF_11', label: '11. Sınıf' },
+  { value: 'SINIF_10', label: '10. Sınıf' },
+  { value: 'SINIF_9', label: '9. Sınıf' },
   { value: 'LGS', label: 'LGS' },
+  { value: 'SINIF_7', label: '7. Sınıf' },
+  { value: 'SINIF_6', label: '6. Sınıf' },
   { value: 'KPSS_LISANS', label: 'KPSS Lisans' },
   { value: 'KPSS_ONLISANS', label: 'KPSS Önlisans' },
   { value: 'KPSS_ORTAOGRETIM', label: 'KPSS Ortaöğretim' },
@@ -169,12 +183,21 @@ const KADEME_SECENEKLERI = [
 type Kademe = (typeof KADEME_SECENEKLERI)[number]['value'];
 
 // Hardcoded fallback — API yetersiz kaldığında kullanılır
+const LGS_DERSLERI = ['Matematik', 'Fen Bilimleri', 'Türkçe', 'Sosyal Bilgiler', 'İnkılap Tarihi ve Atatürkçülük', 'Din Kültürü ve Ahlak Bilgisi', 'İngilizce'];
+const YKS_DERSLERI = ['Matematik', 'Geometri', 'Fizik', 'Kimya', 'Biyoloji', 'Türkçe', 'Edebiyat', 'Tarih', 'Coğrafya', 'Felsefe', 'Din Kültürü ve Ahlak Bilgisi', 'İngilizce', 'Almanca', 'Fransızca'];
+const KPSS_DERSLERI = ['Türkçe', 'Matematik', 'Tarih', 'Coğrafya', 'Vatandaşlık', 'Güncel Bilgiler'];
+
 const YEDEK_BRANSLAR: Record<string, string[]> = {
-  YKS: ['Matematik', 'Geometri', 'Fizik', 'Kimya', 'Biyoloji', 'Türkçe', 'Edebiyat', 'Tarih', 'Coğrafya', 'Felsefe', 'Din Kültürü ve Ahlak Bilgisi', 'İngilizce', 'Almanca', 'Fransızca'],
-  LGS: ['Matematik', 'Fen Bilimleri', 'Türkçe', 'Sosyal Bilgiler', 'İnkılap Tarihi ve Atatürkçülük', 'Din Kültürü ve Ahlak Bilgisi', 'İngilizce'],
-  KPSS_LISANS: ['Türkçe', 'Matematik', 'Tarih', 'Coğrafya', 'Vatandaşlık', 'Güncel Bilgiler'],
-  KPSS_ONLISANS: ['Türkçe', 'Matematik', 'Tarih', 'Coğrafya', 'Vatandaşlık', 'Güncel Bilgiler'],
-  KPSS_ORTAOGRETIM: ['Türkçe', 'Matematik', 'Tarih', 'Coğrafya', 'Vatandaşlık', 'Güncel Bilgiler'],
+  YKS: YKS_DERSLERI,
+  SINIF_11: YKS_DERSLERI,
+  SINIF_10: YKS_DERSLERI,
+  SINIF_9: YKS_DERSLERI,
+  LGS: LGS_DERSLERI,
+  SINIF_7: LGS_DERSLERI,
+  SINIF_6: LGS_DERSLERI,
+  KPSS_LISANS: KPSS_DERSLERI,
+  KPSS_ONLISANS: KPSS_DERSLERI,
+  KPSS_ORTAOGRETIM: KPSS_DERSLERI,
 };
 
 function metinNorm(v: string): string {
@@ -188,8 +211,24 @@ const KADEME_NORM_SET = new Set(
   KADEME_SECENEKLERI.flatMap((k) => [metinNorm(k.value), metinNorm(k.label)])
 );
 
+/** Backend izin listesi ile uyumlu — TYT/AYT/sınıf adı branş değildir */
+const GECERLI_BRANS_SET: Record<string, Set<string>> = Object.fromEntries(
+  Object.entries(YEDEK_BRANSLAR).map(([k, liste]) => [k, new Set(liste)]),
+);
+
 function tekrarKademeGorunumuTemizle(liste: string[]): string[] {
   return liste.filter((item) => !KADEME_NORM_SET.has(metinNorm(item)));
+}
+
+function gecerliBranslariFiltrele(kademe: string, liste: string[]): string[] {
+  const izinli =
+    GECERLI_BRANS_SET[kademe] ||
+    (kademe === 'SINIF_6' || kademe === 'SINIF_7' || kademe === 'LGS'
+      ? GECERLI_BRANS_SET.LGS
+      : kademe.startsWith('KPSS')
+        ? GECERLI_BRANS_SET.KPSS_LISANS
+        : GECERLI_BRANS_SET.YKS);
+  return [...new Set(liste.filter((b) => izinli.has(b)))];
 }
 
 function kademeTekrariGrupMu(grupAdi: string, kademeDegeri: string, kademeEtiketi: string): boolean {
@@ -199,20 +238,31 @@ function kademeTekrariGrupMu(grupAdi: string, kademeDegeri: string, kademeEtiket
 
 // Artık backend'teki gruplardan geliyor; yetersizse yedek liste kullanılır
 function kademeBranslari(k: Kademe, bransHaritasi: Record<string, string[]> | undefined): string[] {
-  // KPSS varyantlarını tek çatı altında topla
+  const yedek = YEDEK_BRANSLAR[k] || YEDEK_BRANSLAR.YKS;
   if (k.startsWith('KPSS')) {
-    const apiList = tekrarKademeGorunumuTemizle([
-      ...(bransHaritasi?.['KPSS_ONLISANS'] || []),
-      ...(bransHaritasi?.['KPSS_ORTAOGRETIM'] || []),
+    const ham = [
+      ...(bransHaritasi?.[k] || []),
       ...(bransHaritasi?.['KPSS'] || []),
-    ]).filter((v, i, a) => a.indexOf(v) === i);
+    ];
+    const apiList = gecerliBranslariFiltrele(k, tekrarKademeGorunumuTemizle(ham));
     if (apiList.length >= 3) return apiList.sort((a, b) => a.localeCompare(b, 'tr'));
-    return YEDEK_BRANSLAR['KPSS_ONLISANS'];
+    return yedek;
   }
-  const apiList = tekrarKademeGorunumuTemizle(bransHaritasi?.[k] || []);
-  // API'den en az 3 branş geliyorsa onu kullan, yoksa yedek listeye düş
-  if (apiList.length >= 3) return apiList;
-  return YEDEK_BRANSLAR[k] || apiList;
+  const apiList = gecerliBranslariFiltrele(k, tekrarKademeGorunumuTemizle(bransHaritasi?.[k] || []));
+  // API'den en az 3 geçerli branş geliyorsa onu kullan, yoksa yedek listeye düş
+  if (apiList.length >= 3) return apiList.sort((a, b) => a.localeCompare(b, 'tr'));
+  return yedek;
+}
+
+function branslarByTurTemizle(
+  harita: Record<string, string[]>,
+  turler: string[],
+): Record<string, string[]> {
+  const out: Record<string, string[]> = {};
+  for (const tur of turler) {
+    out[tur] = gecerliBranslariFiltrele(tur, harita[tur] || []);
+  }
+  return out;
 }
 
 function gorunenAd(k: Kullanici): string {
@@ -234,16 +284,27 @@ function basHarf(k: Kullanici): string {
 }
 
 function baglantiMetni(k: Kullanici): string {
+  const parcalar: string[] = [];
+  if (k.rol === 'OGRENCI' && k.ogrenciProfil?.koc) {
+    const koc = k.ogrenciProfil.koc;
+    if (koc.tip === 'KURUMSAL' || koc.tip === 'KURUM_OGRETMENI') {
+      parcalar.push(koc.kurumAdi?.trim() || `Kurum ${koc.referansKod || ''}`.trim());
+    } else {
+      const ad = `${koc.ad || ''} ${koc.soyad || ''}`.trim();
+      parcalar.push(ad ? `Koç: ${ad}` : koc.referansKod || 'Koç');
+    }
+    if (koc.referansKod) parcalar.push(koc.referansKod);
+  }
   if (k.rol === 'OGRENCI' && k.ogrenciProfil?.veli) {
     const veli = k.ogrenciProfil.veli;
-    return `${veli.ad} ${veli.soyad} (${veli.kullanici.email})`;
+    parcalar.push(`Veli: ${veli.ad} ${veli.soyad}`);
   }
   if (k.rol === 'VELI' && k.veliProfil?.ogrenciler?.length) {
     return k.veliProfil.ogrenciler
       .map((ogrenci) => `${ogrenci.ad} ${ogrenci.soyad} (${ogrenci.kullanici.email})`)
       .join(', ');
   }
-  return '—';
+  return parcalar.length ? Array.from(new Set(parcalar)).join(' · ') : '—';
 }
 
 type FormState = {
@@ -292,6 +353,7 @@ export default function KullanicilarSayfasi() {
   const [sayfa, setSayfa] = useState(1);
   const [rolFiltre, setRolFiltre] = useState<string>('TUMU');
   const [kademeFiltre, setKademeFiltre] = useState<string>('TUMU');
+  const [kurumFiltre, setKurumFiltre] = useState('');
   const [arama, setArama] = useState('');
   const [debouncedArama, setDebouncedArama] = useState('');
   const [modalAcik, setModalAcik] = useState(false);
@@ -335,21 +397,52 @@ export default function KullanicilarSayfasi() {
     return () => clearTimeout(timer);
   }, [arama]);
 
+  const { data: kurumlarData } = useQuery({
+    queryKey: ['admin-kurumlar-filtre'],
+    queryFn: () => adminApi.koclar({ kapsam: 'KURUM', durum: 'AKTIF' }),
+    staleTime: 60_000,
+  });
+
+  const kurumSecenekleri = useMemo(() => {
+    const liste = (kurumlarData?.data?.veri?.koclar || []) as Array<{
+      id: string;
+      kurumAdi: string | null;
+      ad: string;
+      soyad: string;
+      referansKod: string;
+      ogrenciSayisi?: number;
+    }>;
+    return liste
+      .map((k) => {
+        const ad = k.kurumAdi?.trim() || `${k.ad} ${k.soyad}`.trim() || 'Kurum';
+        const ogrenci = typeof k.ogrenciSayisi === 'number' ? ` · ${k.ogrenciSayisi} öğrenci` : '';
+        return {
+          value: k.id,
+          etiket: `${ad}${k.referansKod ? ` (${k.referansKod})` : ''}${ogrenci}`,
+        };
+      })
+      .sort((a, b) => a.etiket.localeCompare(b.etiket, 'tr'));
+  }, [kurumlarData]);
+
   const { data: ozetData } = useQuery({
-    queryKey: ['admin-kullanicilar-ozet', rolFiltre],
+    queryKey: ['admin-kullanicilar-ozet', rolFiltre, kurumFiltre],
     queryFn: () =>
-      adminApi.kullanicilarOzet(rolFiltre !== 'TUMU' ? { rol: rolFiltre } : undefined),
+      adminApi.kullanicilarOzet({
+        ...(rolFiltre !== 'TUMU' ? { rol: rolFiltre } : {}),
+        ...(kurumFiltre ? { kocId: kurumFiltre } : {}),
+      }),
     staleTime: 30_000,
   });
 
   const { data, isLoading, isPlaceholderData } = useQuery({
-    queryKey: ['admin-kullanicilar', sayfa, debouncedArama, rolFiltre, kademeFiltre],
+    queryKey: ['admin-kullanicilar', sayfa, debouncedArama, rolFiltre, kademeFiltre, kurumFiltre],
     queryFn: () =>
       adminApi.kullanicilar({
         sayfa,
         q: debouncedArama,
         ...(rolFiltre !== 'TUMU' ? { rol: rolFiltre } : {}),
         ...(kademeFiltre !== 'TUMU' ? { ogretimTuru: kademeFiltre } : {}),
+        ...(kurumFiltre ? { kocId: kurumFiltre } : {}),
       }),
     placeholderData: (prev) => prev,
   });
@@ -368,7 +461,7 @@ export default function KullanicilarSayfasi() {
 
   // Branş seçenekleri: backend'teki gruplardan gelir
   const { data: bransSecenekleriData } = useQuery({
-    queryKey: ['brans-secenekleri'],
+    queryKey: ['brans-secenekleri', 'v2'],
     queryFn: () => adminApi.bransSecenekleri(),
     staleTime: 120_000,
   });
@@ -397,10 +490,20 @@ export default function KullanicilarSayfasi() {
     return harita;
   }, [form.ogretimTurleri, tumGruplar]);
 
-  const efektifOgretmenGrupIds = useMemo(
-    () => [...new Set([...form.grupIds, ...Object.values(ogretmenGrupSunumu).flatMap((x) => x.otomatikGrupIds)])],
-    [form.grupIds, ogretmenGrupSunumu]
-  );
+  const efektifOgretmenGrupIds = useMemo(() => {
+    const secili = new Set(form.grupIds);
+    const sonuc = new Set<string>(form.grupIds);
+    for (const tur of form.ogretimTurleri) {
+      const kademeGruplari = tumGruplar.filter((g) => g.tur === tur).map((g) => g.id);
+      const kademedeSecili = kademeGruplari.some((id) => secili.has(id));
+      const sunum = ogretmenGrupSunumu[tur];
+      if (!kademedeSecili) {
+        kademeGruplari.forEach((id) => sonuc.add(id));
+        sunum?.otomatikGrupIds.forEach((id) => sonuc.add(id));
+      }
+    }
+    return [...sonuc];
+  }, [form.grupIds, form.ogretimTurleri, tumGruplar, ogretmenGrupSunumu]);
 
   const kullanicilar: Kullanici[] = data?.data?.veri || [];
   const veliListesi: Kullanici[] = veliListeData?.data?.veri || [];
@@ -572,6 +675,11 @@ export default function KullanicilarSayfasi() {
     if (k) {
       setDuzenlenen(k);
       const op = k.ogrenciProfil;
+      const turler: string[] = (k.adminProfil as any)?.ogretimTurleri?.length
+        ? (k.adminProfil as any).ogretimTurleri
+        : [k.adminProfil?.ogretimTuru || 'YKS'];
+      const hamBransHarita = (k.adminProfil as any)?.ogretmenBranslar || {};
+      const temizBransHarita = branslarByTurTemizle(hamBransHarita, turler);
       setForm({
         email: k.email,
         sifre: '',
@@ -583,10 +691,10 @@ export default function KullanicilarSayfasi() {
           ? (op?.ogretimTuru as string)
           : legacySinifNorm(op?.ogretimTuru, op?.sinif) || '',
         ogretimTuru: k.adminProfil?.ogretimTuru || (op ? ogretimTuruCoz(null, { ogrenciProfil: op }) : 'YKS'),
-        ogretimTurleri: (k.adminProfil as any)?.ogretimTurleri?.length ? (k.adminProfil as any).ogretimTurleri : [k.adminProfil?.ogretimTuru || 'YKS'],
-        branslarByTur: (k.adminProfil as any)?.ogretmenBranslar || {},
+        ogretimTurleri: turler,
+        branslarByTur: temizBransHarita,
         okul: op?.okul || '',
-        branslar: branslarParse(k.adminProfil?.brans),
+        branslar: [...new Set(Object.values(temizBransHarita).flat())],
         grupIds: ((k.adminProfil as any)?.ogretmenGruplari || []).map((og: any) => og.grupId),
         aktif: k.aktif,
         veliEmail: op?.veli?.kullanici?.email || '',
@@ -599,16 +707,18 @@ export default function KullanicilarSayfasi() {
     setModalAcik(true);
   };
 
-  const formGonder = (e: React.FormEvent) => {
+  const formGonder = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    const sifreAlani = e.currentTarget.elements.namedItem('sifre');
+    const sifre = (sifreAlani instanceof HTMLInputElement ? sifreAlani.value : form.sifre).trim();
     if (!duzenlenen) {
-      if (!form.sifre || form.sifre.length < 6) {
+      if (sifre.length < 6) {
         toast.hata('Şifre en az 6 karakter olmalı');
         return;
       }
       const veri: Record<string, unknown> = {
         email: form.email.trim(),
-        sifre: form.sifre,
+        sifre,
         rol: form.rol,
         ad: form.ad.trim(),
         soyad: form.soyad.trim(),
@@ -633,15 +743,18 @@ export default function KullanicilarSayfasi() {
           toast.hata('En az bir kademe seçin');
           return;
         }
-        if (efektifOgretmenGrupIds.length === 0) {
-          toast.hata('En az bir grup seçmelisiniz');
+        const temizHarita = branslarByTurTemizle(form.branslarByTur, form.ogretimTurleri);
+        const eksikKademe = form.ogretimTurleri.find((t) => !(temizHarita[t]?.length));
+        if (eksikKademe) {
+          const etiket = KADEME_SECENEKLERI.find((k) => k.value === eksikKademe)?.label || eksikKademe;
+          toast.hata(`${etiket} için en az bir ders (branş) seçin`);
           return;
         }
         // geriye uyum: birleşik brans listesi
-        veri.branslar = form.branslar;
+        veri.branslar = [...new Set(Object.values(temizHarita).flat())];
         veri.ogretimTuru = (form as any).ogretimTurleri[0] || form.ogretimTuru;
         veri.ogretimTurleri = (form as any).ogretimTurleri;
-        veri.branslarByTur = (form as any).branslarByTur;
+        veri.branslarByTur = temizHarita;
         veri.grupIds = efektifOgretmenGrupIds;
       }
       kaydetMutation.mutate(veri);
@@ -654,7 +767,11 @@ export default function KullanicilarSayfasi() {
       soyad: form.soyad.trim(),
       aktif: form.aktif,
     };
-    if (form.sifre.length >= 6) veri.sifre = form.sifre;
+    if (sifre.length > 0 && sifre.length < 6) {
+      toast.hata('Yeni şifre en az 6 karakter olmalı');
+      return;
+    }
+    if (sifre.length >= 6) veri.sifre = sifre;
     if (form.telefon.trim()) veri.telefon = form.telefon.trim();
     else veri.telefon = '';
     if (form.rol && form.rol !== duzenlenen.rol) {
@@ -683,14 +800,17 @@ export default function KullanicilarSayfasi() {
         toast.hata('En az bir kademe seçin');
         return;
       }
-      if (efektifOgretmenGrupIds.length === 0) {
-        toast.hata('En az bir grup seçmelisiniz');
+      const temizHarita = branslarByTurTemizle(form.branslarByTur, form.ogretimTurleri);
+      const eksikKademe = form.ogretimTurleri.find((t) => !(temizHarita[t]?.length));
+      if (eksikKademe) {
+        const etiket = KADEME_SECENEKLERI.find((k) => k.value === eksikKademe)?.label || eksikKademe;
+        toast.hata(`${etiket} için en az bir ders (branş) seçin`);
         return;
       }
-      veri.branslar = form.branslar;
+      veri.branslar = [...new Set(Object.values(temizHarita).flat())];
       veri.ogretimTuru = (form as any).ogretimTurleri[0] || form.ogretimTuru;
       veri.ogretimTurleri = (form as any).ogretimTurleri;
-      veri.branslarByTur = (form as any).branslarByTur;
+      veri.branslarByTur = temizHarita;
       veri.grupIds = efektifOgretmenGrupIds;
     }
     kaydetMutation.mutate(veri);
@@ -831,6 +951,45 @@ export default function KullanicilarSayfasi() {
       </div>
 
       <div className="space-y-2">
+        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Kurum</p>
+        <div className="flex flex-wrap items-center gap-2 max-w-xl">
+          <div className="relative flex-1 min-w-[220px]">
+            <Building2 className="pointer-events-none absolute left-3 top-1/2 z-10 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <AranabilirSelect
+              value={kurumFiltre}
+              onChange={(v) => {
+                setKurumFiltre(v);
+                setSayfa(1);
+                setSecilenIds([]);
+              }}
+              secenekler={kurumSecenekleri}
+              placeholder="Kurum seçin…"
+              bosSecenek={{ value: '', etiket: 'Tüm kurumlar' }}
+              className="[&_button]:pl-10"
+            />
+          </div>
+          {kurumFiltre ? (
+            <button
+              type="button"
+              onClick={() => {
+                setKurumFiltre('');
+                setSayfa(1);
+                setSecilenIds([]);
+              }}
+              className="text-sm font-semibold text-indigo-600 hover:text-indigo-800 px-2 py-1"
+            >
+              Temizle
+            </button>
+          ) : null}
+        </div>
+        {kurumFiltre ? (
+          <p className="text-xs text-gray-500">
+            Seçili kurum hesabı ve o kuruma bağlı öğrenciler listelenir.
+          </p>
+        ) : null}
+      </div>
+
+      <div className="space-y-2">
         <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Öğrenci kademesi</p>
         <div className="flex flex-wrap gap-2">
           {kademeFiltreSecenekleri.map((secenek) => {
@@ -954,7 +1113,7 @@ export default function KullanicilarSayfasi() {
                   <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Kullanıcı</th>
                   <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase">E-posta</th>
                   <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Rol</th>
-                  <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Bağlantı</th>
+                  <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Kurum / Bağlantı</th>
                   <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Tür</th>
                   <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Branş</th>
                   <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Kayıt Tarihi</th>
@@ -1201,6 +1360,7 @@ export default function KullanicilarSayfasi() {
                   <label className="block text-sm font-medium text-gray-700 mb-1">Şifre</label>
                   <input
                     type="password"
+                    name="sifre"
                     autoComplete="new-password"
                     required
                     value={form.sifre}
@@ -1217,7 +1377,9 @@ export default function KullanicilarSayfasi() {
                   </label>
                   <input
                     type="password"
+                    name="sifre"
                     autoComplete="new-password"
+                    minLength={6}
                     value={form.sifre}
                     onChange={(e) => setForm((f) => ({ ...f, sifre: e.target.value }))}
                     className="input-field w-full"
@@ -1554,11 +1716,8 @@ export default function KullanicilarSayfasi() {
                         })
                       )}
                     </div>
-                    {efektifOgretmenGrupIds.length === 0 && (
-                      <p className="text-xs text-amber-600 mt-1">En az bir grup seçmelisiniz.</p>
-                    )}
                     <p className="text-[11px] text-gray-400 mt-1">
-                      Seçilen gruplar öğretmenin soru üretebileceği konu havuzlarını belirler.
+                      Sınıf kutusu boş bırakılırsa seçili kademedeki grupların tamamı yetkili sayılır. İşaretlenenler varsa yalnızca onlar geçer.
                     </p>
                   </div>
                 </>

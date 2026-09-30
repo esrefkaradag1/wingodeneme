@@ -7,9 +7,27 @@ import { ArrowRight } from 'lucide-react';
 import Link from 'next/link';
 
 const stepColors = [
-  { gradient: 'from-[#2ABBA7] to-[#1fa897]', glow: 'shadow-[#2ABBA7]/25', iconBg: 'bg-[#2ABBA7]/10', iconText: 'text-[#2ABBA7]' },
-  { gradient: 'from-[#F7C948] to-[#e6b830]', glow: 'shadow-[#F7C948]/25', iconBg: 'bg-[#F7C948]/10', iconText: 'text-[#F7C948]' },
-  { gradient: 'from-[#7B5EA7] to-[#6a4f96]', glow: 'shadow-[#7B5EA7]/25', iconBg: 'bg-[#7B5EA7]/10', iconText: 'text-[#7B5EA7]' },
+  {
+    num: 'bg-wingo-600',
+    badge: 'bg-wingo-50 text-wingo-700 border-wingo-100',
+    iconBg: 'bg-wingo-50',
+    iconText: 'text-wingo-700',
+    accent: 'from-wingo-500 to-wingo-400',
+  },
+  {
+    num: 'bg-amber-500',
+    badge: 'bg-amber-50 text-amber-800 border-amber-100',
+    iconBg: 'bg-amber-50',
+    iconText: 'text-amber-700',
+    accent: 'from-amber-400 to-orange-400',
+  },
+  {
+    num: 'bg-orange-500',
+    badge: 'bg-orange-50 text-orange-800 border-orange-100',
+    iconBg: 'bg-orange-50',
+    iconText: 'text-orange-700',
+    accent: 'from-orange-500 to-orange-400',
+  },
 ];
 
 export function LandingNasil() {
@@ -17,71 +35,64 @@ export function LandingNasil() {
   const n = site.nasil;
 
   return (
-    <section id="nasil" className="relative py-20 md:py-28 px-4 sm:px-6 lg:px-8 bg-[#0A1024] scroll-mt-20 overflow-hidden">
-      {/* Background */}
-      <div className="absolute top-0 right-0 w-80 h-80 bg-[#2ABBA7]/4 rounded-full blur-[100px] pointer-events-none" />
-      <div className="absolute bottom-0 left-0 w-72 h-72 bg-[#F7C948]/5 rounded-full blur-[100px] pointer-events-none" />
-
+    <section
+      id="nasil"
+      className="relative py-20 md:py-28 px-4 sm:px-6 lg:px-8 bg-white scroll-mt-24 overflow-hidden"
+    >
       <div className="max-w-6xl mx-auto relative">
-        {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
           transition={{ duration: 0.5 }}
-          className="text-center max-w-xl mx-auto mb-14"
+          className="text-center max-w-2xl mx-auto mb-12 md:mb-16"
         >
-          <span className="inline-flex items-center rounded-full bg-white/[0.04] border border-white/[0.08] px-4 py-1.5 text-xs font-black uppercase tracking-widest text-[#8FE4D8] mb-5">
+          <span className="font-display inline-flex items-center rounded-full bg-wingo-50 border border-wingo-100 px-3.5 py-1 text-xs font-extrabold uppercase tracking-[0.16em] text-wingo-700 mb-4">
             {n.ustBaslik}
           </span>
-          <h2 className="text-3xl sm:text-4xl font-black text-white tracking-tight leading-tight mb-4">
+          <h2 className="font-display text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight leading-tight mb-4">
             {n.baslik}
           </h2>
-          <p className="text-slate-400 text-sm leading-relaxed">
-            {n.aciklama}
-          </p>
+          <p className="text-slate-600 text-base leading-relaxed">{n.aciklama}</p>
         </motion.div>
 
-        {/* Steps */}
-        <div className="grid md:grid-cols-3 gap-6 lg:gap-8 relative">
-          {/* Connecting line on desktop */}
-          <div className="hidden md:block absolute top-12 left-[20%] right-[20%] h-px bg-gradient-to-r from-[#2ABBA7]/30 via-[#F7C948]/20 to-[#7B5EA7]/30" />
+        <div className="grid md:grid-cols-3 gap-5 lg:gap-6 relative">
+          <div className="hidden md:block absolute top-[3.25rem] left-[16%] right-[16%] h-0.5 bg-gradient-to-r from-wingo-200 via-amber-200 to-orange-200" />
 
           {n.adimlar.map((adim, i) => {
             const Icon = lucideIkonAl(adim.ikon);
             const c = stepColors[i % stepColors.length];
 
             return (
-              <motion.div
+              <motion.article
                 key={adim.sira}
                 initial={{ opacity: 0, y: 24 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true, margin: '-40px' }}
-                transition={{ duration: 0.5, delay: i * 0.12, ease: [0.16, 1, 0.3, 1] }}
-                whileHover={{ y: -6, transition: { type: 'spring', stiffness: 400, damping: 25 } }}
-                className="relative group"
+                transition={{ duration: 0.5, delay: i * 0.1, ease: [0.16, 1, 0.3, 1] }}
+                className="relative rounded-3xl border border-slate-200 bg-slate-50/60 p-6 md:p-7 hover:bg-white hover:shadow-lg hover:border-slate-300 transition-all duration-300"
               >
-                <div className="relative bg-slate-900/60 rounded-2xl border border-white/[0.07] p-7 backdrop-blur-sm hover:border-white/[0.14] transition-all duration-300 hover:shadow-[0_12px_40px_rgba(0,0,0,0.3)]">
-                  {/* Gradient top accent */}
-                  <div className={`absolute top-0 left-0 right-0 h-1 rounded-t-2xl bg-gradient-to-r ${c.gradient} opacity-0 group-hover:opacity-100 transition-opacity duration-300`} />
+                <div className={`absolute top-0 left-6 right-6 h-1 rounded-b-full bg-gradient-to-r ${c.accent} opacity-80`} />
 
-                  {/* Step number + icon */}
-                  <div className="flex items-center gap-4 mb-5">
-                    <motion.div
-                      whileHover={{ scale: 1.1, rotate: -4 }}
-                      className={`inline-flex w-10 h-10 rounded-xl bg-gradient-to-br ${c.gradient} ${c.glow} shadow-lg items-center justify-center font-black text-base text-white`}
-                    >
-                      {i + 1}
-                    </motion.div>
-                    <div className={`inline-flex w-12 h-12 rounded-xl ${c.iconBg} items-center justify-center`}>
-                      <Icon className={`w-6 h-6 ${c.iconText}`} />
-                    </div>
+                <div className="flex items-center gap-3 mb-5">
+                  <div
+                    className={`relative z-10 inline-flex w-11 h-11 rounded-full ${c.num} shadow-md items-center justify-center font-display font-extrabold text-lg text-white`}
+                  >
+                    {i + 1}
                   </div>
-
-                  <h3 className="text-white font-black text-lg mb-2.5">{adim.baslik}</h3>
-                  <p className="text-slate-400 text-sm leading-relaxed">{adim.metin}</p>
+                  <div className={`inline-flex w-11 h-11 rounded-2xl ${c.iconBg} items-center justify-center`}>
+                    <Icon className={`w-5 h-5 ${c.iconText}`} />
+                  </div>
+                  <span className={`ml-auto text-[10px] font-extrabold uppercase tracking-wider rounded-full border px-2.5 py-1 ${c.badge}`}>
+                    Adım {i + 1}
+                  </span>
                 </div>
-              </motion.div>
+
+                <h3 className="font-display text-slate-900 font-extrabold text-xl mb-2.5">
+                  {adim.baslik}
+                </h3>
+                <p className="text-slate-600 text-sm leading-relaxed">{adim.metin}</p>
+              </motion.article>
             );
           })}
         </div>
@@ -90,15 +101,15 @@ export function LandingNasil() {
           initial={{ opacity: 0 }}
           whileInView={{ opacity: 1 }}
           viewport={{ once: true }}
-          transition={{ delay: 0.3 }}
-          className="text-center mt-10"
+          transition={{ delay: 0.25 }}
+          className="text-center mt-12"
         >
           <Link
             href="/kayit"
-            className="group inline-flex items-center gap-2 text-[#8FE4D8] font-bold text-sm hover:gap-3 transition-all hover:text-[#2ABBA7]"
+            className="group inline-flex items-center gap-2 rounded-full bg-wingo-600 hover:bg-wingo-700 px-7 py-3.5 text-sm font-bold text-white shadow-md shadow-wingo-600/20 transition-all"
           >
-            Hemen basla
-            <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+            Hemen başla
+            <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
           </Link>
         </motion.div>
       </div>

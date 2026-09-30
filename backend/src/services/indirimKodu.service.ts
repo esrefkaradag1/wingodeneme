@@ -393,6 +393,32 @@ function degerDogrula(tip: IndirimTipi, deger: number, alan: string) {
   if (tip === IndirimTipi.YUZDE && deger > 100) throw new AppHatasi(`${alan} %100'den büyük olamaz`, 400);
 }
 
+type SahipProfilSelect = {
+  id: true;
+  email: true;
+  rol: true;
+  adminProfil: { select: { ad: true; soyad: true; brans: true } };
+  kocProfil: { select: { ad: true; soyad: true; tip: true } };
+};
+
+const sahipProfilSelect = {
+  id: true,
+  email: true,
+  rol: true,
+  adminProfil: { select: { ad: true, soyad: true, brans: true } },
+  kocProfil: { select: { ad: true, soyad: true, tip: true } },
+} satisfies SahipProfilSelect;
+
+function sahipAdSoyad(ogretmen: {
+  email: string;
+  adminProfil?: { ad: string; soyad: string; brans?: string | null } | null;
+  kocProfil?: { ad: string; soyad: string } | null;
+}): { ad: string; soyad: string; brans: string | null } {
+  const ad = ogretmen.adminProfil?.ad || ogretmen.kocProfil?.ad || '';
+  const soyad = ogretmen.adminProfil?.soyad || ogretmen.kocProfil?.soyad || '';
+  return { ad, soyad, brans: ogretmen.adminProfil?.brans ?? null };
+}
+
 export async function adminIndirimKoduListesi(filtre: { q?: string; aktif?: string; ogretmenId?: string } = {}) {
   const q = (filtre.q || '').trim();
   const kodlar = await prisma.indirimKodu.findMany({
@@ -407,13 +433,15 @@ export async function adminIndirimKoduListesi(filtre: { q?: string; aktif?: stri
               { ogretmen: { email: { contains: q, mode: 'insensitive' } } },
               { ogretmen: { adminProfil: { ad: { contains: q, mode: 'insensitive' } } } },
               { ogretmen: { adminProfil: { soyad: { contains: q, mode: 'insensitive' } } } },
+              { ogretmen: { kocProfil: { ad: { contains: q, mode: 'insensitive' } } } },
+              { ogretmen: { kocProfil: { soyad: { contains: q, mode: 'insensitive' } } } },
             ],
           }
         : {}),
     },
     orderBy: { olusturuldu: 'desc' },
     include: {
-      ogretmen: { select: { id: true, email: true, adminProfil: { select: { ad: true, soyad: true, brans: true } } } },
+      ogretmen: { select: sahipProfilSelect },
       _count: { select: { kullanimlar: true } },
     },
   });
@@ -428,35 +456,39 @@ export async function adminIndirimKoduListesi(filtre: { q?: string; aktif?: stri
     : [];
   const kazancMap = new Map(kazanclar.map((k) => [k.kodId, k._sum]));
 
-  return kodlar.map((k) => ({
-    id: k.id,
-    kod: k.kod,
-    aciklama: k.aciklama,
-    aktif: k.aktif,
-    indirimTipi: k.indirimTipi,
-    indirimDegeri: k.indirimDegeri,
-    komisyonTipi: k.komisyonTipi,
-    komisyonDegeri: k.komisyonDegeri,
-    platform: k.platform,
-    baslangic: k.baslangic?.toISOString() ?? null,
-    bitis: k.bitis?.toISOString() ?? null,
-    maksKullanim: k.maksKullanim,
-    kullaniciLimiti: k.kullaniciLimiti,
-    minTutar: k.minTutar,
-    kullanimSayisi: k._count.kullanimlar,
-    olusturuldu: k.olusturuldu.toISOString(),
-    ogretmen: k.ogretmen
-      ? {
-          id: k.ogretmen.id,
-          email: k.ogretmen.email,
-          ad: k.ogretmen.adminProfil?.ad ?? '',
-          soyad: k.ogretmen.adminProfil?.soyad ?? '',
-          brans: k.ogretmen.adminProfil?.brans ?? null,
-        }
-      : null,
-    toplamCiro: tutarYuvarla(kazancMap.get(k.id)?.netTutar ?? 0),
-    toplamKomisyon: tutarYuvarla(kazancMap.get(k.id)?.komisyonTutari ?? 0),
-  }));
+  return kodlar.map((k) => {
+    const sahip = k.ogretmen ? sahipAdSoyad(k.ogretmen) : null;
+    return {
+      id: k.id,
+      kod: k.kod,
+      aciklama: k.aciklama,
+      aktif: k.aktif,
+      indirimTipi: k.indirimTipi,
+      indirimDegeri: k.indirimDegeri,
+      komisyonTipi: k.komisyonTipi,
+      komisyonDegeri: k.komisyonDegeri,
+      platform: k.platform,
+      baslangic: k.baslangic?.toISOString() ?? null,
+      bitis: k.bitis?.toISOString() ?? null,
+      maksKullanim: k.maksKullanim,
+      kullaniciLimiti: k.kullaniciLimiti,
+      minTutar: k.minTutar,
+      kullanimSayisi: k._count.kullanimlar,
+      olusturuldu: k.olusturuldu.toISOString(),
+      ogretmen: k.ogretmen
+        ? {
+            id: k.ogretmen.id,
+            email: k.ogretmen.email,
+            rol: k.ogretmen.rol,
+            ad: sahip!.ad,
+            soyad: sahip!.soyad,
+            brans: sahip!.brans,
+          }
+        : null,
+      toplamCiro: tutarYuvarla(kazancMap.get(k.id)?.netTutar ?? 0),
+      toplamKomisyon: tutarYuvarla(kazancMap.get(k.id)?.komisyonTutari ?? 0),
+    };
+  });
 }
 
 async function ogretmenDogrula(ogretmenId?: string | null): Promise<string | null> {
@@ -465,12 +497,133 @@ async function ogretmenDogrula(ogretmenId?: string | null): Promise<string | nul
     where: { id: ogretmenId },
     select: { id: true, rol: true },
   });
-  if (!ku) throw new AppHatasi('Öğretmen bulunamadı', 404);
-  const izinliRoller: Rol[] = [Rol.TEACHER, Rol.ADMIN, Rol.SUPER_ADMIN];
+  if (!ku) throw new AppHatasi('Komisyon sahibi bulunamadı', 404);
+  const izinliRoller: Rol[] = [Rol.TEACHER, Rol.KOC, Rol.ADMIN, Rol.SUPER_ADMIN];
   if (!izinliRoller.includes(ku.rol)) {
-    throw new AppHatasi('Komisyon yalnızca öğretmen hesaplarına tanımlanabilir', 400);
+    throw new AppHatasi('Komisyon yalnızca öğretmen veya koç hesaplarına tanımlanabilir', 400);
   }
   return ku.id;
+}
+
+/** Yönetici formu: öğretmen + koç hesapları */
+export async function komisyonSahibiAdaylari(arama?: string) {
+  const q = (arama || '').trim();
+  const kullanicilar = await prisma.kullanici.findMany({
+    where: {
+      rol: { in: [Rol.TEACHER, Rol.KOC] },
+      aktif: true,
+      ...(q
+        ? {
+            OR: [
+              { email: { contains: q, mode: 'insensitive' } },
+              { adminProfil: { ad: { contains: q, mode: 'insensitive' } } },
+              { adminProfil: { soyad: { contains: q, mode: 'insensitive' } } },
+              { adminProfil: { brans: { contains: q, mode: 'insensitive' } } },
+              { kocProfil: { ad: { contains: q, mode: 'insensitive' } } },
+              { kocProfil: { soyad: { contains: q, mode: 'insensitive' } } },
+              { kocProfil: { kurumAdi: { contains: q, mode: 'insensitive' } } },
+            ],
+          }
+        : {}),
+    },
+    orderBy: { olusturuldu: 'desc' },
+    take: 300,
+    select: sahipProfilSelect,
+  });
+
+  return kullanicilar.map((k) => {
+    const adSoyad = sahipAdSoyad(k);
+    return {
+      kullaniciId: k.id,
+      email: k.email,
+      rol: k.rol,
+      ad: adSoyad.ad,
+      soyad: adSoyad.soyad,
+      brans: adSoyad.brans,
+      tipEtiket: k.rol === Rol.KOC ? 'Koç' : 'Öğretmen',
+    };
+  });
+}
+
+const KOC_MAX_INDIRIM_YUZDE = 50;
+const KOC_MAX_KOMISYON_YUZDE = 30;
+
+/** Koç paneli: kendi hesabıyla kod oluşturabilmek için erişim doğrula */
+async function kocIndirimErisimDogrula(kullaniciId: string) {
+  const { kocProfilGetirVeyaOlustur } = await import('./koc.service');
+  await kocProfilGetirVeyaOlustur(kullaniciId);
+}
+
+function kocIndirimLimitDogrula(indirimTipi: IndirimTipi, indirimDegeri: number, komisyonTipi: IndirimTipi, komisyonDegeri: number) {
+  if (indirimTipi === IndirimTipi.YUZDE && indirimDegeri > KOC_MAX_INDIRIM_YUZDE) {
+    throw new AppHatasi(`Koç indirim oranı en fazla %${KOC_MAX_INDIRIM_YUZDE} olabilir`, 400);
+  }
+  if (komisyonTipi === IndirimTipi.YUZDE && komisyonDegeri > KOC_MAX_KOMISYON_YUZDE) {
+    throw new AppHatasi(`Koç komisyon oranı en fazla %${KOC_MAX_KOMISYON_YUZDE} olabilir`, 400);
+  }
+}
+
+export async function kocIndirimKoduListesi(kullaniciId: string) {
+  await kocIndirimErisimDogrula(kullaniciId);
+  return adminIndirimKoduListesi({ ogretmenId: kullaniciId });
+}
+
+export async function kocIndirimKoduOlustur(kullaniciId: string, girdi: KodGirdisi) {
+  await kocIndirimErisimDogrula(kullaniciId);
+  const indirimTipi = tipCoz(girdi.indirimTipi, IndirimTipi.YUZDE);
+  const indirimDegeri = sayiCoz(girdi.indirimDegeri) ?? 0;
+  const komisyonTipi = tipCoz(girdi.komisyonTipi, IndirimTipi.YUZDE);
+  // Varsayılan: net tutarın %10'u koça komisyon
+  const komisyonDegeri = sayiCoz(girdi.komisyonDegeri) ?? 10;
+  kocIndirimLimitDogrula(indirimTipi, indirimDegeri, komisyonTipi, komisyonDegeri);
+
+  return adminIndirimKoduOlustur({
+    ...girdi,
+    ogretmenId: kullaniciId,
+    indirimTipi,
+    indirimDegeri,
+    komisyonTipi,
+    komisyonDegeri,
+  });
+}
+
+export async function kocIndirimKoduGuncelle(kullaniciId: string, id: string, girdi: KodGirdisi) {
+  await kocIndirimErisimDogrula(kullaniciId);
+  const mevcut = await prisma.indirimKodu.findUnique({ where: { id } });
+  if (!mevcut) throw new AppHatasi('İndirim kodu bulunamadı', 404);
+  if (mevcut.ogretmenId !== kullaniciId) throw new AppHatasi('Bu kod size ait değil', 403);
+
+  const indirimTipi = girdi.indirimTipi === undefined ? mevcut.indirimTipi : tipCoz(girdi.indirimTipi, mevcut.indirimTipi);
+  const indirimDegeri = girdi.indirimDegeri === undefined ? mevcut.indirimDegeri : sayiCoz(girdi.indirimDegeri) ?? 0;
+  const komisyonTipi = girdi.komisyonTipi === undefined ? mevcut.komisyonTipi : tipCoz(girdi.komisyonTipi, mevcut.komisyonTipi);
+  const komisyonDegeri = girdi.komisyonDegeri === undefined ? mevcut.komisyonDegeri : sayiCoz(girdi.komisyonDegeri) ?? 0;
+  kocIndirimLimitDogrula(indirimTipi, indirimDegeri, komisyonTipi, komisyonDegeri);
+
+  return adminIndirimKoduGuncelle(id, {
+    ...girdi,
+    ogretmenId: kullaniciId,
+  });
+}
+
+export async function kocIndirimKoduSil(kullaniciId: string, id: string) {
+  await kocIndirimErisimDogrula(kullaniciId);
+  const mevcut = await prisma.indirimKodu.findUnique({ where: { id }, select: { id: true, ogretmenId: true } });
+  if (!mevcut) throw new AppHatasi('İndirim kodu bulunamadı', 404);
+  if (mevcut.ogretmenId !== kullaniciId) throw new AppHatasi('Bu kod size ait değil', 403);
+  return adminIndirimKoduSil(id);
+}
+
+export async function kocKazancOzeti(kullaniciId: string) {
+  await kocIndirimErisimDogrula(kullaniciId);
+  return ogretmenKazancOzeti(kullaniciId);
+}
+
+export async function kocKazancHareketleri(
+  kullaniciId: string,
+  filtre: { durum?: string; kodId?: string; limit?: number } = {},
+) {
+  await kocIndirimErisimDogrula(kullaniciId);
+  return ogretmenKazancHareketleri(kullaniciId, filtre);
 }
 
 export async function adminIndirimKoduOlustur(girdi: KodGirdisi) {
@@ -492,7 +645,7 @@ export async function adminIndirimKoduOlustur(girdi: KodGirdisi) {
 
   const ogretmenId = await ogretmenDogrula(girdi.ogretmenId);
   if (komisyonDegeri > 0 && !ogretmenId) {
-    throw new AppHatasi('Komisyon tanımlamak için öğretmen seçilmeli', 400);
+    throw new AppHatasi('Komisyon tanımlamak için öğretmen veya koç seçilmeli', 400);
   }
 
   return prisma.indirimKodu.create({
@@ -530,7 +683,7 @@ export async function adminIndirimKoduGuncelle(id: string, girdi: KodGirdisi) {
   const ogretmenId =
     girdi.ogretmenId === undefined ? mevcut.ogretmenId : await ogretmenDogrula(girdi.ogretmenId);
   if (komisyonDegeri > 0 && !ogretmenId) {
-    throw new AppHatasi('Komisyon tanımlamak için öğretmen seçilmeli', 400);
+    throw new AppHatasi('Komisyon tanımlamak için öğretmen veya koç seçilmeli', 400);
   }
 
   return prisma.indirimKodu.update({
@@ -579,7 +732,14 @@ export async function adminKomisyonListesi(filtre: { durum?: string; ogretmenId?
       take: Math.min(filtre.limit ?? 200, 500),
       include: {
         kod: { select: { kod: true } },
-        ogretmen: { select: { id: true, email: true, adminProfil: { select: { ad: true, soyad: true } } } },
+        ogretmen: {
+          select: {
+            id: true,
+            email: true,
+            adminProfil: { select: { ad: true, soyad: true } },
+            kocProfil: { select: { ad: true, soyad: true } },
+          },
+        },
         kullanici: { select: { email: true, ogrenciProfil: { select: { ad: true, soyad: true } } } },
         satinAlim: { select: { durum: true, paket: { select: { ad: true } }, sinav: { select: { baslik: true } } } },
       },
@@ -602,14 +762,16 @@ export async function adminKomisyonListesi(filtre: { durum?: string; ogretmenId?
 
   return {
     ozet,
-    kayitlar: kayitlar.map((k) => ({
+    kayitlar: kayitlar.map((k) => {
+      const sahip = k.ogretmen ? sahipAdSoyad(k.ogretmen) : null;
+      return {
       id: k.id,
       kod: k.kod.kod,
       ogretmen: k.ogretmen
         ? {
             id: k.ogretmen.id,
             email: k.ogretmen.email,
-            ad: [k.ogretmen.adminProfil?.ad, k.ogretmen.adminProfil?.soyad].filter(Boolean).join(' '),
+            ad: [sahip?.ad, sahip?.soyad].filter(Boolean).join(' '),
           }
         : null,
       ogrenci: {
@@ -625,7 +787,8 @@ export async function adminKomisyonListesi(filtre: { durum?: string; ogretmenId?
       siparisDurumu: k.satinAlim?.durum ?? null,
       odemeTarihi: k.odemeTarihi?.toISOString() ?? null,
       tarih: k.olusturuldu.toISOString(),
-    })),
+    };
+    }),
   };
 }
 

@@ -100,7 +100,7 @@ export default function TopluAnalizEkrani() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900">Toplu detaylı analiz</h1>
           <p className="mt-1 text-sm text-slate-600">
-            Sınıf / öğrenci karşılaştırması, ders başarıları ve zayıf konular
+            Sınıf / öğrenci karşılaştırması, sınav sonuçları, ders başarıları ve zayıf konular
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -271,7 +271,7 @@ export default function TopluAnalizEkrani() {
                 {data.sinavBazli.map((s) => (
                   <li
                     key={s.sinavId}
-                    className="flex flex-col gap-1 px-5 py-3 sm:flex-row sm:items-center sm:justify-between"
+                    className="flex flex-col gap-2 px-5 py-3 sm:flex-row sm:items-center sm:justify-between"
                   >
                     <div>
                       <p className="font-medium text-slate-900">{s.baslik}</p>
@@ -279,13 +279,21 @@ export default function TopluAnalizEkrani() {
                         {s.tur} · {s.katilimSayisi} katılım
                       </p>
                     </div>
-                    <p className="text-sm">
-                      Ort. <span className="font-bold">{s.ortalamaNet}</span>
-                      <span className="text-slate-400">
-                        {' '}
-                        (min {s.enDusukNet} / max {s.enYuksekNet})
-                      </span>
-                    </p>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <p className="text-sm">
+                        Ort. <span className="font-bold">{s.ortalamaNet}</span>
+                        <span className="text-slate-400">
+                          {' '}
+                          (min {s.enDusukNet} / max {s.enYuksekNet})
+                        </span>
+                      </p>
+                      <Link
+                        href={`${temelYol}/sinavlar/${s.sinavId}/sonuclar`}
+                        className="inline-flex items-center gap-1 rounded-lg bg-teal-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-teal-700"
+                      >
+                        Sonuçlar <ArrowRight className="h-3 w-3" />
+                      </Link>
+                    </div>
                   </li>
                 ))}
               </ul>

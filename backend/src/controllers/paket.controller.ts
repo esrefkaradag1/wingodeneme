@@ -87,7 +87,7 @@ export async function paketleriGetir(req: AuthRequest, res: Response, next: Next
 export async function aktifPaketleriGetir(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   try {
     const platformKey = req.isKpssPlatform ? 'kpss' : 'yks_lgs';
-    const cacheKey = `paketler:aktif:v5:${platformKey}`;
+    const cacheKey = `paketler:aktif:v6:${platformKey}`;
     const cached = await cache.al(cacheKey);
     if (cached) {
       res.set('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=86400');
@@ -114,6 +114,7 @@ export async function aktifPaketleriGetir(req: AuthRequest, res: Response, next:
         aktif: true,
         populer: true,
         disUrl: true,
+        gorselUrl: true,
         oneCikan: true,
       },
     });
@@ -215,7 +216,7 @@ export async function paketOlustur(req: AuthRequest, res: Response, next: NextFu
     const body = req.body as Record<string, any>;
     const {
       ad, aciklama, kategori, fiyat, indirimliFiyat, sinavSayisi, ozellikler, aktif, populer,
-      sinavIds, ucretsizSinavIds, grupIds, etiketler, disUrl, oneCikan,
+      sinavIds, ucretsizSinavIds, grupIds, etiketler, disUrl, gorselUrl, oneCikan,
     } = body;
     const cozulmusGrupIds = idListesi(grupIds);
     const fiyatAyarlari = paketKademeAyarlariCoz(body);
@@ -239,6 +240,7 @@ export async function paketOlustur(req: AuthRequest, res: Response, next: NextFu
         grupIds: cozulmusGrupIds,
         etiketler: Array.isArray(etiketler) ? etiketler : [],
         disUrl: disUrl || null,
+        gorselUrl: typeof gorselUrl === 'string' && gorselUrl.trim() ? gorselUrl.trim() : null,
         oneCikan: oneCikan ?? false,
         aktif: aktif ?? true,
         populer: populer ?? false,
@@ -256,7 +258,7 @@ export async function paketGuncelle(req: AuthRequest, res: Response, next: NextF
     const body = req.body as Record<string, any>;
     const {
       ad, aciklama, kategori, fiyat, indirimliFiyat, sinavSayisi, ozellikler, aktif, populer,
-      sinavIds, ucretsizSinavIds, grupIds, etiketler, disUrl, oneCikan,
+      sinavIds, ucretsizSinavIds, grupIds, etiketler, disUrl, gorselUrl, oneCikan,
     } = body;
     const cozulmusGrupIds = grupIds !== undefined ? idListesi(grupIds) : undefined;
     const fiyatAyarlari = paketKademeAyarlariCoz(body);
@@ -284,6 +286,7 @@ export async function paketGuncelle(req: AuthRequest, res: Response, next: NextF
         ...(cozulmusGrupIds !== undefined ? { grupIds: cozulmusGrupIds } : {}),
         etiketler: Array.isArray(etiketler) ? etiketler : [],
         disUrl: disUrl || null,
+        gorselUrl: typeof gorselUrl === 'string' && gorselUrl.trim() ? gorselUrl.trim() : null,
         oneCikan: oneCikan ?? false,
         aktif: aktif ?? true,
         populer: populer ?? false,

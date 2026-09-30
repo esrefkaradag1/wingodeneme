@@ -22,6 +22,7 @@ import {
   MapPin,
   Phone,
   Plus,
+  KeyRound,
   Search,
   ShieldCheck,
   Trash2,
@@ -214,6 +215,17 @@ export default function KurumlarSayfasi() {
     onError: (e) => toast.hata(hataMesaji(e, 'Uzatılamadı')),
   });
 
+  const sifreMut = useMutation({
+    mutationFn: (id: string) => adminApi.kocSifreSifirla(id),
+    onSuccess: (res) => {
+      const veri = res.data?.veri as { email: string; geciciSifre: string };
+      setDetayId(null);
+      setGirisBilgisi({ email: veri.email, sifre: veri.geciciSifre });
+      toast.basarili('Yeni geçici şifre oluşturuldu');
+    },
+    onError: (e) => toast.hata(hataMesaji(e, 'Şifre sıfırlanamadı')),
+  });
+
   const silMut = useMutation({
     mutationFn: (id: string) => adminApi.kocYetkiKaldir(id),
     onSuccess: (res) => {
@@ -402,6 +414,21 @@ export default function KurumlarSayfasi() {
                       </button>
                     )}
                     <button
+                      onClick={() => {
+                        if (
+                          window.confirm(
+                            `${k.kurumAdi || `${k.ad} ${k.soyad}`} için yeni geçici şifre oluşturulsun mu? Mevcut oturumlar düşer.`,
+                          )
+                        ) {
+                          sifreMut.mutate(k.id);
+                        }
+                      }}
+                      disabled={sifreMut.isPending}
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-gray-200 px-3.5 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50"
+                    >
+                      <KeyRound className="h-3.5 w-3.5" /> Şifre
+                    </button>
+                    <button
                       onClick={() => setDetayId(k.id)}
                       className="inline-flex items-center gap-1.5 rounded-xl border border-gray-200 px-3.5 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50"
                     >
@@ -525,6 +552,17 @@ export default function KurumlarSayfasi() {
             }
           }}
           demoUzat={(gun) => demoMut.mutate({ id: detayId, gun })}
+          sifreSifirla={() => {
+            const kayit = koclar.find((x) => x.id === detayId);
+            if (
+              window.confirm(
+                `${kayit?.kurumAdi || kayit?.ad || 'Kurum'} için yeni geçici şifre oluşturulsun mu? Mevcut oturumlar düşer.`,
+              )
+            ) {
+              sifreMut.mutate(detayId);
+            }
+          }}
+          sifreBekliyor={sifreMut.isPending}
         />
       )}
 
@@ -668,11 +706,15 @@ function DetayModal({
   kapat,
   sil,
   demoUzat,
+  sifreSifirla,
+  sifreBekliyor,
 }: {
   kocId: string;
   kapat: () => void;
   sil: () => void;
   demoUzat: (gun: number) => void;
+  sifreSifirla: () => void;
+  sifreBekliyor: boolean;
 }) {
   const qc = useQueryClient();
   const [ogrenciEmail, setOgrenciEmail] = useState('');
@@ -854,6 +896,13 @@ function DetayModal({
                 className="inline-flex items-center gap-1.5 rounded-xl border border-gray-200 px-3.5 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50"
               >
                 Süresiz yap
+              </button>
+              <button
+                onClick={sifreSifirla}
+                disabled={sifreBekliyor}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-gray-200 px-3.5 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                <KeyRound className="h-3.5 w-3.5" /> Şifre sıfırla
               </button>
               <button
                 onClick={sil}

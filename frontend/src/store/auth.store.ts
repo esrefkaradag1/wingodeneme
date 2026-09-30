@@ -14,8 +14,8 @@ interface Kullanici {
   branslar?: string[];
   /** Matematik → ['Matematik','Geometri'] vb. */
   izinliDersler?: string[];
-  /** Öğrenci ve öğretmen için kademe (YKS / LGS) */
-  ogretimTuru?: 'YKS' | 'LGS';
+  /** Öğrenci/öğretmen kademesi: YKS, LGS, KPSS, KPSS_LISANS, … */
+  ogretimTuru?: string;
   /** KOC rolü referans kodu */
   referansKod?: string;
   /** KOC rolü tipi: BIREYSEL koç mu, KURUMSAL/KURUM_OGRETMENI mi */

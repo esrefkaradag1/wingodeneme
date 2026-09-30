@@ -5,7 +5,6 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import Link from 'next/link';
-import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import {
   Building2,
@@ -26,11 +25,6 @@ import { authApi } from '@/lib/api';
 import { useAuthStore } from '@/store/auth.store';
 import { toast } from '@/store/toast.store';
 import AnaSiteyeDonButonu from '@/components/auth/AnaSiteyeDonButonu';
-
-const AuthThreeBackground = dynamic(() => import('@/components/auth/AuthThreeBackground'), {
-  ssr: false,
-  loading: () => <div className="absolute inset-0 -z-10 bg-[#070713]" />,
-});
 
 const kurumSchema = z.object({
   kurumAdi: z.string().min(2, 'Kurum adı gerekli'),
@@ -97,16 +91,23 @@ export default function KurumBasvuruSayfasi() {
   };
 
   const inputSinifi = (hatali: boolean) =>
-    `w-full rounded-xl border bg-white/5 pl-10 pr-3 py-3 text-sm text-white outline-none placeholder:text-slate-500 ${
-      hatali ? 'border-red-400/60' : 'border-white/10 focus:border-indigo-400/50'
+    `w-full rounded-xl border bg-slate-50 pl-10 pr-3 py-3 text-sm text-edu-ink outline-none placeholder:text-slate-400 ${
+      hatali ? 'border-red-400/60' : 'border-edu-line focus:border-wingo-400'
     }`;
 
   if (gonderildi) {
     return (
-      <div className="relative min-h-screen overflow-hidden bg-[#070713] text-white">
-        <AuthThreeBackground />
+      <div className="relative min-h-screen overflow-hidden bg-edu-bg text-edu-ink">
+      <div
+        className="pointer-events-none absolute inset-0 -z-10"
+        style={{
+          background:
+            'radial-gradient(circle at 12% 10%, rgba(13, 148, 136, 0.12) 0, transparent 32%), radial-gradient(circle at 90% 8%, rgba(234, 88, 12, 0.08) 0, transparent 28%), #F3FAF8',
+        }}
+        aria-hidden
+      />
         <div className="relative z-10 mx-auto flex min-h-screen max-w-lg flex-col justify-center px-4 py-10">
-          <div className="rounded-3xl border border-white/10 bg-black/40 p-8 text-center backdrop-blur-md">
+          <div className="rounded-3xl border border-edu-line bg-black/40 p-8 text-center backdrop-blur-md">
             <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-emerald-400/30 bg-emerald-500/10 text-emerald-300">
               <CheckCircle2 className="h-7 w-7" />
             </div>
@@ -117,7 +118,7 @@ export default function KurumBasvuruSayfasi() {
             </p>
             <button
               onClick={() => router.push('/kurum/dashboard')}
-              className="mt-6 w-full rounded-xl bg-indigo-500 py-3 text-sm font-bold text-white hover:bg-indigo-400"
+              className="mt-6 w-full rounded-xl bg-wingo-600 py-3 text-sm font-bold text-edu-ink hover:bg-wingo-700"
             >
               Başvuru durumumu gör
             </button>
@@ -128,12 +129,19 @@ export default function KurumBasvuruSayfasi() {
   }
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[#070713] text-white">
-      <AuthThreeBackground />
+    <div className="relative min-h-screen overflow-hidden bg-edu-bg text-edu-ink">
+      <div
+        className="pointer-events-none absolute inset-0 -z-10"
+        style={{
+          background:
+            'radial-gradient(circle at 12% 10%, rgba(13, 148, 136, 0.12) 0, transparent 32%), radial-gradient(circle at 90% 8%, rgba(234, 88, 12, 0.08) 0, transparent 28%), #F3FAF8',
+        }}
+        aria-hidden
+      />
       <div className="relative z-10 mx-auto flex min-h-screen max-w-lg flex-col justify-center px-4 py-10">
         <AnaSiteyeDonButonu />
-        <div className="mt-6 rounded-3xl border border-white/10 bg-black/40 p-6 backdrop-blur-md sm:p-8">
-          <div className="mb-1 inline-flex items-center gap-2 rounded-full border border-indigo-400/30 bg-indigo-500/10 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-indigo-300">
+        <div className="mt-6 rounded-3xl border border-edu-line bg-black/40 p-6 backdrop-blur-md sm:p-8">
+          <div className="mb-1 inline-flex items-center gap-2 rounded-full border border-indigo-400/30 bg-wingo-600/10 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-wingo-700">
             <Building2 className="h-3.5 w-3.5" /> Kurumsal
           </div>
           <h1 className="mt-2 text-2xl font-bold tracking-tight">Kurum başvurusu</h1>
@@ -144,7 +152,7 @@ export default function KurumBasvuruSayfasi() {
           <ul className="mt-4 space-y-2">
             {AVANTAJLAR.map((a) => (
               <li key={a.metin} className="flex items-start gap-2 text-xs text-slate-300">
-                <a.ikon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-indigo-300" />
+                <a.ikon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-wingo-700" />
                 {a.metin}
               </li>
             ))}
@@ -220,7 +228,7 @@ export default function KurumBasvuruSayfasi() {
                 {...register('basvuruNotu')}
                 rows={2}
                 placeholder="Kurumunuz, kademeleriniz ve beklentileriniz hakkında kısa bilgi"
-                className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-3 text-sm text-white outline-none placeholder:text-slate-500 focus:border-indigo-400/50"
+                className="w-full rounded-xl border border-edu-line bg-slate-50 px-3 py-3 text-sm text-edu-ink outline-none placeholder:text-slate-400 focus:border-wingo-400"
               />
             </label>
 
@@ -247,7 +255,7 @@ export default function KurumBasvuruSayfasi() {
             <button
               type="submit"
               disabled={yukleniyor}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-500 py-3 text-sm font-bold text-white hover:bg-indigo-400 disabled:opacity-60"
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-wingo-600 py-3 text-sm font-bold text-edu-ink hover:bg-wingo-700 disabled:opacity-60"
             >
               {yukleniyor ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
               Başvuruyu gönder
@@ -260,7 +268,7 @@ export default function KurumBasvuruSayfasi() {
               Koç kaydı
             </Link>
             {' · '}
-            <Link href="/giris" className="font-semibold text-indigo-300 hover:underline">
+            <Link href="/giris" className="font-semibold text-wingo-700 hover:underline">
               Giriş yapın
             </Link>
           </p>

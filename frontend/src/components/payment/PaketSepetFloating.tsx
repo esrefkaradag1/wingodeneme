@@ -69,11 +69,11 @@ export function PaketSepetFloating() {
       <button
         type="button"
         onClick={() => setAcik(true)}
-        className="fixed bottom-6 right-6 z-[80] flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-[#7C6BFF] to-[#2ABBA7] text-white shadow-lg shadow-indigo-500/30 transition-all hover:scale-105 hover:shadow-indigo-500/45 active:scale-95"
+        className="fixed bottom-6 right-6 z-[80] flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-wingo-600 to-wingo-500 text-white shadow-lg shadow-wingo-600/25 transition-all hover:scale-105 hover:shadow-wingo-600/30 active:scale-95"
         aria-label={`Sepet, ${seciliSinavIds.length} deneme seçili`}
       >
         <ShoppingCart className="h-6 w-6" />
-        <span className="absolute -right-1 -top-1 flex h-6 min-w-6 items-center justify-center rounded-full bg-white px-1.5 text-xs font-bold text-indigo-700 shadow-md">
+        <span className="absolute -right-1 -top-1 flex h-6 min-w-6 items-center justify-center rounded-full bg-white px-1.5 text-xs font-bold text-wingo-700 shadow-md">
           {seciliSinavIds.length}
         </span>
       </button>
@@ -95,18 +95,18 @@ export function PaketSepetFloating() {
               animate={{ x: 0 }}
               exit={{ x: '100%' }}
               transition={{ type: 'spring', damping: 28, stiffness: 320 }}
-              className="fixed right-0 top-0 z-[100] flex h-full w-full max-w-md flex-col border-l border-white/10 bg-[#0A1024] shadow-2xl"
+              className="fixed right-0 top-0 z-[100] flex h-full w-full max-w-md flex-col border-l border-edu-line bg-white shadow-2xl"
             >
-              <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
+              <div className="flex items-center justify-between border-b border-edu-line px-5 py-4">
                 <div className="min-w-0 pr-4">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Sepet</p>
-                  <h2 className="truncate text-lg font-bold text-white">{baslik}</h2>
-                  <p className="text-sm text-slate-400">{seciliSinavIds.length} deneme seçili</p>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-edu-muted">Sepet</p>
+                  <h2 className="truncate text-lg font-bold text-edu-ink">{baslik}</h2>
+                  <p className="text-sm text-edu-muted">{seciliSinavIds.length} deneme seçili</p>
                 </div>
                 <button
                   type="button"
                   onClick={() => setAcik(false)}
-                  className="rounded-xl p-2 text-slate-400 transition-colors hover:bg-white/10 hover:text-white"
+                  className="rounded-xl p-2 text-edu-muted transition-colors hover:bg-slate-100 hover:text-edu-ink"
                   aria-label="Kapat"
                 >
                   <X className="h-5 w-5" />
@@ -115,12 +115,12 @@ export function PaketSepetFloating() {
 
               <div className="flex-1 overflow-y-auto px-5 py-4">
                 {isLoading ? (
-                  <div className="flex items-center justify-center gap-2 py-12 text-slate-400">
+                  <div className="flex items-center justify-center gap-2 py-12 text-edu-muted">
                     <Loader2 className="h-5 w-5 animate-spin" />
                     <span className="text-sm">Yükleniyor…</span>
                   </div>
                 ) : seciliSinavlar.length === 0 ? (
-                  <p className="py-8 text-center text-sm text-slate-400">
+                  <p className="py-8 text-center text-sm text-edu-muted">
                     Seçili denemeler yüklenemedi. Paket sayfasına giderek kontrol edin.
                   </p>
                 ) : (
@@ -128,11 +128,11 @@ export function PaketSepetFloating() {
                     {seciliSinavlar.map((sinav: { id: string; baslik: string; gosterilenFiyat?: number | null }) => (
                       <li
                         key={sinav.id}
-                        className="flex items-start gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-3"
+                        className="flex items-start gap-2 rounded-xl border border-edu-line bg-white px-3 py-3"
                       >
                         <div className="min-w-0 flex-1">
                           <span className="block text-sm font-medium text-slate-200">{sinav.baslik}</span>
-                          <span className="mt-1 block text-sm font-semibold text-[#2ABBA7]">
+                          <span className="mt-1 block text-sm font-semibold text-wingo-700">
                             {(sinav.gosterilenFiyat ?? 0) <= 0
                               ? 'Ücretsiz'
                               : `${fiyatGoster(sinav.gosterilenFiyat)} ₺`}
@@ -141,7 +141,7 @@ export function PaketSepetFloating() {
                         <button
                           type="button"
                           onClick={() => cikar(sinav.id)}
-                          className="shrink-0 rounded-lg p-2 text-slate-500 transition-colors hover:bg-red-500/10 hover:text-red-400"
+                          className="shrink-0 rounded-lg p-2 text-edu-muted transition-colors hover:bg-red-500/10 hover:text-red-400"
                           aria-label={`${sinav.baslik} denemesini sepetten çıkar`}
                         >
                           <Minus className="h-4 w-4" />
@@ -152,10 +152,10 @@ export function PaketSepetFloating() {
                 )}
               </div>
 
-              <div className="border-t border-white/10 px-5 py-4">
+              <div className="border-t border-edu-line px-5 py-4">
                 {kademeSonuc.indirim > 0 && kademeSonuc.kademe ? (
                   <div className="mb-3 space-y-1 text-sm">
-                    <div className="flex justify-between text-slate-400">
+                    <div className="flex justify-between text-edu-muted">
                       <span>Ara toplam</span>
                       <span>{fiyatGoster(listeToplam)} ₺</span>
                     </div>
@@ -166,8 +166,8 @@ export function PaketSepetFloating() {
                   </div>
                 ) : null}
                 <div className="mb-4 flex items-center justify-between">
-                  <span className="font-semibold text-white">Toplam</span>
-                  <span className="text-xl font-bold text-white">
+                  <span className="font-semibold text-edu-ink">Toplam</span>
+                  <span className="text-xl font-bold text-edu-ink">
                     {kademeSonuc.toplam <= 0 ? 'Ücretsiz' : `${fiyatGoster(kademeSonuc.toplam)} ₺`}
                   </span>
                 </div>
@@ -175,7 +175,7 @@ export function PaketSepetFloating() {
                 <Link
                   href={paketSayfaYolu}
                   onClick={() => setAcik(false)}
-                  className="mb-2 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#7C6BFF] to-[#2ABBA7] py-3.5 text-sm font-bold text-white shadow-lg shadow-indigo-500/25 transition-all hover:shadow-indigo-500/40"
+                  className="mb-2 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-wingo-600 to-wingo-500 py-3.5 text-sm font-bold text-white shadow-lg shadow-wingo-600/20 transition-all hover:shadow-wingo-600/30"
                 >
                   {pathname === paketSayfaYolu ? 'Sepete dön' : 'Pakete git ve satın al'}
                   <ArrowRight className="h-4 w-4" />
@@ -187,7 +187,7 @@ export function PaketSepetFloating() {
                     temizle();
                     setAcik(false);
                   }}
-                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-white/10 py-2.5 text-sm font-medium text-slate-400 transition-colors hover:border-red-500/30 hover:bg-red-500/10 hover:text-red-400"
+                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-edu-line py-2.5 text-sm font-medium text-edu-muted transition-colors hover:border-red-500/30 hover:bg-red-500/10 hover:text-red-400"
                 >
                   <Trash2 className="h-4 w-4" />
                   Sepeti temizle

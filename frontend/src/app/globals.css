@@ -24,6 +24,62 @@
     --destructive-foreground: 210 40% 98%;
     --ring: 222.2 84% 4.9%;
     --radius: 0.5rem;
+
+    /* YKS — teal + turuncu */
+    --wingo-50: #F0FDFA;
+    --wingo-100: #CCFBF1;
+    --wingo-200: #99F6E4;
+    --wingo-300: #5EEAD4;
+    --wingo-400: #2DD4BF;
+    --wingo-500: #14B8A6;
+    --wingo-600: #0D9488;
+    --wingo-700: #0F766E;
+    --wingo-800: #115E59;
+    --wingo-900: #134E4A;
+    --edu-bg: #F3FAF8;
+    --edu-ink: #0F2F2B;
+    --edu-muted: #5B736E;
+    --edu-line: #D5E8E3;
+    --edu-mint: #E6F7F3;
+    --edu-cta: #EA580C;
+    --edu-cta-hover: #C2410C;
+    --surface-darkest: #0A1F1C;
+    --surface-dark: #0F2F2B;
+    --surface-border: rgba(15, 47, 43, 0.08);
+    --landing-hero-a: rgba(125, 211, 252, 0.28);
+    --landing-hero-b: rgba(153, 246, 228, 0.28);
+    --landing-hero-base: #EAF6FF;
+    --landing-hero-mid: #F5FCFF;
+    --landing-brand-stroke: #14B8A6;
+  }
+
+  /* KPSS — indigo + amber (YKS teal/turuncudan ayrı) */
+  [data-landing-theme='kpss'] {
+    --wingo-50: #EEF2FF;
+    --wingo-100: #E0E7FF;
+    --wingo-200: #C7D2FE;
+    --wingo-300: #A5B4FC;
+    --wingo-400: #818CF8;
+    --wingo-500: #6366F1;
+    --wingo-600: #4F46E5;
+    --wingo-700: #4338CA;
+    --wingo-800: #3730A3;
+    --wingo-900: #312E81;
+    --edu-bg: #F4F6FF;
+    --edu-ink: #1E1B4B;
+    --edu-muted: #64748B;
+    --edu-line: #E0E7FF;
+    --edu-mint: #EEF2FF;
+    --edu-cta: #D97706;
+    --edu-cta-hover: #B45309;
+    --surface-darkest: #0B1220;
+    --surface-dark: #111827;
+    --surface-border: rgba(30, 27, 75, 0.08);
+    --landing-hero-a: rgba(165, 180, 252, 0.35);
+    --landing-hero-b: rgba(251, 191, 36, 0.18);
+    --landing-hero-base: #EEF2FF;
+    --landing-hero-mid: #F8FAFF;
+    --landing-brand-stroke: #6366F1;
   }
 
   .dark {
@@ -33,12 +89,17 @@
 
   * { @apply border-gray-200; }
   body {
-    @apply text-gray-900 antialiased;
-    font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    color: var(--edu-ink, #0F2F2B);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-family: var(--font-body), 'DM Sans', system-ui, sans-serif;
     background:
-      radial-gradient(circle at 2% 2%, rgba(99, 102, 241, 0.08) 0, transparent 24%),
-      radial-gradient(circle at 98% 0%, rgba(168, 85, 247, 0.07) 0, transparent 25%),
-      #f4f6fb;
+      radial-gradient(circle at 8% 0%, color-mix(in srgb, var(--wingo-600) 7%, transparent) 0, transparent 28%),
+      radial-gradient(circle at 96% 4%, color-mix(in srgb, var(--edu-cta) 5%, transparent) 0, transparent 26%),
+      var(--edu-bg, #F3FAF8);
+  }
+  .font-display {
+    font-family: var(--font-display), Outfit, system-ui, sans-serif;
   }
 }
 
@@ -64,18 +125,18 @@
     @apply bg-clip-text text-transparent;
   }
   .text-gradient-teal {
-    @apply bg-clip-text text-transparent bg-gradient-to-r from-[#2ABBA7] to-[#8FE4D8];
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-wingo-600 to-wingo-400;
   }
   .text-gradient-brand {
-    @apply bg-clip-text text-transparent bg-gradient-to-r from-[#7C6BFF] to-[#2ABBA7];
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-wingo-700 to-orange-600;
   }
 
   /* Glow effects */
   .glow-teal {
-    box-shadow: 0 0 30px rgba(42, 187, 167, 0.15), 0 0 60px rgba(42, 187, 167, 0.05);
+    box-shadow: 0 0 30px rgba(13, 148, 136, 0.15), 0 0 60px rgba(13, 148, 136, 0.05);
   }
   .glow-indigo {
-    box-shadow: 0 0 30px rgba(124, 107, 255, 0.15), 0 0 60px rgba(124, 107, 255, 0.05);
+    box-shadow: 0 0 30px rgba(13, 148, 136, 0.12), 0 0 60px rgba(234, 88, 12, 0.05);
   }
 
   /* Animation delays */
@@ -87,11 +148,10 @@
 
   /* Card base style */
   .card-dark {
-    @apply relative bg-slate-900/60 rounded-2xl border border-white/[0.07] backdrop-blur-sm;
-    background-image: linear-gradient(135deg, rgba(255,255,255,0.03) 0%, transparent 50%);
+    @apply relative bg-white rounded-2xl border border-edu-line shadow-sm;
   }
   .card-dark:hover {
-    @apply border-white/[0.14];
+    @apply border-wingo-200 shadow-md;
   }
 }
 
@@ -105,12 +165,12 @@
   }
 
   .btn-primary {
-    @apply bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-medium px-4 py-2 rounded-xl
+    @apply bg-gradient-to-r from-wingo-600 to-wingo-500 hover:from-wingo-700 hover:to-wingo-600 text-white font-medium px-4 py-2 rounded-xl
            transition-all duration-200 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed;
   }
 
   .btn-secondary {
-    @apply bg-white hover:bg-indigo-50 text-gray-700 font-medium px-4 py-2 rounded-xl
+    @apply bg-white hover:bg-wingo-50 text-gray-700 font-medium px-4 py-2 rounded-xl
            border border-gray-200 transition-all duration-200 active:scale-95 shadow-sm;
   }
 
@@ -124,7 +184,7 @@
 
   .input-field {
     @apply w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 
-           focus:ring-indigo-500 focus:border-transparent transition-all duration-200 bg-white;
+           focus:ring-wingo-400 focus:border-transparent transition-all duration-200 bg-white;
   }
 
   .badge {
@@ -133,16 +193,16 @@
 
   .nav-item {
     @apply flex items-center gap-3 px-4 py-2.5 rounded-xl text-slate-500 hover:bg-slate-50
-           hover:text-indigo-600 transition-all duration-300 cursor-pointer relative;
+           hover:text-wingo-700 transition-all duration-300 cursor-pointer relative;
   }
 
   .nav-item.active {
-    @apply bg-indigo-50 text-indigo-700 font-bold border border-indigo-100/50 shadow-sm;
+    @apply bg-wingo-50 text-wingo-800 font-bold border border-wingo-100 shadow-sm;
   }
 
   .nav-item.active::before {
     content: '';
-    @apply absolute left-0 top-1/2 -translate-y-1/2 w-1.5 h-6 bg-indigo-600 rounded-r-full shadow-[2px_0_8px_rgba(79,70,229,0.4)];
+    @apply absolute left-0 top-1/2 -translate-y-1/2 w-1.5 h-6 bg-wingo-600 rounded-r-full;
   }
 
   /* ÖSYM / deneme sınavı kitapçık — A4’e yakın kağıt */
@@ -230,20 +290,56 @@
     column-rule-color: #2563eb;
   }
 
-  /* YKS + LGS: iki sütun (ÖSYM kitapçık düzeni) */
+  /* YKS + LGS: iki ayrı sütun (CSS column akışı uzun soruyu sağ sütuna taşıyıp üstüne bindiriyordu) */
   .deneme-iki-sutun {
-    column-count: 2;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     column-gap: 1.25rem;
-    column-rule: 1px solid #d1d5db;
+    align-items: start;
     flex: 1;
     min-height: 0;
   }
 
+  .deneme-iki-sutun > .deneme-sutun {
+    min-width: 0;
+    max-width: 100%;
+    position: relative;
+    overflow: clip;
+  }
+
+  /* Word VML Chrome'da çizilmez; absolute kutu metni yan sütuna bindirir */
+  .osym-soru v\:shape,
+  .osym-soru v\:shapetype,
+  .osym-soru v\:stroke,
+  .osym-soru v\:formulas,
+  .osym-soru v\:f,
+  .osym-soru v\:path,
+  .osym-soru v\:imagedata,
+  .osym-soru v\:handles,
+  .osym-soru v\:h,
+  .osym-soru v\:textbox {
+    display: none !important;
+  }
+
+  .deneme-iki-sutun > .deneme-sutun + .deneme-sutun {
+    border-left: 1px solid #d1d5db;
+    padding-left: 1.25rem;
+  }
+
   .deneme-iki-sutun .osym-soru {
-    break-inside: avoid;
-    page-break-inside: avoid;
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    word-break: break-word;
     padding-left: 0.25rem;
     padding-right: 0.25rem;
+  }
+
+  .deneme-iki-sutun .osym-soru img,
+  .deneme-iki-sutun .osym-soru table,
+  .deneme-iki-sutun .osym-soru svg,
+  .deneme-iki-sutun .osym-soru mjx-container {
+    max-width: 100%;
   }
 
   .deneme-kitapcik-sayfa .deneme-iki-sutun .osym-soru {
@@ -325,10 +421,21 @@
   .osym-kitapcik .osym-secenek .osym-soru-metin {
     font-size: 11pt;
     line-height: 1.35;
+    font-variant-numeric: lining-nums tabular-nums;
+    font-feature-settings: "lnum" 1, "tnum" 1;
+  }
+
+  /* Yapıştırılan Word/HTML rakamları aynı yazı tipinde (lining) kalsın; formül motoruna dokunma */
+  .osym-kitapcik .osym-soru-metin :where(span, p, div, strong, b, em, i, u, li, font),
+  .osym-kitapcik .osym-secenek :where(span, p, div, strong, b, em, i, u, li, font) {
+    font-family: 'Times New Roman', Times, serif !important;
+    font-variant-numeric: lining-nums tabular-nums !important;
+    font-feature-settings: "lnum" 1, "tnum" 1 !important;
   }
 
   .osym-kitapcik .osym-soru-no {
     font-size: 11pt;
+    font-variant-numeric: lining-nums tabular-nums;
   }
 
   /* Sınav sayacı */

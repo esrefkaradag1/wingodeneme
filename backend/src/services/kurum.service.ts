@@ -6,6 +6,18 @@ import { AppHatasi } from '../middlewares/hata.middleware';
 import { ogretimTuruBelirle } from '../utils/ogretimTuru';
 import { bildirimGonder } from './bildirim.service';
 import { benzersizReferansKodUret, kurumKapsamGetir } from './koc.service';
+import { ayniDomainOgrencileriniKurumaBagla } from './partnerKayit.service';
+
+/** Kapya: kurum e-posta domain'indeki bağsız öğrencileri otomatik bağla */
+async function kurumDomainOgrenciSenkron(kullaniciId: string, kurumId: string) {
+  const ku = await prisma.kullanici.findUnique({
+    where: { id: kullaniciId },
+    select: { email: true },
+  });
+  if (ku?.email) {
+    await ayniDomainOgrencileriniKurumaBagla(kurumId, ku.email);
+  }
+}
 
 /** Kurum tarafından açılan hesaplar için geçici şifre (en az 8 karakter, büyük harf + rakam) */
 function geciciSifreUret(): string {
@@ -80,6 +92,7 @@ async function sinifAtamalariniAyarla(ogretmenId: string, kurumId: string, sinif
 
 export async function kurumOzetGetir(kullaniciId: string) {
   const kurum = await kurumKapsamGetir(kullaniciId);
+  await kurumDomainOgrenciSenkron(kullaniciId, kurum.id);
 
   const [ogrenciSayisi, ogretmenSayisi, sinifSayisi, sinifsizOgrenci] = await Promise.all([
     prisma.ogrenciProfil.count({ where: { kocId: kurum.id } }),
@@ -444,6 +457,7 @@ export async function kurumOgretmenSifreSifirla(kullaniciId: string, ogretmenId:
 
 export async function kurumOgrenciListesi(kullaniciId: string, sinifId?: string) {
   const kurum = await kurumKapsamGetir(kullaniciId);
+  await kurumDomainOgrenciSenkron(kullaniciId, kurum.id);
 
   const ogrenciler = await prisma.ogrenciProfil.findMany({
     where: {
@@ -695,4 +709,21 @@ export async function adminKurumHesabiOlustur(girdi: {
     },
     geciciSifre,
   };
+}
+
+/** Yönetici: kurum / koç hesabına geçici şifre üretir (eski oturumlar düşer). */
+export async function adminKurumSifreSifirla(kocProfilId: string) {
+  const profil = await prisma.kocProfil.findUnique({
+    where: { id: kocProfilId },
+    include: { kullanici: { select: { id: true, email: true } } },
+  });
+  if (!profil) throw new AppHatasi('Kurum bulunamadı', 404);
+
+  const geciciSifre = geciciSifreUret();
+  await prisma.kullanici.update({
+    where: { id: profil.kullanici.id },
+    data: { sifre: await bcrypt.hash(geciciSifre, 12), refreshToken: null },
+  });
+
+  return { email: profil.kullanici.email, geciciSifre };
 }

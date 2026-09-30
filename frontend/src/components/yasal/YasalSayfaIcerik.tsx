@@ -58,7 +58,7 @@ const ICERIK_STILI =
   '[&_ul]:my-4 [&_ul]:list-disc [&_ul]:pl-6 [&_ul]:space-y-2 ' +
   '[&_ol]:my-4 [&_ol]:list-decimal [&_ol]:pl-6 [&_ol]:space-y-2 ' +
   '[&_li]:text-slate-600 [&_strong]:font-bold [&_strong]:text-slate-800 ' +
-  '[&_a]:text-indigo-600 [&_a]:font-semibold [&_a]:underline [&_a]:underline-offset-2 hover:[&_a]:text-indigo-700';
+  '[&_a]:text-wingo-700 [&_a]:font-semibold [&_a]:underline [&_a]:underline-offset-2 hover:[&_a]:text-wingo-800';
 
 export function YasalSayfaIcerik({ slug }: { slug: YasalSayfaSlug }) {
   if (!slugGecerli(slug)) notFound();
@@ -84,22 +84,22 @@ export function YasalSayfaIcerik({ slug }: { slug: YasalSayfaSlug }) {
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12 lg:py-14 w-full">
         {/* Breadcrumb */}
         <nav
-          className="flex flex-wrap items-center gap-1.5 text-xs font-semibold text-slate-500 mb-8"
+          className="flex flex-wrap items-center gap-1.5 text-xs font-semibold text-edu-muted mb-8"
           aria-label="Breadcrumb"
         >
           <Link
             href="/"
-            className="inline-flex items-center gap-1 hover:text-[#2ABBA7] transition-colors"
+            className="inline-flex items-center gap-1 hover:text-wingo-700 transition-colors"
           >
             <Home className="w-3.5 h-3.5" />
             Ana sayfa
           </Link>
           <ChevronRight className="w-3.5 h-3.5 opacity-50" />
-          <span className="text-slate-400">Sözleşmeler</span>
+          <span className="text-edu-muted">Sözleşmeler</span>
           {sayfa?.yayinda !== false && (
             <>
               <ChevronRight className="w-3.5 h-3.5 opacity-50" />
-              <span className="text-slate-300">{sayfa.baslik}</span>
+              <span className="text-slate-600">{sayfa.baslik}</span>
             </>
           )}
         </nav>
@@ -107,12 +107,12 @@ export function YasalSayfaIcerik({ slug }: { slug: YasalSayfaSlug }) {
         <div className="lg:grid lg:grid-cols-12 lg:gap-10 items-start">
           {/* Sidebar — mobilde yatay kaydırma */}
           <aside className="lg:col-span-4 xl:col-span-3 mb-8 lg:mb-0">
-            <div className="lg:sticky lg:top-24 rounded-2xl border border-white/[0.08] bg-white/[0.04] backdrop-blur-md overflow-hidden">
-              <div className="px-5 py-4 border-b border-white/[0.06]">
-                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">
+            <div className="lg:sticky lg:top-24 rounded-2xl border border-edu-line bg-white backdrop-blur-md overflow-hidden">
+              <div className="px-5 py-4 border-b border-edu-line">
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-edu-muted">
                   Sözleşmeler
                 </p>
-                <p className="text-sm text-slate-400 mt-1 font-medium">
+                <p className="text-sm text-edu-muted mt-1 font-medium">
                   Yasal metinler ve politikalar
                 </p>
               </div>
@@ -126,11 +126,11 @@ export function YasalSayfaIcerik({ slug }: { slug: YasalSayfaSlug }) {
                       href={oge.href}
                       className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold whitespace-nowrap lg:whitespace-normal transition-all shrink-0 lg:shrink ${
                         aktif
-                          ? 'bg-[#2ABBA7]/15 text-[#2ABBA7] border border-[#2ABBA7]/30'
-                          : 'text-slate-400 hover:bg-white/[0.06] hover:text-slate-200 border border-transparent'
+                          ? 'bg-wingo-600/15 text-wingo-700 border border-wingo-600/30'
+                          : 'text-edu-muted hover:bg-edu-mint hover:text-edu-ink border border-transparent'
                       }`}
                     >
-                      <Ikon className={`w-4 h-4 shrink-0 ${aktif ? 'text-[#2ABBA7]' : ''}`} />
+                      <Ikon className={`w-4 h-4 shrink-0 ${aktif ? 'text-wingo-700' : ''}`} />
                       {oge.label}
                     </Link>
                   );
@@ -145,11 +145,11 @@ export function YasalSayfaIcerik({ slug }: { slug: YasalSayfaSlug }) {
               <motion.div
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="rounded-3xl border border-white/10 bg-white/[0.06] backdrop-blur-sm px-8 py-16 text-center"
+                className="rounded-3xl border border-edu-line bg-white backdrop-blur-sm px-8 py-16 text-center"
               >
-                <FileText className="w-12 h-12 text-slate-500 mx-auto mb-4" />
-                <h1 className="text-2xl font-bold text-white mb-2">Sayfa hazırlanıyor</h1>
-                <p className="text-slate-400 text-sm max-w-md mx-auto">
+                <FileText className="w-12 h-12 text-edu-muted mx-auto mb-4" />
+                <h1 className="text-2xl font-bold text-edu-ink mb-2">Sayfa hazırlanıyor</h1>
+                <p className="text-edu-muted text-sm max-w-md mx-auto">
                   Bu sözleşme metni henüz yayınlanmadı. Kısa süre içinde güncellenecektir.
                 </p>
               </motion.div>
@@ -158,9 +158,9 @@ export function YasalSayfaIcerik({ slug }: { slug: YasalSayfaSlug }) {
                 initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.35 }}
-                className="rounded-3xl border border-white/10 bg-white shadow-2xl shadow-black/30 overflow-hidden"
+                className="rounded-3xl border border-edu-line bg-white shadow-2xl shadow-slate-200/80 overflow-hidden"
               >
-                <header className="relative overflow-hidden bg-gradient-to-br from-[#0F2137] via-indigo-950 to-indigo-900 px-6 sm:px-10 py-10 sm:py-12">
+                <header className="relative overflow-hidden bg-gradient-to-br from-wingo-50 via-edu-mint to-orange-50 px-6 sm:px-10 py-10 sm:py-12">
                   <div
                     className="absolute inset-0 opacity-30"
                     style={{
@@ -170,14 +170,14 @@ export function YasalSayfaIcerik({ slug }: { slug: YasalSayfaSlug }) {
                     aria-hidden
                   />
                   <div className="relative flex items-start gap-4">
-                    <div className="w-12 h-12 rounded-2xl bg-[#2ABBA7]/20 border border-[#2ABBA7]/30 flex items-center justify-center shrink-0">
-                      <AktifIkon className="w-6 h-6 text-[#2ABBA7]" />
+                    <div className="w-12 h-12 rounded-2xl bg-wingo-600/20 border border-wingo-600/30 flex items-center justify-center shrink-0">
+                      <AktifIkon className="w-6 h-6 text-wingo-700" />
                     </div>
                     <div>
-                      <p className="text-[10px] font-black uppercase tracking-[0.25em] text-[#2ABBA7] mb-2">
+                      <p className="text-[10px] font-black uppercase tracking-[0.25em] text-wingo-700 mb-2">
                         Yasal metin
                       </p>
-                      <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black text-white tracking-tight leading-tight">
+                      <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black text-edu-ink tracking-tight leading-tight">
                         {sayfa.baslik}
                       </h1>
                     </div>
@@ -193,13 +193,13 @@ export function YasalSayfaIcerik({ slug }: { slug: YasalSayfaSlug }) {
               </motion.article>
             )}
 
-            <div className="mt-6 rounded-2xl border border-white/[0.08] bg-white/[0.04] px-5 py-4 flex flex-col sm:flex-row sm:items-center gap-3 sm:justify-between">
-              <p className="text-sm text-slate-400 font-medium">
+            <div className="mt-6 rounded-2xl border border-edu-line bg-white px-5 py-4 flex flex-col sm:flex-row sm:items-center gap-3 sm:justify-between">
+              <p className="text-sm text-edu-muted font-medium">
                 Bu metinle ilgili sorularınız için bizimle iletişime geçebilirsiniz.
               </p>
               <a
                 href={`mailto:${eposta}`}
-                className="inline-flex items-center gap-2 text-sm font-bold text-[#2ABBA7] hover:text-teal-300 transition-colors shrink-0"
+                className="inline-flex items-center gap-2 text-sm font-bold text-wingo-700 hover:text-wingo-800 transition-colors shrink-0"
               >
                 <Mail className="w-4 h-4" />
                 {eposta}

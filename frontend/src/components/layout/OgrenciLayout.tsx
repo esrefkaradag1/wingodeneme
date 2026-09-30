@@ -58,7 +58,6 @@ export function OgrenciLayout({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!kullanici || !profilData?.data?.veri) return;
-    const op = profilData.data.veri.ogrenciProfil;
     const tur = ogretimTuruCoz(kullanici, profilData.data.veri);
     if (tur && kullanici.ogretimTuru !== tur) {
       girisYap({ kullanici: { ...kullanici, ogretimTuru: tur } });

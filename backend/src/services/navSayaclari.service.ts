@@ -20,11 +20,9 @@ export async function ogrenciNavSayaclari(kullaniciId: string) {
 
   const [duyurular, destek, arkadaslar, duello] = await Promise.all([
     prisma.duyuruAlici.count({ where: { kullaniciId, okundu: false } }),
-    prisma.destekTalebi.count({
-      where: {
-        ogrenciId: profil.id,
-        durum: { in: [DestekTalebiDurum.ACIK, DestekTalebiDurum.BEKLEMEDE] },
-      },
+    // Öğrenci rozeti: admin yanıtı / destek bildirimi (açık talepler değil)
+    prisma.bildirim.count({
+      where: { kullaniciId, okundu: false, tur: 'destek' },
     }),
     prisma.arkadaslik.count({
       where: { arkadasId: profil.id, durum: ArkadaslikDurumu.BEKLIYOR },

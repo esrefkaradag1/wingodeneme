@@ -8,6 +8,7 @@ const distDir =
 
 const nextConfig = {
   distDir,
+  transpilePackages: ['@designcodeio/threeui'],
   // Standalone sadece production build'de; dev modda gereksiz yük oluşturuyordu.
   ...(process.env.VERCEL || isDev ? {} : { output: 'standalone' }),
   images: {

@@ -1,9 +1,10 @@
 import { prisma } from '../config/database';
 import { bildirimGonder } from './bildirim.service';
 import { AppHatasi } from '../middlewares/hata.middleware';
-import { KocTipi, KurumBasvuruDurum, Rol } from '@prisma/client';
+import { KocTipi, KurumBasvuruDurum, Rol, KatilimDurumu } from '@prisma/client';
 import { ogrenciAnalizGetir } from './analiz.service';
 import { sinavListesiGetir } from './sinav.service';
+import { denemeKarnesiGetir } from './deneme-karnesi.service';
 
 function referansKodUret(): string {
   const alfabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -677,7 +678,7 @@ export async function kocOgrenciSonucGetir(
   const katilim = await prisma.sinavKatilim.findUnique({
     where: { id: katilimId },
     include: {
-      sinav: { select: { baslik: true, tur: true } },
+      sinav: { select: { id: true, baslik: true, tur: true } },
       cevaplar: { include: { soru: { include: { konu: true } } } },
     },
   });
@@ -708,6 +709,69 @@ export async function kocOgrenciSonucGetir(
       dogruCevap: c.soru.dogruCevap,
     })),
   };
+}
+
+/**
+ * Koç/kurum kapsamındaki öğrencilerin bir sınavdaki sonuç listesi (admin sonuclar benzeri).
+ */
+export async function kocSinavKatilimlariListele(kocKullaniciId: string, sinavId: string) {
+  const kapsam = await kocKapsamGetir(kocKullaniciId);
+
+  const sinav = await prisma.sinav.findUnique({
+    where: { id: sinavId },
+    select: { id: true, baslik: true, tur: true, baslangicZamani: true },
+  });
+  if (!sinav) throw new AppHatasi('Sınav bulunamadı', 404);
+
+  if (
+    kapsam.profil.tip === KocTipi.KURUM_OGRETMENI &&
+    (!kapsam.sinifIds || kapsam.sinifIds.length === 0)
+  ) {
+    return { sinav, katilimlar: [], toplam: 0 };
+  }
+
+  const katilimlar = await prisma.sinavKatilim.findMany({
+    where: {
+      sinavId,
+      durum: KatilimDurumu.TAMAMLANDI,
+      ogrenci: kapsam.ogrenciWhere,
+    },
+    orderBy: [{ netPuan: 'desc' }, { bitisZamani: 'asc' }],
+    select: {
+      id: true,
+      netPuan: true,
+      hamPuan: true,
+      dogruSayisi: true,
+      yanlisSayisi: true,
+      bosSayisi: true,
+      ulusalSiralama: true,
+      yuzdelik: true,
+      bitisZamani: true,
+      ogrenci: {
+        select: {
+          id: true,
+          ad: true,
+          soyad: true,
+          sinif: true,
+          okul: true,
+          kurumSinif: { select: { id: true, ad: true } },
+        },
+      },
+    },
+  });
+
+  return { sinav, katilimlar, toplam: katilimlar.length };
+}
+
+/** Koç/kurum: kendi öğrencisinin deneme karnesi (admin karnesi ile aynı içerik) */
+export async function kocDenemeKarnesiGetir(kocKullaniciId: string, katilimId: string) {
+  const katilim = await prisma.sinavKatilim.findUnique({
+    where: { id: katilimId },
+    select: { id: true, ogrenciId: true },
+  });
+  if (!katilim) throw new AppHatasi('Katılım bulunamadı', 404);
+  await kocOgrenciDogrula(kocKullaniciId, katilim.ogrenciId);
+  return denemeKarnesiGetir(katilimId);
 }
 
 /** Kayıt sırasında referans kodundan kocId çöz */

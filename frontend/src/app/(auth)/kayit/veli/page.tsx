@@ -5,18 +5,12 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import Link from 'next/link';
-import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { Loader2, Users, Mail, Phone, User, GraduationCap, BookOpen, Lock, Eye, EyeOff } from 'lucide-react';
 import { authApi } from '@/lib/api';
 import { useAuthStore } from '@/store/auth.store';
 import { toast } from '@/store/toast.store';
 import AnaSiteyeDonButonu from '@/components/auth/AnaSiteyeDonButonu';
-
-const AuthThreeBackground = dynamic(() => import('@/components/auth/AuthThreeBackground'), {
-  ssr: false,
-  loading: () => <div className="absolute inset-0 -z-10 bg-[#070713]" />,
-});
 
 const sifreKurali = (etiket: string) =>
   z.string()
@@ -78,14 +72,21 @@ export default function VeliKayitSayfasi() {
   };
 
   const inputSinifi = (hatali: boolean, ikonlu = true) =>
-    `w-full h-11 ${ikonlu ? 'pl-10' : 'px-4'} pr-4 bg-slate-950/50 border rounded-xl text-white text-sm placeholder:text-slate-500 focus:outline-none focus:ring-2 transition-all ${
-      hatali ? 'border-red-500/60 focus:ring-red-500/40' : 'border-white/10 focus:border-indigo-500/50 focus:ring-indigo-500/30 hover:border-white/20'
+    `w-full h-11 ${ikonlu ? 'pl-10' : 'px-4'} pr-4 bg-slate-50 border rounded-xl text-edu-ink text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 transition-all ${
+      hatali ? 'border-red-500/60 focus:ring-red-500/40' : 'border-edu-line focus:border-indigo-500/50 focus:ring-wingo-400/30 hover:border-white/20'
     }`;
 
   return (
     <div className="min-h-screen relative overflow-hidden">
-      <AuthThreeBackground mode="yks_lgs" />
-      <div className="pointer-events-none absolute inset-0 -z-[5] bg-[radial-gradient(ellipse_at_center,transparent_30%,rgba(7,7,19,0.6)_100%)]" />
+      <div
+        className="pointer-events-none absolute inset-0 -z-10"
+        style={{
+          background:
+            'radial-gradient(circle at 12% 10%, rgba(13, 148, 136, 0.12) 0, transparent 32%), radial-gradient(circle at 90% 8%, rgba(234, 88, 12, 0.08) 0, transparent 28%), #F3FAF8',
+        }}
+        aria-hidden
+      />
+      
       <AnaSiteyeDonButonu />
 
       <div className="relative z-10 min-h-screen flex items-center justify-center p-4 sm:p-6">
@@ -95,27 +96,27 @@ export default function VeliKayitSayfasi() {
               <div className="w-11 h-11 bg-gradient-to-br from-indigo-500 to-violet-600 rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-500/25">
                 <span className="text-white font-bold text-lg">W</span>
               </div>
-              <span className="text-white font-bold text-xl tracking-tight">WingoSınav</span>
+              <span className="text-edu-ink font-bold text-xl tracking-tight">WingoSınav</span>
             </Link>
-            <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">Veli Hesabı Oluştur</h1>
-            <p className="text-slate-400 text-sm mt-2 max-w-md mx-auto">
+            <h1 className="text-2xl sm:text-3xl font-bold text-edu-ink tracking-tight">Veli Hesabı Oluştur</h1>
+            <p className="text-edu-muted text-sm mt-2 max-w-md mx-auto">
               Deneme sonuçları, analiz ve gelişim özetlerini takip edin.
             </p>
 
-            <div className="inline-flex p-1 mt-5 rounded-xl bg-white/5 border border-white/10 backdrop-blur-sm">
-              <Link href="/kayit" className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-slate-400 text-xs font-medium hover:text-white hover:bg-white/5 transition-colors">
+            <div className="inline-flex p-1 mt-5 rounded-xl bg-slate-50 border border-edu-line backdrop-blur-sm">
+              <Link href="/kayit" className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-edu-muted text-xs font-medium hover:text-edu-ink hover:bg-slate-50 transition-colors">
                 <GraduationCap className="w-3.5 h-3.5" /> Öğrenci
               </Link>
-              <span className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-indigo-500/20 text-indigo-200 text-xs font-semibold border border-indigo-500/30">
+              <span className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-wingo-50 text-wingo-700 text-xs font-semibold border border-wingo-200">
                 <Users className="w-3.5 h-3.5" /> Veli
               </span>
-              <Link href="/kayit/ogretmen" className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-slate-400 text-xs font-medium hover:text-white hover:bg-white/5 transition-colors">
+              <Link href="/kayit/ogretmen" className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-edu-muted text-xs font-medium hover:text-edu-ink hover:bg-slate-50 transition-colors">
                 <BookOpen className="w-3.5 h-3.5" /> Öğretmen
               </Link>
             </div>
           </div>
 
-          <div className="rounded-2xl border border-white/10 bg-slate-900/70 backdrop-blur-xl shadow-2xl shadow-black/20 p-6 sm:p-8">
+          <div className="rounded-2xl border border-edu-line bg-white backdrop-blur-xl shadow-2xl shadow-slate-200/70 p-6 sm:p-8">
             <div className="rounded-xl border border-dashed border-white/15 bg-white/[0.02] px-4 py-3 mb-5">
               <p className="text-xs text-slate-400 leading-relaxed">
                 Giriş bilgileriniz e-posta adresinize gönderilir. Şifre belirlemezseniz telefon numaranızın son 6 hanesi kullanılır.
@@ -183,7 +184,7 @@ export default function VeliKayitSayfasi() {
               <button
                 type="submit"
                 disabled={yukleniyor}
-                className="w-full h-11 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white text-sm font-semibold flex items-center justify-center gap-2 transition-all shadow-lg shadow-indigo-500/20 disabled:opacity-60"
+                className="w-full h-11 rounded-xl bg-gradient-to-r from-wingo-600 to-wingo-500 hover:from-wingo-700 hover:to-wingo-600 text-white text-sm font-semibold flex items-center justify-center gap-2 transition-all shadow-lg shadow-wingo-600/20 disabled:opacity-60"
               >
                 {yukleniyor && <Loader2 className="w-4 h-4 animate-spin" />}
                 Veli Hesabı Oluştur
@@ -193,7 +194,7 @@ export default function VeliKayitSayfasi() {
             <div className="mt-6 pt-5 border-t border-white/8 text-center text-sm text-slate-500 space-y-2">
               <p>
                 Zaten hesabınız var mı?{' '}
-                <Link href="/giris" className="text-indigo-400 hover:text-indigo-300 font-medium">Giriş Yapın</Link>
+                <Link href="/giris" className="text-indigo-400 hover:text-wingo-700 font-medium">Giriş Yapın</Link>
               </p>
               <Link href="/sifremi-unuttum" className="text-slate-500 hover:text-slate-300 text-xs">Şifremi unuttum</Link>
             </div>

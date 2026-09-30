@@ -8,6 +8,13 @@ import {
   adminKomisyonListesi,
   adminKomisyonOde,
   indirimKoduDogrula,
+  kocIndirimKoduGuncelle,
+  kocIndirimKoduListesi,
+  kocIndirimKoduOlustur,
+  kocIndirimKoduSil,
+  kocKazancHareketleri,
+  kocKazancOzeti,
+  komisyonSahibiAdaylari,
   ogretmenKazancHareketleri,
   ogretmenKazancOzeti,
 } from '../services/indirimKodu.service';
@@ -83,6 +90,15 @@ export async function adminIndirimKodlariController(req: AuthRequest, res: Respo
   }
 }
 
+export async function adminKomisyonSahibiAdaylariController(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const veri = await komisyonSahibiAdaylari(metin(req.query.q));
+    res.json({ basarili: true, veri });
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function adminIndirimKoduOlusturController(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   try {
     const veri = await adminIndirimKoduOlustur(req.body ?? {});
@@ -127,6 +143,64 @@ export async function adminKomisyonOdeController(req: AuthRequest, res: Response
   try {
     const idler = Array.isArray(req.body?.kullanimIds) ? req.body.kullanimIds.map(String) : [];
     const veri = await adminKomisyonOde(idler, metin(req.body?.not));
+    res.json({ basarili: true, veri });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// --- Koç paneli ---
+
+export async function kocIndirimKodlariController(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  try {
+    res.json({ basarili: true, veri: await kocIndirimKoduListesi(uid(req)) });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function kocIndirimKoduOlusturController(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const veri = await kocIndirimKoduOlustur(uid(req), req.body ?? {});
+    res.status(201).json({ basarili: true, veri });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function kocIndirimKoduGuncelleController(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const veri = await kocIndirimKoduGuncelle(uid(req), req.params.id, req.body ?? {});
+    res.json({ basarili: true, veri });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function kocIndirimKoduSilController(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const veri = await kocIndirimKoduSil(uid(req), req.params.id);
+    res.json({ basarili: true, veri });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function kocKazancOzetController(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  try {
+    res.json({ basarili: true, veri: await kocKazancOzeti(uid(req)) });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function kocKazancHareketController(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const veri = await kocKazancHareketleri(uid(req), {
+      durum: metin(req.query.durum),
+      kodId: metin(req.query.kodId),
+      limit: Number(req.query.limit) || undefined,
+    });
     res.json({ basarili: true, veri });
   } catch (err) {
     next(err);

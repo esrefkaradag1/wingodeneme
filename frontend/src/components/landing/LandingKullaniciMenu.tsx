@@ -157,15 +157,15 @@ export function LandingKullaniciMenu({
 
   const avatarSinif =
     variant === 'kpss'
-      ? 'bg-gradient-to-br from-[#2ABBA7] to-teal-600 shadow-teal-500/20'
-      : 'bg-gradient-to-br from-[#7C6BFF] to-[#2ABBA7] shadow-indigo-500/20';
+      ? 'bg-gradient-to-br from-wingo-500 to-wingo-700 shadow-wingo-600/20'
+      : 'bg-gradient-to-br from-wingo-600 to-teal-700 shadow-wingo-600/20';
 
   if (mobil) {
     return (
       <div className="mx-2 space-y-1">
-        <div className="px-4 py-3 rounded-xl bg-white/[0.04] border border-white/[0.08] mb-2">
-          <p className="text-sm font-bold text-white truncate">{adGoster}</p>
-          <p className="text-xs text-slate-500 mt-0.5">{rolEtiketi(kullanici.rol)}</p>
+        <div className="px-4 py-3 rounded-xl bg-edu-mint border border-edu-line mb-2">
+          <p className="text-sm font-bold text-edu-ink truncate">{adGoster}</p>
+          <p className="text-xs text-edu-muted mt-0.5">{rolEtiketi(kullanici.rol)}</p>
         </div>
         {ogeler.map((oge) => {
           const Ikon = oge.ikon;
@@ -174,9 +174,9 @@ export function LandingKullaniciMenu({
               key={oge.etiket}
               href={oge.href}
               onClick={onNavigate}
-              className="flex items-center gap-3 px-4 py-3 rounded-xl text-slate-300 font-medium hover:bg-white/[0.06] hover:text-white transition-all"
+              className="flex items-center gap-3 px-4 py-3 rounded-xl text-edu-ink font-medium hover:bg-edu-mint transition-all"
             >
-              <Ikon className="w-4 h-4 text-slate-500" />
+              <Ikon className="w-4 h-4 text-edu-muted" />
               {oge.etiket}
             </Link>
           );
@@ -185,7 +185,7 @@ export function LandingKullaniciMenu({
           type="button"
           onClick={yenile}
           disabled={yenileniyor}
-          className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-slate-400 font-medium hover:bg-white/[0.06] hover:text-white transition-all disabled:opacity-50"
+          className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-edu-muted font-medium hover:bg-edu-mint hover:text-edu-ink transition-all disabled:opacity-50"
         >
           <RefreshCw className={`w-4 h-4 ${yenileniyor ? 'animate-spin' : ''}`} />
           Yenile
@@ -193,7 +193,7 @@ export function LandingKullaniciMenu({
         <button
           type="button"
           onClick={cikisYapFn}
-          className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-rose-400 font-semibold hover:bg-rose-500/10 transition-all"
+          className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-rose-600 font-semibold hover:bg-rose-50 transition-all"
         >
           <LogOut className="w-4 h-4" />
           Çıkış Yap
@@ -207,34 +207,34 @@ export function LandingKullaniciMenu({
       <button
         type="button"
         onClick={() => setAcik((v) => !v)}
-        className="flex items-center gap-2 pl-2 pr-2.5 py-1.5 rounded-xl text-sm font-semibold text-slate-200 hover:text-white hover:bg-white/[0.06] border border-transparent hover:border-white/[0.08] transition-all duration-200"
+        className="flex items-center gap-2 pl-2 pr-2.5 py-1.5 rounded-xl text-sm font-semibold text-edu-ink hover:bg-edu-mint border border-transparent hover:border-edu-line transition-all duration-200"
         aria-expanded={acik}
         aria-haspopup="menu"
       >
         <span className={`w-8 h-8 rounded-lg flex items-center justify-center text-white text-xs font-bold shadow-md ${avatarSinif}`}>
           {basHarf}
         </span>
-        <span className="hidden xl:block max-w-[100px] truncate text-slate-300">
+        <span className="hidden xl:block max-w-[100px] truncate text-edu-muted">
           {kullanici.ad || kullanici.email?.split('@')[0]}
         </span>
-        <ChevronDown className={`w-4 h-4 text-slate-500 transition-transform duration-200 ${acik ? 'rotate-180' : ''}`} />
+        <ChevronDown className={`w-4 h-4 text-edu-muted transition-transform duration-200 ${acik ? 'rotate-180' : ''}`} />
       </button>
 
       {acik && (
         <div
           role="menu"
-          className="absolute right-0 top-full mt-2 z-[60] w-[min(100vw-2rem,17.5rem)] rounded-2xl border border-white/[0.1] bg-[#0F1629]/95 backdrop-blur-2xl shadow-[0_20px_60px_rgba(0,0,0,0.55)] overflow-hidden"
+          className="absolute right-0 top-full mt-2 z-[60] w-[min(100vw-2rem,17.5rem)] rounded-2xl border border-edu-line bg-white shadow-[0_20px_50px_rgba(15,47,43,0.12)] overflow-hidden"
         >
-          <div className="flex items-start justify-between gap-3 px-4 py-3.5 border-b border-white/[0.08]">
+          <div className="flex items-start justify-between gap-3 px-4 py-3.5 border-b border-edu-line">
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-bold text-white truncate tracking-wide">{adGoster}</p>
-              <p className="text-xs text-slate-500 mt-0.5">{rolEtiketi(kullanici.rol)}</p>
+              <p className="text-sm font-bold text-edu-ink truncate tracking-wide">{adGoster}</p>
+              <p className="text-xs text-edu-muted mt-0.5">{rolEtiketi(kullanici.rol)}</p>
             </div>
             <button
               type="button"
               onClick={yenile}
               disabled={yenileniyor}
-              className="shrink-0 flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold text-slate-500 hover:text-slate-300 hover:bg-white/[0.06] transition-colors disabled:opacity-50"
+              className="shrink-0 flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold text-edu-muted hover:text-edu-ink hover:bg-edu-mint transition-colors disabled:opacity-50"
             >
               <RefreshCw className={`w-3 h-3 ${yenileniyor ? 'animate-spin' : ''}`} />
               Yenile
@@ -250,21 +250,21 @@ export function LandingKullaniciMenu({
                   href={oge.href}
                   role="menuitem"
                   onClick={() => setAcik(false)}
-                  className="flex items-center gap-3 px-4 py-2.5 text-sm text-slate-300 hover:text-white hover:bg-white/[0.05] transition-colors"
+                  className="flex items-center gap-3 px-4 py-2.5 text-sm text-edu-ink/80 hover:text-edu-ink hover:bg-edu-mint transition-colors"
                 >
-                  <Ikon className="w-4 h-4 text-slate-500 shrink-0" />
+                  <Ikon className="w-4 h-4 text-edu-muted shrink-0" />
                   {oge.etiket}
                 </Link>
               );
             })}
           </div>
 
-          <div className="border-t border-white/[0.08] py-1.5">
+          <div className="border-t border-edu-line py-1.5">
             <button
               type="button"
               role="menuitem"
               onClick={cikisYapFn}
-              className="w-full flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 transition-colors"
+              className="w-full flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-rose-600 hover:bg-rose-50 transition-colors"
             >
               <LogOut className="w-4 h-4 shrink-0" />
               Çıkış Yap

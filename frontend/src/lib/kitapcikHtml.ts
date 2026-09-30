@@ -1,5 +1,6 @@
 import { TUR_BILGI, denemeEtiketiCikar } from './osymKitapcikMetin';
 import { soruGorunurHtml } from './soru-metin-parcalari';
+import { wordVmlTemizle } from './wordHtmlTemizle';
 import { formatOsymDagilimCumlesi, kitapcikSolKodSatir, soruSirasinaGoreDersBloklari } from './kitapcikDagilimMetni';
 import { cozumleKitapcikBolumleri } from './kitapcikBolumleri';
 import {
@@ -44,7 +45,7 @@ function katexHamNormalize(html: string): string {
  * öğretmen notu ekran görüntülerini çıkarır, float/absolute img stillerini temizler.
  */
 export function sanitizeKitapcikIcerikHtml(html: string): string {
-  let out = katexHamNormalize(html || '');
+  let out = wordVmlTemizle(katexHamNormalize(html || ''));
 
   // Yapıştırılmış «Öğretmen notu» ekran görüntüleri kitapçığa girmesin
   out = out.replace(/<img\b[^>]*alt\s*=\s*["'][^"']*öğretmen[^"']*["'][^>]*>/gi, '');
@@ -238,7 +239,8 @@ export function kitapcikHtmlBelgesiUret(sinav: KitapcikHtmlSinav, sorular: Kitap
   .sayfa-ic { display: flex; flex-direction: column; min-height: 0; }
   .sayfa-kapak .kapak-gorsel { width: 100%; max-height: 280mm; object-fit: contain; display: block; margin: 0 auto; }
   .iki-sutun { column-count: 2; column-gap: 1.6rem; column-rule: 2px solid var(--ogm-accent); }
-  .iki-sutun .soru { break-inside: avoid; page-break-inside: avoid; -webkit-column-break-inside: avoid; display: inline-block; width: 100%; vertical-align: top; }
+  .iki-sutun .soru { break-inside: auto; page-break-inside: auto; display: block; width: auto; max-width: 100%; vertical-align: top; overflow: clip; }
+  v\\:shape, v\\:shapetype, v\\:stroke, v\\:formulas, v\\:f, v\\:path, v\\:imagedata, v\\:handles, v\\:h, v\\:textbox { display: none !important; }
   .tek-sutun { column-count: 1; }
   .ic-yks { border-top: 1px solid #111; border-bottom: 1px solid #111; padding: 8px 0; margin-bottom: 14px; }
   .ic-yks-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }

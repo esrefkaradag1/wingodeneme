@@ -18,15 +18,15 @@ export function SeoLandingBody({ config, pageKey }: { config: SeoPageConfig; pag
 
   return (
     <article className="max-w-4xl mx-auto px-4 sm:px-6 py-12 md:py-16">
-      <nav className="text-xs text-slate-400 mb-6" aria-label="Breadcrumb">
+      <nav className="text-xs text-edu-muted mb-6" aria-label="Breadcrumb">
         <ol className="flex flex-wrap items-center gap-1">
           <li>
-            <Link href="/" className="hover:text-white transition-colors">
+            <Link href="/" className="hover:text-edu-ink transition-colors">
               Ana sayfa
             </Link>
           </li>
           <li aria-hidden>/</li>
-          <li className="text-slate-300">{config.h1}</li>
+          <li className="text-slate-600">{config.h1}</li>
         </ol>
       </nav>
 
@@ -34,14 +34,14 @@ export function SeoLandingBody({ config, pageKey }: { config: SeoPageConfig; pag
         <p className="text-[11px] font-black uppercase tracking-[0.2em] text-teal-400 mb-3">
           {SITE_NAME} · Online deneme
         </p>
-        <h1 className="text-3xl sm:text-4xl md:text-5xl font-black text-white tracking-tight leading-tight mb-4">
+        <h1 className="text-3xl sm:text-4xl md:text-5xl font-black text-edu-ink tracking-tight leading-tight mb-4">
           {config.h1}
         </h1>
-        <p className="text-lg text-slate-300 leading-relaxed max-w-3xl">{config.lead}</p>
+        <p className="text-lg text-slate-600 leading-relaxed max-w-3xl">{config.lead}</p>
       </header>
 
-      <section className="mb-10 rounded-2xl border border-white/10 bg-white/5 p-6 md:p-8">
-        <h2 className="text-xl font-bold text-white mb-4">Neden {SITE_NAME}?</h2>
+      <section className="mb-10 rounded-2xl border border-edu-line bg-white p-6 md:p-8">
+        <h2 className="text-xl font-bold text-edu-ink mb-4">Neden {SITE_NAME}?</h2>
         <ul className="space-y-3">
           {config.bullets.map((b) => (
             <li key={b} className="flex items-start gap-3 text-slate-200 text-sm md:text-base">
@@ -53,14 +53,14 @@ export function SeoLandingBody({ config, pageKey }: { config: SeoPageConfig; pag
         <div className="mt-8 flex flex-col sm:flex-row gap-3">
           <Link
             href="/kayit"
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-teal-500 px-6 py-3 text-sm font-black text-white hover:bg-teal-400 transition-colors"
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-wingo-600 px-6 py-3 text-sm font-black text-white hover:bg-wingo-700 transition-colors"
           >
             Ücretsiz kayıt ol
             <ArrowRight className="w-4 h-4" />
           </Link>
           <Link
             href="/paketler"
-            className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/20 px-6 py-3 text-sm font-bold text-white hover:bg-white/10 transition-colors"
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 px-6 py-3 text-sm font-bold text-edu-ink hover:bg-slate-100 transition-colors"
           >
             Deneme paketlerini gör
           </Link>
@@ -69,19 +69,19 @@ export function SeoLandingBody({ config, pageKey }: { config: SeoPageConfig; pag
 
       {config.faqs.length > 0 ? (
         <section className="mb-10" aria-labelledby="sss-baslik">
-          <h2 id="sss-baslik" className="text-xl font-bold text-white mb-4">
+          <h2 id="sss-baslik" className="text-xl font-bold text-edu-ink mb-4">
             Sık sorulan sorular
           </h2>
           <div className="space-y-4">
             {config.faqs.map((f) => (
               <details
                 key={f.soru}
-                className="group rounded-xl border border-white/10 bg-slate-900/50 open:bg-slate-900/80"
+                className="group rounded-xl border border-edu-line bg-white open:bg-white"
               >
-                <summary className="cursor-pointer list-none px-5 py-4 font-semibold text-white text-sm md:text-base [&::-webkit-details-marker]:hidden">
+                <summary className="cursor-pointer list-none px-5 py-4 font-semibold text-edu-ink text-sm md:text-base [&::-webkit-details-marker]:hidden">
                   {f.soru}
                 </summary>
-                <p className="px-5 pb-4 text-slate-300 text-sm leading-relaxed border-t border-white/5 pt-3">
+                <p className="px-5 pb-4 text-slate-600 text-sm leading-relaxed border-t border-edu-line pt-3">
                   {f.cevap}
                 </p>
               </details>
@@ -90,8 +90,8 @@ export function SeoLandingBody({ config, pageKey }: { config: SeoPageConfig; pag
         </section>
       ) : null}
 
-      <section className="border-t border-white/10 pt-8">
-        <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-4">
+      <section className="border-t border-edu-line pt-8">
+        <h2 className="text-sm font-bold text-edu-muted uppercase tracking-wider mb-4">
           Diğer deneme türleri
         </h2>
         <ul className="flex flex-wrap gap-2">
@@ -99,7 +99,7 @@ export function SeoLandingBody({ config, pageKey }: { config: SeoPageConfig; pag
             <li key={d.key}>
               <Link
                 href={SEO_LANDING[d.key].path}
-                className="inline-block rounded-lg border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:border-teal-500/50 hover:text-white transition-colors"
+                className="inline-block rounded-lg border border-edu-line bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:border-wingo-400 hover:text-edu-ink transition-colors"
               >
                 {d.label}
               </Link>
@@ -108,7 +108,7 @@ export function SeoLandingBody({ config, pageKey }: { config: SeoPageConfig; pag
           <li>
             <Link
               href="/rehber"
-              className="inline-block rounded-lg border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:border-teal-500/50 hover:text-white transition-colors"
+              className="inline-block rounded-lg border border-edu-line bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:border-wingo-400 hover:text-edu-ink transition-colors"
             >
               Rehber
             </Link>

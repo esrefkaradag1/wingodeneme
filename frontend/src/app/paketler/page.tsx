@@ -114,28 +114,59 @@ export default function PaketlerSayfasi() {
 
   return (
     <MarketingShell>
-      <div className="px-4 sm:px-6 lg:px-8 pb-16 md:pb-20 flex-1">
-        <div className="max-w-7xl mx-auto pt-6 md:pt-10">
-          <div className="mb-10 md:mb-14">
-            <span className="inline-flex items-center rounded-full bg-white/[0.04] border border-white/[0.08] px-4 py-1.5 text-xs font-black uppercase tracking-widest text-[#8FE4D8] mb-4">
+      <div className="flex-1 pb-16 md:pb-20">
+        <section className="relative overflow-hidden border-b border-edu-line">
+          <div className="pointer-events-none absolute inset-0" aria-hidden>
+            <div className="absolute -top-28 right-0 h-[26rem] w-[26rem] rounded-full bg-wingo-400/20 blur-[110px]" />
+            <div className="absolute bottom-0 left-10 h-72 w-72 rounded-full bg-orange-300/15 blur-[90px]" />
+          </div>
+          <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 md:pt-12 pb-10 md:pb-14">
+            <span className="inline-flex items-center rounded-full bg-white border border-edu-line px-4 py-1.5 text-xs font-black uppercase tracking-widest text-wingo-700 mb-4 shadow-sm">
               Paketler
             </span>
-            <h1 className="text-3xl sm:text-4xl md:text-5xl font-black text-white tracking-tight">
-              Tüm deneme paketleri
-            </h1>
-            <p className="text-slate-400 mt-4 max-w-2xl text-sm md:text-base leading-relaxed">
-              Paketleri inceleyin, sınav takviminden istediğiniz denemeleri seçerek satın alın veya
-              toplu paket fiyatından yararlanın.
-            </p>
-            <Link
-              href="/kayit"
-              className="inline-flex items-center gap-2 mt-6 px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#7C6BFF] to-[#2ABBA7] text-white text-xs font-black hover:brightness-110 transition-all shadow-lg shadow-indigo-500/20"
-            >
-              <Sparkles className="w-3.5 h-3.5" />
-              Ücretsiz dene
-            </Link>
+            <div className="grid gap-8 lg:grid-cols-12 lg:items-end">
+              <div className="lg:col-span-8">
+                <h1 className="font-display text-3xl sm:text-4xl md:text-5xl font-extrabold text-edu-ink tracking-tight leading-[1.1]">
+                  Tüm deneme paketleri
+                </h1>
+                <p className="text-edu-muted mt-4 max-w-2xl text-sm md:text-base leading-relaxed">
+                  Paketi aç, istediğin denemeleri seç veya tüm paketi al. Kademeli indirim ve anında erişim.
+                </p>
+                <div className="mt-6 flex flex-wrap items-center gap-3">
+                  <Link
+                    href="/kayit"
+                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-edu-cta hover:bg-edu-cta-hover text-white text-xs font-black transition-all shadow-lg shadow-orange-500/20"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    Ücretsiz dene
+                  </Link>
+                  <a
+                    href="#paket-listesi"
+                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-white border border-edu-line text-edu-ink text-xs font-bold hover:border-wingo-300 transition-all"
+                  >
+                    Paketleri incele
+                  </a>
+                </div>
+              </div>
+              <div className="lg:col-span-4 grid grid-cols-2 gap-3">
+                <div className="rounded-2xl border border-edu-line bg-white/90 px-4 py-4 shadow-sm">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-edu-muted">Aktif paket</p>
+                  <p className="mt-1 font-display text-2xl font-extrabold text-edu-ink tabular-nums">
+                    {isLoading ? '—' : paketler.length}
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-edu-line bg-white/90 px-4 py-4 shadow-sm">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-edu-muted">Esnek seçim</p>
+                  <p className="mt-1 font-display text-sm font-bold text-wingo-700 leading-snug">
+                    Tek deneme veya tüm paket
+                  </p>
+                </div>
+              </div>
+            </div>
           </div>
+        </section>
 
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 md:pt-10" id="paket-listesi">
           {kategoriler.filter((k) => (kategoriSayilari[k.slug] || 0) > 0).length > 1 && (
             <div className="flex flex-wrap gap-2 mb-10">
               <button
@@ -143,8 +174,8 @@ export default function PaketlerSayfasi() {
                 onClick={() => setKategoriFiltre('TUMU')}
                 className={`px-4 py-2 rounded-full text-xs font-bold border transition-colors ${
                   kategoriFiltre === 'TUMU'
-                    ? 'bg-[#2ABBA7] text-white border-[#2ABBA7]'
-                    : 'bg-white/[0.04] text-slate-300 border-white/10 hover:border-white/20'
+                    ? 'bg-wingo-600 text-white border-wingo-600'
+                    : 'bg-white text-slate-600 border-edu-line hover:border-slate-200'
                 }`}
               >
                 Tümü ({paketler.length})
@@ -158,7 +189,7 @@ export default function PaketlerSayfasi() {
                     onClick={() => setKategoriFiltre(k.slug)}
                     className={`px-4 py-2 rounded-full text-xs font-bold border transition-colors ${
                       kategoriFiltre === k.slug
-                        ? 'bg-[#2ABBA7] text-white border-[#2ABBA7]'
+                        ? 'bg-wingo-600 text-white border-wingo-600'
                         : `${paketKategoriRenk(k.slug, kategoriHarita)} hover:opacity-90`
                     }`}
                   >
@@ -170,13 +201,13 @@ export default function PaketlerSayfasi() {
 
           {isLoading ? (
             <div className="flex justify-center py-24">
-              <Loader2 className="w-10 h-10 animate-spin text-[#2ABBA7]" />
+              <Loader2 className="w-10 h-10 animate-spin text-wingo-700" />
             </div>
           ) : paketler.length === 0 ? (
-            <div className="rounded-2xl border border-white/[0.06] bg-slate-900/50 p-14 text-center">
-              <Star className="w-10 h-10 text-[#2ABBA7] mx-auto mb-4 opacity-50" />
-              <p className="text-white font-bold text-lg">Şu an aktif bir paket yok.</p>
-              <p className="text-slate-400 text-sm mt-2">Yakında yeni paketler eklenecek.</p>
+            <div className="rounded-2xl border border-edu-line bg-white p-14 text-center">
+              <Star className="w-10 h-10 text-wingo-700 mx-auto mb-4 opacity-50" />
+              <p className="text-edu-ink font-bold text-lg">Şu an aktif bir paket yok.</p>
+              <p className="text-edu-muted text-sm mt-2">Yakında yeni paketler eklenecek.</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6 lg:gap-7 items-stretch pt-2">

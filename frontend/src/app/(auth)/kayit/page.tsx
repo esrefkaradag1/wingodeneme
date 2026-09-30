@@ -5,7 +5,6 @@ import { useForm, type FieldErrors } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import Link from 'next/link';
-import dynamic from 'next/dynamic';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   Loader2, ChevronRight, ChevronLeft, Users, GraduationCap,
@@ -19,11 +18,6 @@ import { OGRENCI_SINIF_SECENEKLERI, KPSS_OGRENCI_SECENEKLERI, kpssOgretimTuruMu,
 import AnaSiteyeDonButonu from '@/components/auth/AnaSiteyeDonButonu';
 import { isKpssMode } from '@/lib/platform';
 import { girisUrlWithReturn, guvenliReturnUrl, ogrenciGirisSonrasiHedef } from '@/lib/returnUrl';
-
-const AuthThreeBackground = dynamic(() => import('@/components/auth/AuthThreeBackground'), {
-  ssr: false,
-  loading: () => <div className="absolute inset-0 -z-10 bg-[#070713]" />,
-});
 
 const sifreKurali = (etiket: string) =>
   z.string()
@@ -51,14 +45,23 @@ const kayitSchema = z.object({
     .string()
     .min(1, 'Telefon zorunlu')
     .refine((v) => {
-      const r = v.replace(/\D/g, '');
-      const son = r.startsWith('90') && r.length === 12 ? r.slice(2) : r.startsWith('0') ? r.slice(1) : r;
-      return son.length === 10 && son.startsWith('5');
+      let r = v.replace(/\D/g, '');
+      while (r.startsWith('90') && r.length > 11) r = r.slice(2);
+      if (r.startsWith('90') && r.length === 12) r = r.slice(2);
+      if (r.startsWith('90') && r.length === 11 && r[2] === '5') r = r.slice(2);
+      const son = r.startsWith('0') ? r.slice(1) : r;
+      if (son.length === 10 && son.startsWith('5')) return true;
+      if (r.length > 10) {
+        const son10 = r.slice(-10);
+        return son10.startsWith('5');
+      }
+      return false;
     }, 'Geçerli cep telefonu girin (5XX XXX XX XX)'),
   tcKimlikNo: z
     .string()
-    .min(1, 'TC kimlik numarası zorunlu')
-    .refine((v) => tcKimlikGecerli(v), 'Geçerli bir TC kimlik numarası girin'),
+    .optional()
+    .or(z.literal(''))
+    .refine((v) => !v || !String(v).trim() || tcKimlikGecerli(v), 'Geçerli bir TC kimlik numarası girin'),
   okul: z.string().optional(),
   sehir: z.string().optional(),
   sinif: z.string().min(1, 'Seçim yapın'),
@@ -126,7 +129,7 @@ const POPULER_BOLUMLER = [
 
 type KayitFormu = z.infer<typeof kayitSchema>;
 
-const ADIM1_ALANLARI = ['ad', 'soyad', 'email', 'telefon', 'tcKimlikNo', 'sifre'] as const;
+const ADIM1_ALANLARI = ['ad', 'soyad', 'email', 'telefon', 'sifre'] as const;
 const ADIM2_ALANLARI = ['sinif'] as const;
 const ADIM3_ALANLARI = ['veliAd', 'veliSoyad', 'veliEmail', 'veliTelefon', 'veliSifre'] as const;
 
@@ -152,14 +155,14 @@ const ADIMLAR = [
 ] as const;
 
 function inputSinifi(hatali: boolean, ikonlu = true) {
-  return `w-full h-11 ${ikonlu ? 'pl-10' : 'px-4'} pr-4 bg-slate-950/50 border rounded-xl text-white text-sm placeholder:text-slate-500 focus:outline-none focus:ring-2 transition-all ${
-    hatali ? 'border-red-500/60 focus:ring-red-500/40' : 'border-white/10 focus:border-indigo-500/50 focus:ring-indigo-500/30 hover:border-white/20'
+  return `w-full h-11 ${ikonlu ? 'pl-10' : 'px-4'} pr-4 bg-slate-50 border rounded-xl text-edu-ink text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 transition-all ${
+    hatali ? 'border-red-500/60 focus:ring-red-500/40' : 'border-edu-line focus:border-indigo-500/50 focus:ring-wingo-400/30 hover:border-white/20'
   }`;
 }
 
 function selectSinifi(hatali: boolean) {
-  return `w-full h-11 px-4 bg-slate-950/50 border rounded-xl text-white text-sm focus:outline-none focus:ring-2 transition-all appearance-none cursor-pointer ${
-    hatali ? 'border-red-500/60 focus:ring-red-500/40' : 'border-white/10 focus:border-indigo-500/50 focus:ring-indigo-500/30 hover:border-white/20'
+  return `w-full h-11 px-4 bg-slate-50 border rounded-xl text-edu-ink text-sm focus:outline-none focus:ring-2 transition-all appearance-none cursor-pointer ${
+    hatali ? 'border-red-500/60 focus:ring-red-500/40' : 'border-edu-line focus:border-indigo-500/50 focus:ring-wingo-400/30 hover:border-white/20'
   }`;
 }
 
@@ -212,16 +215,16 @@ function AdimGostergesi({ adim, adimlar }: { adim: number; adimlar: readonly Adi
               <div
                 className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-300 ${
                   aktif
-                    ? 'bg-indigo-500 text-white shadow-lg shadow-indigo-500/30 scale-105'
+                    ? 'bg-wingo-600 text-white shadow-lg shadow-wingo-600/25 scale-105'
                     : tamam
-                      ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/40'
-                      : 'bg-white/5 text-slate-500 border border-white/10'
+                      ? 'bg-wingo-600/20 text-wingo-700 border border-indigo-500/40'
+                      : 'bg-slate-50 text-slate-500 border border-edu-line'
                 }`}
               >
                 {tamam ? <CheckCircle2 className="w-5 h-5" /> : <Icon className="w-5 h-5" />}
               </div>
               <div className="text-center hidden sm:block">
-                <p className={`text-xs font-semibold ${aktif ? 'text-white' : tamam ? 'text-indigo-300' : 'text-slate-500'}`}>
+                <p className={`text-xs font-semibold ${aktif ? 'text-edu-ink' : tamam ? 'text-wingo-700' : 'text-slate-500'}`}>
                   {a.baslik}
                 </p>
                 <p className="text-[10px] text-slate-500">{a.alt}</p>
@@ -230,7 +233,7 @@ function AdimGostergesi({ adim, adimlar }: { adim: number; adimlar: readonly Adi
           );
         })}
       </div>
-      <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
+      <div className="h-1.5 bg-slate-50 rounded-full overflow-hidden">
         <div
           className="h-full bg-gradient-to-r from-indigo-600 to-violet-500 rounded-full transition-all duration-500 ease-out"
           style={{ width: `${yuzde}%` }}
@@ -297,7 +300,12 @@ function KayitSayfasiIcerik() {
   const [veliSifreGoster, setVeliSifreGoster] = useState(false);
   const [hedefListeAcik, setHedefListeAcik] = useState(false);
   const [kpssModu, setKpssModu] = useState(false);
-  const { girisYap } = useAuthStore();
+  const [partnerYukleniyor, setPartnerYukleniyor] = useState(false);
+  const [partnerKaynak, setPartnerKaynak] = useState<'kapya' | null>(null);
+  const [partnerKilitli, setPartnerKilitli] = useState(false);
+  const [mevcutHesapUyari, setMevcutHesapUyari] = useState(false);
+  const [partnerHata, setPartnerHata] = useState<string | null>(null);
+  const { girisYap, cikisYap } = useAuthStore();
   const router = useRouter();
   const searchParams = useSearchParams();
   const returnUrl = guvenliReturnUrl(searchParams.get('returnUrl'));
@@ -324,6 +332,91 @@ function KayitSayfasiIcerik() {
     const ref = (searchParams.get('ref') || searchParams.get('koc') || '').trim();
     if (ref) setValue('kocReferansKod', ref.toUpperCase());
   }, [searchParams, setValue]);
+
+  // Kapya / Edulim: ?partner=kapya&t=<JWT>
+  // Mevcut öğrenci hesabı varsa şifresiz otomatik giriş; yoksa form prefill.
+  useEffect(() => {
+    const partner = (searchParams.get('partner') || '').trim().toLowerCase();
+    const t = (searchParams.get('t') || '').trim();
+    if (partner !== 'kapya' || !t) return;
+
+    let iptal = false;
+    setPartnerYukleniyor(true);
+    setPartnerHata(null);
+    // Eski tarayıcı oturumu (başka öğrenci) SSO'yu karıştırmasın
+    cikisYap();
+
+    void (async () => {
+      try {
+        const res = await authApi.partnerGiris({ partner: 'kapya', t });
+        if (iptal) return;
+        const v = res.data.veri as {
+          kayitGerekli?: boolean;
+          token?: string;
+          refreshToken?: string;
+          kullanici?: { id: string; email: string; rol: string; ad?: string; soyad?: string; ogretimTuru?: string };
+          prefill?: {
+            ad?: string;
+            soyad?: string;
+            email?: string;
+            telefon?: string;
+            tcKimlikNo?: string;
+            sinif?: string;
+            okul?: string;
+            sehir?: string;
+            kocReferansKod?: string;
+          };
+        };
+
+        if (!v.kayitGerekli && v.token && v.refreshToken && v.kullanici) {
+          girisYap({ kullanici: v.kullanici, token: v.token, refreshToken: v.refreshToken });
+          toast.basarili(
+            (v as { yeniHesap?: boolean }).yeniHesap ? 'Kapya hesabınız oluşturuldu' : 'Kapya ile giriş yapıldı',
+            `${v.kullanici.ad || ''} · ${v.kullanici.email}`,
+          );
+          router.replace(ogrenciGirisSonrasiHedef(v.kullanici.rol, returnUrl) || '/dashboard');
+          return;
+        }
+
+        const p = v.prefill || {};
+        const telHam = (p.telefon || '').trim();
+        let tel = telHam.replace(/\D/g, '');
+        while (tel.startsWith('90') && tel.length > 11) tel = tel.slice(2);
+        if (tel.startsWith('90') && tel.length === 12) tel = tel.slice(2);
+        if (tel.length === 10 && tel.startsWith('5')) tel = `0${tel}`;
+        else if (!(tel.length === 11 && tel.startsWith('05'))) tel = telHam;
+
+        if (p.ad) setValue('ad', p.ad, { shouldValidate: true });
+        if (p.soyad) setValue('soyad', p.soyad, { shouldValidate: true });
+        if (p.email) setValue('email', p.email, { shouldValidate: true });
+        if (tel) setValue('telefon', tel, { shouldValidate: true });
+        if (p.tcKimlikNo) setValue('tcKimlikNo', p.tcKimlikNo, { shouldValidate: true });
+        if (p.sinif) setValue('sinif', p.sinif, { shouldValidate: true });
+        if (p.okul) setValue('okul', p.okul);
+        if (p.sehir) setValue('sehir', p.sehir);
+        if (p.kocReferansKod) setValue('kocReferansKod', p.kocReferansKod.toUpperCase());
+        setPartnerKaynak('kapya');
+        setPartnerKilitli(true);
+        setMevcutHesapUyari(false);
+        const kayitMesaj = (v as { kayitMesaj?: string }).kayitMesaj;
+        if (kayitMesaj) toast.hata(kayitMesaj);
+        else toast.basarili('Kapya bilgileriniz yüklendi. Eksik alanları tamamlayıp kayıt olun.');
+      } catch (err) {
+        if (iptal) return;
+        const mesaj =
+          (err as { response?: { data?: { mesaj?: string } } })?.response?.data?.mesaj ||
+          'Kapya bağlantısı doğrulanamadı. Panelden tekrar deneyin.';
+        setPartnerHata(mesaj);
+        toast.hata(mesaj);
+      } finally {
+        if (!iptal) setPartnerYukleniyor(false);
+      }
+    })();
+
+    return () => {
+      iptal = true;
+    };
+  }, [searchParams, setValue, girisYap, cikisYap, router, returnUrl]);
 
   // KPSS adayları yetişkin olduğundan veli adımı gösterilmez (2 adımlı akış).
   const gorunurAdimlar = useMemo<readonly AdimBilgi[]>(
@@ -423,6 +516,11 @@ function KayitSayfasiIcerik() {
   };
 
   const onSubmit = async (veri: KayitFormu) => {
+    if (mevcutHesapUyari) {
+      toast.hata('Bu e-posta zaten kayıtlı. Giriş sayfasını kullanın.');
+      router.push(returnUrl ? girisUrlWithReturn(returnUrl) : '/giris');
+      return;
+    }
     setYukleniyor(true);
     try {
       const tur = kpssOgretimTuruMu(veri.sinif)
@@ -485,13 +583,20 @@ function KayitSayfasiIcerik() {
     }
   };
 
-  const btnBirincil = 'h-11 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white text-sm font-semibold flex items-center justify-center gap-2 transition-all shadow-lg shadow-indigo-500/20 disabled:opacity-60 disabled:cursor-not-allowed';
-  const btnIkincil = 'h-11 rounded-xl bg-white/5 hover:bg-white/10 text-slate-200 text-sm font-medium flex items-center justify-center gap-2 transition-all border border-white/10';
+  const btnBirincil = 'h-11 rounded-xl bg-gradient-to-r from-wingo-600 to-wingo-500 hover:from-wingo-700 hover:to-wingo-600 text-white text-sm font-semibold flex items-center justify-center gap-2 transition-all shadow-lg shadow-wingo-600/20 disabled:opacity-60 disabled:cursor-not-allowed';
+  const btnIkincil = 'h-11 rounded-xl bg-white hover:bg-edu-mint text-edu-ink text-sm font-medium flex items-center justify-center gap-2 transition-all border border-edu-line';
 
   return (
     <div className="min-h-screen relative overflow-hidden">
-      <AuthThreeBackground mode={kpssModu ? 'kpss' : 'yks_lgs'} />
-      <div className="pointer-events-none absolute inset-0 -z-[5] bg-[radial-gradient(ellipse_at_center,transparent_30%,rgba(7,7,19,0.6)_100%)]" />
+      <div
+        className="pointer-events-none absolute inset-0 -z-10"
+        style={{
+          background:
+            'radial-gradient(circle at 12% 10%, rgba(13, 148, 136, 0.12) 0, transparent 32%), radial-gradient(circle at 90% 8%, rgba(234, 88, 12, 0.08) 0, transparent 28%), #F3FAF8',
+        }}
+        aria-hidden
+      />
+      
       <AnaSiteyeDonButonu />
 
       <div className="relative z-10 min-h-screen flex items-center justify-center p-4 sm:p-6 lg:p-8">
@@ -502,39 +607,60 @@ function KayitSayfasiIcerik() {
               <div className={`w-11 h-11 rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-105 transition-transform ${
                 kpssModu
                   ? 'bg-gradient-to-br from-teal-500 to-emerald-600 shadow-teal-500/25'
-                  : 'bg-gradient-to-br from-indigo-500 to-violet-600 shadow-indigo-500/25'
+                  : 'bg-gradient-to-br from-wingo-600 to-wingo-500 shadow-wingo-600/25'
               }`}>
                 <span className="text-white font-bold text-lg">W</span>
               </div>
-              <span className="text-white font-bold text-xl tracking-tight">{kpssModu ? 'WingoKPSS' : 'WingoSınav'}</span>
+              <span className="text-edu-ink font-bold text-xl tracking-tight">{kpssModu ? 'WingoKPSS' : 'WingoSınav'}</span>
             </Link>
-            <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">Öğrenci Hesabı Oluştur</h1>
-            <p className="text-slate-400 text-sm mt-2 max-w-sm mx-auto">
+            <h1 className="text-2xl sm:text-3xl font-bold text-edu-ink tracking-tight">Öğrenci Hesabı Oluştur</h1>
+            <p className="text-edu-muted text-sm mt-2 max-w-sm mx-auto">
               {kpssModu ? 'KPSS denemeleri, analiz ve gelişim raporları için kaydolun.' : 'Deneme çöz, analiz gör, hedefinle ilerle.'}
             </p>
 
+            {partnerYukleniyor && (
+              <div className="mt-4 inline-flex items-center gap-2 rounded-xl border border-wingo-200 bg-wingo-50 px-4 py-2 text-xs font-medium text-wingo-800">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" /> Kapya ile bağlanılıyor…
+              </div>
+            )}
+            {partnerHata && (
+              <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-left text-xs text-red-700 max-w-md mx-auto">
+                <p className="font-semibold">Kapya bağlantısı başarısız</p>
+                <p className="mt-1 opacity-90">{partnerHata}</p>
+                <p className="mt-2 opacity-70">Kapya panelinden WingoDeneme’ye tekrar tıklayın (bağlantı 5 dk geçerli).</p>
+              </div>
+            )}
+            {partnerKaynak === 'kapya' && !partnerYukleniyor && (
+              <div className="mt-4 rounded-xl border border-wingo-200 bg-wingo-50 px-4 py-3 text-left text-xs text-wingo-800 max-w-md mx-auto">
+                <p className="font-semibold text-wingo-800">Kapya Akademi üzerinden geldiniz</p>
+                <p className="mt-1 text-wingo-700">
+                  Bilgileriniz dolduruldu. Şifrenizi belirleyip kaydı tamamlayın.
+                </p>
+              </div>
+            )}
+
             {/* Kayıt türü sekmeleri */}
-            <div className="inline-flex p-1 mt-5 rounded-xl bg-white/5 border border-white/10 backdrop-blur-sm">
-              <span className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-indigo-500/20 text-indigo-200 text-xs font-semibold border border-indigo-500/30">
+            <div className="inline-flex p-1 mt-5 rounded-xl bg-slate-50 border border-edu-line backdrop-blur-sm">
+              <span className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-wingo-50 text-wingo-700 text-xs font-semibold border border-wingo-200">
                 <GraduationCap className="w-3.5 h-3.5" /> Öğrenci
               </span>
-              <Link href="/kayit/veli" className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-slate-400 text-xs font-medium hover:text-white hover:bg-white/5 transition-colors">
+              <Link href="/kayit/veli" className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-edu-muted text-xs font-medium hover:text-edu-ink hover:bg-slate-50 transition-colors">
                 <Users className="w-3.5 h-3.5" /> Veli
               </Link>
-              <Link href="/kayit/kurum" className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-slate-400 text-xs font-medium hover:text-white hover:bg-white/5 transition-colors">
+              <Link href="/kayit/kurum" className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-edu-muted text-xs font-medium hover:text-edu-ink hover:bg-slate-50 transition-colors">
                 Kurum Başvurusu
               </Link>
-              <Link href="/kayit/koc" className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-slate-400 text-xs font-medium hover:text-white hover:bg-white/5 transition-colors">
+              <Link href="/kayit/koc" className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-edu-muted text-xs font-medium hover:text-edu-ink hover:bg-slate-50 transition-colors">
                 <Users className="w-3.5 h-3.5" /> Koç
               </Link>
-              <Link href="/kayit/ogretmen" className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-slate-400 text-xs font-medium hover:text-white hover:bg-white/5 transition-colors">
+              <Link href="/kayit/ogretmen" className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-edu-muted text-xs font-medium hover:text-edu-ink hover:bg-slate-50 transition-colors">
                 <BookOpen className="w-3.5 h-3.5" /> Öğretmen
               </Link>
             </div>
           </div>
 
           {/* Form kartı */}
-          <div className="rounded-2xl border border-white/10 bg-slate-900/70 backdrop-blur-xl shadow-2xl shadow-black/20 p-6 sm:p-8">
+          <div className="rounded-2xl border border-edu-line bg-white backdrop-blur-xl shadow-2xl shadow-slate-200/70 p-6 sm:p-8">
             <AdimGostergesi adim={adim} adimlar={gorunurAdimlar} />
 
             <form onSubmit={handleSubmit(onSubmit, onInvalid)} noValidate>
@@ -542,11 +668,11 @@ function KayitSayfasiIcerik() {
               {adim === 1 && (
                 <div className="space-y-5">
                   <div className="flex items-center gap-3 pb-1">
-                    <div className="w-9 h-9 rounded-lg bg-indigo-500/15 flex items-center justify-center">
+                    <div className="w-9 h-9 rounded-lg bg-wingo-600/15 flex items-center justify-center">
                       <User className="w-4 h-4 text-indigo-400" />
                     </div>
                     <div>
-                      <h2 className="text-base font-semibold text-white">Kişisel Bilgiler</h2>
+                      <h2 className="text-base font-semibold text-edu-ink">Kişisel Bilgiler</h2>
                       <p className="text-xs text-slate-500">Giriş için kullanacağınız bilgiler</p>
                     </div>
                   </div>
@@ -554,15 +680,34 @@ function KayitSayfasiIcerik() {
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <FormAlan label="Ad" required error={errors.ad?.message} icon={User}>
-                      <input {...register('ad')} className={inputSinifi(!!errors.ad)} placeholder="Ahmet" aria-invalid={!!errors.ad} />
+                      <input
+                        {...register('ad')}
+                        readOnly={partnerKilitli}
+                        className={`${inputSinifi(!!errors.ad)} ${partnerKilitli ? 'opacity-80 cursor-not-allowed' : ''}`}
+                        placeholder="Ahmet"
+                        aria-invalid={!!errors.ad}
+                      />
                     </FormAlan>
                     <FormAlan label="Soyad" required error={errors.soyad?.message}>
-                      <input {...register('soyad')} className={inputSinifi(!!errors.soyad, false)} placeholder="Yılmaz" aria-invalid={!!errors.soyad} />
+                      <input
+                        {...register('soyad')}
+                        readOnly={partnerKilitli}
+                        className={`${inputSinifi(!!errors.soyad, false)} ${partnerKilitli ? 'opacity-80 cursor-not-allowed' : ''}`}
+                        placeholder="Yılmaz"
+                        aria-invalid={!!errors.soyad}
+                      />
                     </FormAlan>
                   </div>
 
                   <FormAlan label="E-posta" required error={errors.email?.message} icon={Mail}>
-                    <input {...register('email')} type="email" className={inputSinifi(!!errors.email)} placeholder="ornek@email.com" aria-invalid={!!errors.email} />
+                    <input
+                      {...register('email')}
+                      type="email"
+                      readOnly={partnerKilitli}
+                      className={`${inputSinifi(!!errors.email)} ${partnerKilitli ? 'opacity-80 cursor-not-allowed' : ''}`}
+                      placeholder="ornek@email.com"
+                      aria-invalid={!!errors.email}
+                    />
                   </FormAlan>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -572,18 +717,19 @@ function KayitSayfasiIcerik() {
                         type="tel"
                         inputMode="numeric"
                         maxLength={14}
-                        className={inputSinifi(!!errors.telefon)}
+                        readOnly={partnerKilitli}
+                        className={`${inputSinifi(!!errors.telefon)} ${partnerKilitli ? 'opacity-80 cursor-not-allowed' : ''}`}
                         placeholder="05XX XXX XX XX"
                         aria-invalid={!!errors.telefon}
                       />
                     </FormAlan>
-                    <FormAlan label="TC kimlik no" required error={errors.tcKimlikNo?.message} icon={CreditCard}>
+                    <FormAlan label="TC kimlik no" error={errors.tcKimlikNo?.message} icon={CreditCard}>
                       <input
                         {...register('tcKimlikNo')}
                         inputMode="numeric"
                         maxLength={11}
                         className={inputSinifi(!!errors.tcKimlikNo)}
-                        placeholder="11 haneli kimlik numaranız"
+                        placeholder="İsteğe bağlı · 11 hane"
                         aria-invalid={!!errors.tcKimlikNo}
                         onInput={(e) => {
                           const hedef = e.currentTarget;
@@ -593,7 +739,7 @@ function KayitSayfasiIcerik() {
                     </FormAlan>
                   </div>
                   <p className="-mt-2 text-[11px] text-slate-500">
-                    TC kimlik numarası fatura ve sınav kimlik doğrulaması için zorunludur; üçüncü kişilerle paylaşılmaz.
+                    TC kimlik numarası isteğe bağlıdır; fatura/ödeme sırasında istenebilir.
                   </p>
 
                   <FormAlan label="Koç / kurum referans kodu (isteğe bağlı)" error={errors.kocReferansKod?.message} icon={Users}>
@@ -634,11 +780,11 @@ function KayitSayfasiIcerik() {
               {adim === 2 && (
                 <div className="space-y-5">
                   <div className="flex items-center gap-3 pb-1">
-                    <div className="w-9 h-9 rounded-lg bg-indigo-500/15 flex items-center justify-center">
+                    <div className="w-9 h-9 rounded-lg bg-wingo-600/15 flex items-center justify-center">
                       <School className="w-4 h-4 text-indigo-400" />
                     </div>
                     <div>
-                      <h2 className="text-base font-semibold text-white">Eğitim Bilgileri</h2>
+                      <h2 className="text-base font-semibold text-edu-ink">Eğitim Bilgileri</h2>
                       <p className="text-xs text-slate-500">
                         {kpssModu ? 'KPSS hazırlık türünüz' : 'Okulunuz ve sınav hedefiniz'}
                       </p>
@@ -698,7 +844,7 @@ function KayitSayfasiIcerik() {
                         ? 'bg-teal-500/10 border-teal-500/25 text-teal-300'
                         : ogretimTuru === 'LGS'
                           ? 'bg-sky-500/10 border-sky-500/25 text-sky-300'
-                          : 'bg-indigo-500/10 border-indigo-500/25 text-indigo-300'
+                          : 'bg-wingo-600/10 border-indigo-500/25 text-wingo-700'
                     }`}>
                       <Sparkles className="w-3.5 h-3.5 shrink-0" />
                       {kpssModu
@@ -725,7 +871,7 @@ function KayitSayfasiIcerik() {
                         placeholder={ogretimTuru === 'LGS' ? 'Lise ara veya yaz...' : 'Üniversite ara veya yaz...'}
                       />
                       {hedefListeAcik && (
-                        <div className="absolute z-50 w-full mt-1.5 bg-slate-900 border border-white/10 rounded-xl shadow-2xl max-h-48 overflow-y-auto">
+                        <div className="absolute z-50 w-full mt-1.5 bg-white border border-edu-line rounded-xl shadow-2xl max-h-48 overflow-y-auto">
                           {(ogretimTuru === 'LGS' ? POPULER_LISELER : POPULER_UNIVERSITELER).map((okul) => (
                             <button
                               key={okul}
@@ -735,7 +881,7 @@ function KayitSayfasiIcerik() {
                                 setValue('hedefUniversite', okul, { shouldDirty: true });
                                 setHedefListeAcik(false);
                               }}
-                              className="w-full text-left px-3 py-2.5 text-sm text-slate-300 hover:bg-indigo-600/80 hover:text-white transition-colors first:rounded-t-xl last:rounded-b-xl"
+                              className="w-full text-left px-3 py-2.5 text-sm text-slate-300 hover:bg-wingo-50 hover:text-edu-ink transition-colors first:rounded-t-xl last:rounded-b-xl"
                             >
                               {okul}
                             </button>
@@ -783,11 +929,11 @@ function KayitSayfasiIcerik() {
               {!kpssModu && adim === 3 && (
                 <div className="space-y-5">
                   <div className="flex items-center gap-3 pb-1">
-                    <div className="w-9 h-9 rounded-lg bg-indigo-500/15 flex items-center justify-center">
+                    <div className="w-9 h-9 rounded-lg bg-wingo-600/15 flex items-center justify-center">
                       <Users className="w-4 h-4 text-indigo-400" />
                     </div>
                     <div>
-                      <h2 className="text-base font-semibold text-white">Veli Bilgileri</h2>
+                      <h2 className="text-base font-semibold text-edu-ink">Veli Bilgileri</h2>
                       <p className="text-xs text-slate-500">İsteğe bağlı — veli takibi için</p>
                     </div>
                   </div>
@@ -849,20 +995,20 @@ function KayitSayfasiIcerik() {
                   </FormAlan>
 
                   {veliBilgisiVar && (
-                    <label className="flex items-start gap-3 rounded-xl border border-white/10 bg-slate-950/40 px-4 py-3.5 cursor-pointer hover:border-indigo-500/30 transition-colors">
+                    <label className="flex items-start gap-3 rounded-xl border border-edu-line bg-slate-950/40 px-4 py-3.5 cursor-pointer hover:border-indigo-500/30 transition-colors">
                       <input
                         type="checkbox"
                         {...register('veliMevcutHesap')}
-                        className="mt-0.5 h-4 w-4 rounded border-white/20 bg-white/5 text-indigo-500 focus:ring-indigo-500/50"
+                        className="mt-0.5 h-4 w-4 rounded border-white/20 bg-slate-50 text-indigo-500 focus:ring-wingo-400/50"
                       />
                       <span className="text-sm text-slate-300 leading-relaxed">
-                        Bu e-posta ile veli hesabı <span className="text-indigo-300 font-medium">zaten kayıtlı</span> — mevcut hesaba bağlan
+                        Bu e-posta ile veli hesabı <span className="text-wingo-700 font-medium">zaten kayıtlı</span> — mevcut hesaba bağlan
                       </span>
                     </label>
                   )}
 
                   {veliMevcutHesap && veliBilgisiVar && (
-                    <div className="flex items-start gap-2 text-xs text-indigo-300/90 rounded-xl border border-indigo-500/20 bg-indigo-500/10 px-3.5 py-3">
+                    <div className="flex items-start gap-2 text-xs text-wingo-700/90 rounded-xl border border-indigo-500/20 bg-wingo-600/10 px-3.5 py-3">
                       <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
                       Kayıtlı veli hesabı bulunursa öğrenci otomatik bağlanır; şifre gerekmez.
                     </div>
@@ -884,7 +1030,7 @@ function KayitSayfasiIcerik() {
             <div className="mt-6 pt-5 border-t border-white/8 text-center text-sm text-slate-500 space-y-2">
               <p>
                 Zaten hesabınız var mı?{' '}
-                <Link href={returnUrl ? girisUrlWithReturn(returnUrl) : '/giris'} className="text-indigo-400 hover:text-indigo-300 font-medium transition-colors">Giriş Yapın</Link>
+                <Link href={returnUrl ? girisUrlWithReturn(returnUrl) : '/giris'} className="text-indigo-400 hover:text-wingo-700 font-medium transition-colors">Giriş Yapın</Link>
               </p>
               <Link href="/sifremi-unuttum" className="text-slate-500 hover:text-slate-300 text-xs transition-colors">
                 Şifremi unuttum
@@ -899,7 +1045,7 @@ function KayitSayfasiIcerik() {
 
 export default function KayitSayfasi() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-[#070713]" />}>
+    <Suspense fallback={<div className="min-h-screen bg-edu-bg" />}>
       <KayitSayfasiIcerik />
     </Suspense>
   );

@@ -126,6 +126,19 @@ export async function duyuruOlustur(
     logger.warn('Duyuru bildirimleri oluşturulamadı', hata);
   }
 
+  // Mobil push (toplu)
+  try {
+    const { kullanicilaraPushGonder } = await import('./expoPush.service');
+    void kullanicilaraPushGonder({
+      kullaniciIdleri: alicilar.map((k) => k.id),
+      baslik: `📢 ${baslik}`,
+      mesaj,
+      veri: { tur: 'duyuru', duyuruId: duyuru.id },
+    });
+  } catch (hata) {
+    logger.warn('Duyuru push gönderilemedi', hata);
+  }
+
   return { duyuru, aliciSayisi: alicilar.length };
 }
 

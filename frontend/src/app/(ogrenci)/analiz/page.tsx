@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { OgrenciSureAnaliziPanel, type SureAnaliziOgesi } from '@/components/ogrenci/OgrenciSureAnaliziPanel';
+import { useAuthStore } from '@/store/auth.store';
 
 function netArtirmaOneriMetni(z: { konu: string; ders: string; basari: number }): string {
   const d = z.ders.toLowerCase();
@@ -39,13 +40,14 @@ function netArtirmaOneriMetni(z: { konu: string; ders: string; basari: number })
 }
 
 export default function AnalizSayfasi() {
+  const ogretimTuru = useAuthStore((s) => s.kullanici?.ogretimTuru);
   const { data: analizData, isLoading } = useQuery({
-    queryKey: ['analiz'],
+    queryKey: ['analiz', ogretimTuru || ''],
     queryFn: () => analizApi.benim(),
   });
 
   const { data: aiData } = useQuery({
-    queryKey: ['ai-analiz'],
+    queryKey: ['ai-analiz', ogretimTuru || ''],
     queryFn: () => aiApi.analiz(),
   });
 

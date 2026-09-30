@@ -7,6 +7,7 @@ import { useQuery } from '@tanstack/react-query';
 import {
   ArrowLeft,
   CheckCircle2,
+  FileText,
   Loader2,
   MinusCircle,
   Target,
@@ -53,7 +54,7 @@ export default function OgrenciSonucEkrani() {
           ulusalSiralama: number | null;
           yuzdelik: number | null;
         };
-        sinav: { baslik: string; tur: string };
+        sinav: { id?: string; baslik: string; tur: string };
         cevaplar: Cevap[];
       },
     enabled: !!ogrenciId && !!katilimId,
@@ -116,6 +117,22 @@ export default function OgrenciSonucEkrani() {
           {data.sinav.tur}
           {k.yuzdelik != null ? ` · %${Number(k.yuzdelik).toFixed(1)}` : ''}
         </p>
+        {data.sinav.id && (
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Link
+              href={`${temelYol}/sinavlar/${data.sinav.id}/karnesi/${katilimId}`}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-teal-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-teal-700"
+            >
+              <FileText className="h-3.5 w-3.5" /> Deneme karnesi
+            </Link>
+            <Link
+              href={`${temelYol}/sinavlar/${data.sinav.id}/sonuclar`}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              Sınav sonuç listesi
+            </Link>
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">

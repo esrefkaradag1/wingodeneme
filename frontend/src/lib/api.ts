@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { supabase } from './supabase';
-import { isKpssMode } from './platform';
+import { kpssOrtami } from './platform';
 import { useAuthStore, oturumTemizle } from '@/store/auth.store';
 
 /** Build anında gömülür; yanlışlıkla /api verilse bile /api/v1'e normalize edilir. */
@@ -131,8 +131,9 @@ function oturumTemizleVeYonlendir(): void {
 api.interceptors.request.use(async (config) => {
   const url = String(config.url || '');
   
-  // Platform modunu panoya göre ekle (KPSS alanı ≠ YKS alanı)
-  config.headers['x-platform-mode'] = isKpssMode() ? 'kpss' : 'yks_lgs';
+  // Site KPSS ise veya oturumdaki öğrenci KPSS kademeliyse KPSS sınav/analiz filtresi
+  const oturumKullanici = useAuthStore.getState().kullanici;
+  config.headers['x-platform-mode'] = kpssOrtami(oturumKullanici?.ogretimTuru) ? 'kpss' : 'yks_lgs';
 
   /** Token yenilemede eski (süresi dolmuş) JWT gönderilmesin */
   if (url.includes('/auth/token-yenile')) {
@@ -184,7 +185,11 @@ api.interceptors.response.use(
     const istekUrl = String(original.url || '');
 
     /** Public uçlar ve opsiyonel istekler 401'de oturum temizleme yapmasın */
-    if (original.skipAuthRedirect || istekUrl.includes('/public/')) {
+    if (
+      original.skipAuthRedirect ||
+      istekUrl.includes('/public/') ||
+      istekUrl.includes('/auth/partner/')
+    ) {
       throw error;
     }
 
@@ -235,6 +240,14 @@ export const authApi = {
   kayit: (veri: Record<string, unknown>) =>
     api.post('/auth/kayit', { ...veri, email: String(veri.email || '').trim().toLowerCase() })
       .then(res => ({ data: { veri: res.data.veri } })),
+  partnerDogrula: (veri: { partner: string; t: string }) =>
+    api.post('/auth/partner/dogrula', veri).then((res) => ({ data: { veri: res.data.veri } })),
+  /** Kapya JWT → mevcut öğrenci şifresiz giriş; hesap yoksa kayitGerekli + prefill */
+  partnerGiris: (veri: { partner: string; t: string }) =>
+    api.post('/auth/partner/giris', veri).then((res) => ({ data: { veri: res.data.veri } })),
+  /** Kapya kurum JWT → şifresiz kurum paneli */
+  partnerKurumGiris: (veri: { partner: string; t: string }) =>
+    api.post('/auth/partner/kurum-giris', veri).then((res) => ({ data: { veri: res.data.veri } })),
   kayitVeli: (veri: Record<string, unknown>) =>
     api.post('/auth/kayit-veli', { ...veri, email: String(veri.email || '').trim().toLowerCase() })
       .then(res => ({ data: { veri: res.data.veri } })),
@@ -347,6 +360,21 @@ export const soruYazariApi = {
     api.get('/soru-yazari-basvuru/admin', { params }).then((res) => ({ data: { veri: res.data.veri } })),
   adminDurum: (id: string, durum: string, adminNotu?: string) =>
     api.patch(`/soru-yazari-basvuru/admin/${id}`, { durum, adminNotu }).then((res) => ({ data: { veri: res.data.veri } })),
+  adminKabul: (
+    id: string,
+    veri: {
+      rol: 'TEACHER' | 'KOC';
+      kod?: string;
+      indirimTipi?: 'YUZDE' | 'TUTAR';
+      indirimDegeri: number;
+      komisyonTipi?: 'YUZDE' | 'TUTAR';
+      komisyonDegeri: number;
+      adminNotu?: string;
+    },
+  ) =>
+    api.post(`/soru-yazari-basvuru/admin/${id}/kabul`, veri).then((res) => ({
+      data: { veri: res.data.veri, mesaj: res.data.mesaj as string },
+    })),
   adminSil: (id: string) =>
     api.delete(`/soru-yazari-basvuru/admin/${id}`).then((res) => ({ data: { veri: res.data.veri } })),
 };
@@ -368,6 +396,18 @@ export const kocApi = {
     api.get(`/koc/ogrenci/${ogrenciId}/sinavlar`).then((res) => ({ data: { veri: res.data.veri } })),
   ogrenciSonuc: (ogrenciId: string, katilimId: string) =>
     api.get(`/koc/ogrenci/${ogrenciId}/katilim/${katilimId}/sonuc`).then((res) => ({ data: { veri: res.data.veri } })),
+
+  sinavKatilimlar: (sinavId: string) =>
+    api.get(`/koc/sinavlar/${sinavId}/katilimlar`).then((res) => ({ data: { veri: res.data.veri } })),
+  denemeKarnesi: (sinavId: string, katilimId: string) =>
+    api
+      .get(`/koc/sinavlar/${sinavId}/katilim/${katilimId}/karnesi`)
+      .then((res) => ({ data: { veri: res.data.veri } })),
+
+  kazancimOzet: () => api.get('/koc/kazancim/ozet').then((res) => ({ data: { veri: res.data.veri } })),
+  kazancimHareketler: (params?: { durum?: string; kodId?: string }) =>
+    api.get('/koc/kazancim/hareketler', { params }).then((res) => ({ data: { veri: res.data.veri } })),
+
   // --- Kurumsal yönetim ---
   kurumOzet: () => api.get('/kurum/ozet').then((res) => ({ data: { veri: res.data.veri } })),
 
@@ -552,9 +592,9 @@ export const adminApi = {
   soruKopyalaTyt: (id: string, veri: { targetKonuId: string }) => api.post(`/admin/sorular/${id}/copy-to-tyt`, veri),
   soruTopluKopyalaTyt: (veri: { soruIds: string[]; targetKonuId: string }) => api.post('/admin/sorular/toplu-copy-to-tyt', veri),
   sorularGrubaAta: (veri: any) => api.post('/admin/sorular/gruba-ata', veri),
-  kullanicilar: (params?: { sayfa?: number; boyut?: number; rol?: string; q?: string; ogretimTuru?: string }) =>
+  kullanicilar: (params?: { sayfa?: number; boyut?: number; rol?: string; q?: string; ogretimTuru?: string; kocId?: string }) =>
     api.get('/admin/kullanicilar', { params }).then(res => ({ data: { veri: res.data.veri, meta: res.data.meta } })),
-  kullanicilarOzet: (params?: { rol?: string }) =>
+  kullanicilarOzet: (params?: { rol?: string; kocId?: string }) =>
     api.get('/admin/kullanicilar/ozet', { params }).then((res) => ({ data: { veri: res.data.veri } })),
   kullaniciOlustur: (veri: any) => api.post('/admin/kullanicilar', veri),
   veliOgrenciEslestir: (veri: { veliEmail: string; ogrenciEmail: string }) =>
@@ -578,6 +618,8 @@ export const adminApi = {
     api.get('/admin/kazancim/hareketler', { params }).then((res) => ({ data: { veri: res.data.veri } })),
   indirimKodlari: (params?: { q?: string; aktif?: string; ogretmenId?: string }) =>
     api.get('/admin/indirim-kodlari', { params }).then((res) => ({ data: { veri: res.data.veri } })),
+  indirimSahipAdaylari: (params?: { q?: string }) =>
+    api.get('/admin/indirim-kodlari/sahip-adaylari', { params }).then((res) => ({ data: { veri: res.data.veri } })),
   indirimKoduOlustur: (veri: Record<string, unknown>) =>
     api.post('/admin/indirim-kodlari', veri).then((res) => ({ data: { veri: res.data.veri } })),
   indirimKoduGuncelle: (id: string, veri: Record<string, unknown>) =>
@@ -620,13 +662,16 @@ export const adminApi = {
     api.post(`/admin/koclar/${kocId}/durum`, { durum, not }).then((res) => ({ data: { veri: res.data.veri } })),
   kocDemoUzat: (kocId: string, gun: number) =>
     api.post(`/admin/koclar/${kocId}/demo-uzat`, { gun }).then((res) => ({ data: { veri: res.data.veri } })),
+  kocSifreSifirla: (kocId: string) =>
+    api.post(`/admin/koclar/${kocId}/sifre-sifirla`).then((res) => ({ data: { veri: res.data.veri } })),
   kocOgrencileri: (kocId: string) =>
     api.get(`/admin/koclar/${kocId}/ogrenciler`).then((res) => ({ data: { veri: res.data.veri } })),
   kocOgrenciAta: (kocId: string, email: string) =>
     api.post(`/admin/koclar/${kocId}/ogrenciler`, { email }).then((res) => ({ data: { veri: res.data.veri } })),
   kocOgrenciKaldir: (kocId: string, ogrenciId: string) =>
     api.delete(`/admin/koclar/${kocId}/ogrenciler/${ogrenciId}`).then((res) => ({ data: { veri: res.data.veri } })),
-  gruplar: () => api.get('/admin/gruplar').then(res => ({ data: { veri: res.data.veri } })),
+  gruplar: (params?: { kapsam?: 'uygun' }) =>
+    api.get('/admin/gruplar', { params }).then(res => ({ data: { veri: res.data.veri } })),
   bransSecenekleri: () => api.get('/admin/gruplar/brans-secenekleri').then(res => ({ data: { veri: res.data.veri } })),
   grupHavuzOzet: (grupId: string) => api.get(`/admin/gruplar/${grupId}/havuz-ozet`).then(res => ({ data: { veri: res.data.veri } })),
   paketler: () => api.get('/paketler').then(res => ({ data: { veri: res.data.veri } })),

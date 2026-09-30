@@ -32,7 +32,7 @@ export function soruOnayBekliyorMu(onayDurumu?: string | null): boolean {
   return onayDurumu === 'ONAY_BEKLIYOR';
 }
 
-/** Öğretmen yalnızca kendi hazırladığı soruda işlem yapabilir; sahipsiz bekleyen sorular branş içi üstlenilebilir */
+/** Öğretmen kendi hazırladığı / düzenlediği soruda işlem yapabilir */
 export function soruOgretmenSahibiMi(
   soru: {
     olusturanId?: string | null;
@@ -41,7 +41,8 @@ export function soruOgretmenSahibiMi(
   },
   userId: string,
 ): boolean {
-  if (soru.olusturanId) return soru.olusturanId === userId;
-  if (soru.duzenleyenId) return soru.duzenleyenId === userId;
+  if (!userId) return false;
+  if (soru.olusturanId && soru.olusturanId === userId) return true;
+  if (soru.duzenleyenId && soru.duzenleyenId === userId) return true;
   return false;
 }

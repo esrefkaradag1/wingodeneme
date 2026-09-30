@@ -1,5 +1,5 @@
 import bcrypt from 'bcryptjs';
-import { prisma, prismaInteraktifTransaction } from '../config/database';
+import { prisma, prismaInteraktifTransaction, prismaPoolRetry } from '../config/database';
 import { tokenOlustur, refreshTokenOlustur, refreshTokenDogrula } from '../utils/jwt';
 import { AppHatasi } from '../middlewares/hata.middleware';
 import type { Request } from 'express';
@@ -13,8 +13,17 @@ import { bransIcinDersler, branslarParse } from './ogretmenSinirlama';
 import { platformOgretimTuruUyumlu, platformOgretimTurleriUyumlu } from '../utils/paketPlatformFiltre';
 import { OgretimTuru } from '@prisma/client';
 import { kpssUcretsizSinavAtaOgrenciArkaPlan } from './kpssKademeSinavAtama.service';
-import { benzersizReferansKodUret, kocIdReferansKoddan } from './koc.service';
+import { benzersizReferansKodUret, kocIdReferansKoddan, referansKodNormalize } from './koc.service';
+import {
+  ayniDomainOgrencileriniKurumaBagla,
+  kapyaPartnerTokenDogrula,
+  kapyaKurumTokenDogrula,
+  kurumIdEmailDomainIle,
+  kurumReferansKodEmailDomainIle,
+  partnerTelefonNormalize,
+} from './partnerKayit.service';
 import { KocTipi, KurumBasvuruDurum } from '@prisma/client';
+import { randomInt } from 'crypto';
 
 interface KayitGirdisi {
   email: string;
@@ -37,6 +46,8 @@ interface KayitGirdisi {
   veliSifre?: string;
   /** Koç / kurum referans kodu (WINGO-XXXXXX) */
   kocReferansKod?: string;
+  /** Kapya SSO otomatik kayıt — telefon geçersizse null bırakılabilir */
+  partnerSso?: boolean;
 }
 
 function sifreGecerliMi(sifre: string): string | null {
@@ -72,9 +83,17 @@ function veliSifreBelirle(veliSifre: string | undefined, veliTelefon: string | u
 
 /** Kayıt zorunlu alan doğrulaması — telefon 10-11 hane, TC kimlik algoritmik geçerli */
 function kayitTelefonNorm(telefon: unknown): string {
-  const rakamlar = telefonRakamlari(String(telefon || ''));
-  const temiz = rakamlar.startsWith('90') && rakamlar.length === 12 ? rakamlar.slice(2) : rakamlar;
-  const son = temiz.startsWith('0') ? temiz.slice(1) : temiz;
+  let rakamlar = telefonRakamlari(String(telefon || ''));
+  while (rakamlar.startsWith('90') && rakamlar.length > 11) rakamlar = rakamlar.slice(2);
+  if (rakamlar.startsWith('90') && rakamlar.length === 12) rakamlar = rakamlar.slice(2);
+  if (rakamlar.startsWith('90') && rakamlar.length === 11 && rakamlar[2] === '5') {
+    rakamlar = `0${rakamlar.slice(2)}`;
+  }
+  if (rakamlar.length > 11) {
+    const son10 = rakamlar.slice(-10);
+    if (son10.startsWith('5')) rakamlar = `0${son10}`;
+  }
+  const son = rakamlar.startsWith('0') ? rakamlar.slice(1) : rakamlar;
   if (son.length !== 10 || !son.startsWith('5')) {
     throw new AppHatasi('Geçerli bir cep telefonu girin (5XX XXX XX XX)', 400);
   }
@@ -136,23 +155,44 @@ export async function ogrenciKayit(girdi: KayitGirdisi, platformTurleri?: Ogreti
   }
 
   // Telefon ve TC kimlik no kayıtta zorunludur (fatura ve kimlik doğrulama için)
-  const telefonNorm = kayitTelefonNorm(girdi.telefon);
-  const telefonSahibi = await prisma.kullanici.findUnique({ where: { telefon: telefonNorm } });
-  if (telefonSahibi) {
-    throw new AppHatasi('Bu telefon numarası zaten başka bir hesapta kayıtlı. Farklı bir numara girin.', 409);
+  // Partner SSO'da Kapya bazen hatalı telefon gönderebilir → null kabul
+  let telefonNorm: string | null = null;
+  if (girdi.partnerSso) {
+    if (girdi.telefon?.trim()) {
+      try {
+        telefonNorm = kayitTelefonNorm(girdi.telefon);
+      } catch {
+        telefonNorm = null;
+      }
+    }
+  } else {
+    telefonNorm = kayitTelefonNorm(girdi.telefon);
+  }
+  if (telefonNorm) {
+    const telefonSahibi = await prisma.kullanici.findUnique({ where: { telefon: telefonNorm } });
+    if (telefonSahibi) {
+      throw new AppHatasi('Bu telefon numarası zaten başka bir hesapta kayıtlı. Farklı bir numara girin.', 409);
+    }
   }
 
-  const tcNorm = tcKimlikNoNormalize(girdi.tcKimlikNo);
-  if (!tcNorm) throw new AppHatasi('TC kimlik numarası zorunludur', 400);
-  if (!tcKimlikNoGecerliMi(tcNorm)) {
-    throw new AppHatasi('Geçerli bir TC kimlik numarası girin', 400);
-  }
-  const tcSahibi = await prisma.ogrenciProfil.findFirst({
-    where: { tcKimlikNo: tcNorm },
-    select: { id: true },
-  });
-  if (tcSahibi) {
-    throw new AppHatasi('Bu TC kimlik numarası ile kayıtlı bir hesap zaten var', 409);
+  // TC kimlik opsiyonel — verilirse geçerli ve benzersiz olmalı
+  let tcNorm = tcKimlikNoNormalize(girdi.tcKimlikNo) || null;
+  if (tcNorm) {
+    if (!tcKimlikNoGecerliMi(tcNorm)) {
+      throw new AppHatasi('Geçerli bir TC kimlik numarası girin', 400);
+    }
+    const tcSahibi = await prisma.ogrenciProfil.findFirst({
+      where: { tcKimlikNo: tcNorm },
+      select: { id: true },
+    });
+    if (tcSahibi) {
+      if (girdi.partnerSso) {
+        // Kapya demo / çakışan TC kaydı engellemesin
+        tcNorm = null;
+      } else {
+        throw new AppHatasi('Bu TC kimlik numarası ile kayıtlı bir hesap zaten var', 409);
+      }
+    }
   }
 
   const sifreHash = await bcrypt.hash(girdi.sifre, 12);
@@ -230,7 +270,9 @@ export async function ogrenciKayit(girdi: KayitGirdisi, platformTurleri?: Ogreti
       throw new AppHatasi('Seçilen kademe bu platformda kayıt için uygun değil', 400);
     }
 
-    const ogrenciTelefonSahibi = await tx.kullanici.findUnique({ where: { telefon: telefonNorm } });
+    const ogrenciTelefonSahibi = telefonNorm
+      ? await tx.kullanici.findUnique({ where: { telefon: telefonNorm } })
+      : null;
     if (ogrenciTelefonSahibi) {
       throw new AppHatasi('Bu telefon numarası zaten başka bir hesapta kayıtlı. Farklı bir numara girin.', 409);
     }
@@ -238,7 +280,7 @@ export async function ogrenciKayit(girdi: KayitGirdisi, platformTurleri?: Ogreti
     let kocId: string | null = null;
     if (girdi.kocReferansKod?.trim()) {
       kocId = await kocIdReferansKoddan(girdi.kocReferansKod);
-      if (!kocId) {
+      if (!kocId && !girdi.partnerSso) {
         throw new AppHatasi('Geçersiz veya pasif koç / kurum referans kodu', 400);
       }
     }
@@ -637,15 +679,17 @@ export async function kocKayit(girdi: {
 }
 
 export async function girisYap(email: string, sifre: string, req?: Pick<Request, 'headers' | 'socket'>) {
-  const kullanici = await prisma.kullanici.findUnique({
-    where: { email },
-    include: {
-      ogrenciProfil: true,
-      veliProfil: true,
-      adminProfil: true,
-      kocProfil: true,
-    },
-  });
+  const kullanici = await prismaPoolRetry(() =>
+    prisma.kullanici.findUnique({
+      where: { email },
+      include: {
+        ogrenciProfil: true,
+        veliProfil: true,
+        adminProfil: true,
+        kocProfil: true,
+      },
+    }),
+  );
 
   if (!kullanici) throw new AppHatasi('E-posta veya şifre hatalı', 401);
 
@@ -662,6 +706,162 @@ export async function girisYap(email: string, sifre: string, req?: Pick<Request,
   const token = tokenOlustur({ userId: kullanici.id, rol: kullanici.rol, email: kullanici.email });
   const refreshToken = refreshTokenOlustur(kullanici.id);
 
+  await prismaPoolRetry(() =>
+    prisma.kullanici.update({
+      where: { id: kullanici.id },
+      data: { refreshToken },
+    }),
+  );
+
+  await oturumBaslat(kullanici.id, kullanici.rol, req);
+
+  return {
+    token,
+    refreshToken,
+    kullanici: kullaniciOzet(kullanici),
+  };
+}
+
+/**
+ * Kapya / Edulim JWT ile şifresiz öğrenci girişi.
+ * - Hesap varsa (e-posta veya TC) → oturum açar
+ * - Yoksa ve zorunlu alanlar doluysa → otomatik kayıt + oturum
+ * - org_ref / kocReferansKod varsa öğrenci ilgili kuruma bağlanır
+ * - Eksik/geçersiz alan varsa → kayitGerekli + prefill (JTI tüketilmez)
+ */
+export async function partnerSsoGiris(
+  partner: string,
+  tokenHam: string,
+  req?: Pick<Request, 'headers' | 'socket'> & { platformTurleri?: OgretimTuru[] },
+) {
+  const partnerNorm = String(partner || '').trim().toLowerCase();
+  if (partnerNorm && partnerNorm !== 'kapya') {
+    throw new AppHatasi('Desteklenmeyen partner', 400);
+  }
+
+  const prefillHam = await kapyaPartnerTokenDogrula(tokenHam, { consumeJti: false });
+  const telefonNorm = partnerTelefonNormalize(prefillHam.telefon);
+  const tcNorm = tcKimlikNoNormalize(prefillHam.tcKimlikNo) || '';
+  const prefill = {
+    ...prefillHam,
+    telefon: telefonNorm || prefillHam.telefon,
+    tcKimlikNo: tcNorm || prefillHam.tcKimlikNo,
+  };
+
+  const include = {
+    ogrenciProfil: true,
+    veliProfil: true,
+    adminProfil: true,
+    kocProfil: true,
+  } as const;
+
+  let kullanici = await prisma.kullanici.findUnique({
+    where: { email: prefill.email },
+    include,
+  });
+
+  // TC ile başka e-postaya bağlama yok. Çakışan TC'yi yok say — kayıt/SSO engellenmesin.
+  let tcKullan = tcNorm;
+  if (tcKullan && tcKimlikNoGecerliMi(tcKullan)) {
+    const tcSahibi = await prisma.ogrenciProfil.findFirst({
+      where: { tcKimlikNo: tcKullan },
+      select: {
+        kullanici: { select: { email: true } },
+      },
+    });
+    if (tcSahibi?.kullanici?.email && tcSahibi.kullanici.email !== prefill.email) {
+      tcKullan = '';
+      prefill.tcKimlikNo = '';
+    }
+  }
+
+  if (!kullanici) {
+    const ad = prefill.ad.trim();
+    const soyad = prefill.soyad.trim();
+    const sinif = prefill.sinif.trim();
+    const otomatikMumkun = ad.length >= 2 && soyad.length >= 2;
+
+    if (!otomatikMumkun) {
+      return { kayitGerekli: true as const, prefill };
+    }
+
+    // org_ref yoksa aynı kurumsal e-posta domain'i ile bağla (örn. @kapyaakademi.com)
+    let kocReferansKod = prefill.kocReferansKod || undefined;
+    if (!kocReferansKod) {
+      kocReferansKod = (await kurumReferansKodEmailDomainIle(prefill.email)) || undefined;
+    }
+
+    const harfler = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+    const kucuk = 'abcdefghijkmnpqrstuvwxyz';
+    let govde = '';
+    for (let i = 0; i < 5; i++) govde += kucuk[randomInt(kucuk.length)];
+    const geciciSifre = `${harfler[randomInt(harfler.length)]}${govde}${randomInt(1000, 9999)}!`;
+
+    try {
+      const olusan = await ogrenciKayit(
+        {
+          email: prefill.email,
+          sifre: geciciSifre,
+          ad,
+          soyad,
+          telefon: telefonNorm || undefined,
+          tcKimlikNo: tcKullan && tcKimlikNoGecerliMi(tcKullan) ? tcKullan : undefined,
+          sinif: sinif || undefined,
+          okul: prefill.okul || undefined,
+          sehir: prefill.sehir || undefined,
+          kocReferansKod,
+          partnerSso: true,
+        },
+        req?.platformTurleri,
+      );
+
+      await kapyaPartnerTokenDogrula(tokenHam, { consumeJti: true });
+
+      return {
+        kayitGerekli: false as const,
+        yeniHesap: true as const,
+        token: olusan.token,
+        refreshToken: olusan.refreshToken,
+        kullanici: olusan.kullanici,
+      };
+    } catch (err) {
+      // Çakışma / validasyon → forma düş
+      if (err instanceof AppHatasi && (err.statusKodu === 409 || err.statusKodu === 400)) {
+        return { kayitGerekli: true as const, prefill, kayitMesaj: err.message };
+      }
+      throw err;
+    }
+  }
+
+  if (kullanici.rol !== Rol.OGRENCI) {
+    throw new AppHatasi('Bu e-posta bir öğrenci hesabına ait değil. Normal giriş kullanın.', 403);
+  }
+
+  if (!kullanici.aktif) {
+    throw new AppHatasi('Hesabınız pasif durumdadır. Lütfen iletişime geçiniz.', 403);
+  }
+
+  // Mevcut öğrenci → org_ref veya aynı e-posta domain'i ile kuruma bağla
+  if (kullanici.ogrenciProfil?.id) {
+    let kocId = prefill.kocReferansKod
+      ? await kocIdReferansKoddan(prefill.kocReferansKod)
+      : null;
+    if (!kocId) {
+      kocId = await kurumIdEmailDomainIle(prefill.email);
+    }
+    if (kocId && kullanici.ogrenciProfil.kocId !== kocId) {
+      await prisma.ogrenciProfil.update({
+        where: { id: kullanici.ogrenciProfil.id },
+        data: { kocId },
+      });
+    }
+  }
+
+  await kapyaPartnerTokenDogrula(tokenHam, { consumeJti: true });
+
+  const token = tokenOlustur({ userId: kullanici.id, rol: kullanici.rol, email: kullanici.email });
+  const refreshToken = refreshTokenOlustur(kullanici.id);
+
   await prisma.kullanici.update({
     where: { id: kullanici.id },
     data: { refreshToken },
@@ -670,9 +870,225 @@ export async function girisYap(email: string, sifre: string, req?: Pick<Request,
   await oturumBaslat(kullanici.id, kullanici.rol, req);
 
   return {
+    kayitGerekli: false as const,
+    yeniHesap: false as const,
     token,
     refreshToken,
     kullanici: kullaniciOzet(kullanici),
+  };
+}
+
+const kocInclude = {
+  ogrenciProfil: true,
+  veliProfil: true,
+  adminProfil: true,
+  kocProfil: true,
+} as const;
+
+async function kurumsalProfilBul(opts: {
+  orgRef?: string;
+  orgEmail?: string;
+  email?: string;
+}) {
+  if (opts.orgRef) {
+    const kod = referansKodNormalize(opts.orgRef);
+    if (kod) {
+      const profil = await prisma.kocProfil.findUnique({
+        where: { referansKod: kod },
+        include: { kullanici: { include: kocInclude } },
+      });
+      if (profil?.tip === KocTipi.KURUMSAL && profil.kullanici) {
+        return profil.kullanici;
+      }
+    }
+  }
+
+  for (const mail of [opts.orgEmail, opts.email]) {
+    const email = String(mail || '').trim().toLowerCase();
+    if (!email) continue;
+    const ku = await prisma.kullanici.findUnique({
+      where: { email },
+      include: kocInclude,
+    });
+    if (ku?.rol === Rol.KOC && ku.kocProfil?.tip === KocTipi.KURUMSAL) {
+      return ku;
+    }
+  }
+
+  return null;
+}
+
+async function partnerKurumHesabiOlustur(claim: {
+  email: string;
+  ad: string;
+  soyad: string;
+  orgName: string;
+  orgPhone: string;
+  orgRef: string;
+}) {
+  const email = claim.email.trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    throw new AppHatasi('Kurum için geçerli e-posta gerekli', 400);
+  }
+
+  const mevcut = await prisma.kullanici.findUnique({ where: { email }, include: kocInclude });
+  if (mevcut) {
+    if (mevcut.rol === Rol.KOC && mevcut.kocProfil?.tip === KocTipi.KURUMSAL) {
+      return mevcut;
+    }
+    throw new AppHatasi('Bu e-posta başka bir hesap türüne ait; kurum oluşturulamadı', 409);
+  }
+
+  let referansKod = claim.orgRef ? referansKodNormalize(claim.orgRef) : '';
+  if (referansKod) {
+    const cakisan = await prisma.kocProfil.findUnique({
+      where: { referansKod },
+      select: { id: true },
+    });
+    if (cakisan) {
+      throw new AppHatasi(`Referans kodu zaten kullanılıyor: ${referansKod}`, 409);
+    }
+  } else {
+    referansKod = await benzersizReferansKodUret();
+  }
+
+  const telefon = partnerTelefonNormalize(claim.orgPhone) || null;
+  const harfler = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+  const kucuk = 'abcdefghijkmnpqrstuvwxyz';
+  let govde = '';
+  for (let i = 0; i < 5; i++) govde += kucuk[randomInt(kucuk.length)];
+  const geciciSifre = `${harfler[randomInt(harfler.length)]}${govde}${randomInt(1000, 9999)}!`;
+
+  const ad = (claim.ad || 'Kurum').trim() || 'Kurum';
+  const soyad = (claim.soyad || 'Yönetici').trim() || 'Yönetici';
+  const kurumAdi = (claim.orgName || 'Kurum').trim() || 'Kurum';
+
+  const yeni = await prisma.kullanici.create({
+    data: {
+      email,
+      sifre: await bcrypt.hash(geciciSifre, 12),
+      telefon,
+      rol: Rol.KOC,
+      aktif: true,
+      kocProfil: {
+        create: {
+          ad,
+          soyad,
+          telefon,
+          tip: KocTipi.KURUMSAL,
+          kurumAdi,
+          referansKod,
+          basvuruDurum: KurumBasvuruDurum.AKTIF,
+          kararTarihi: new Date(),
+          demoBitis: null,
+        },
+      },
+    },
+    include: kocInclude,
+  });
+
+  await bildirimGonder({
+    kullaniciId: yeni.id,
+    baslik: 'Kurum hesabınız açıldı',
+    mesaj: `Kapya üzerinden kurum paneliniz hazır. Referans kodunuz: ${referansKod}`,
+    tur: 'kurum_onay',
+  });
+
+  return yeni;
+}
+
+/**
+ * Kapya kurum JWT → şifresiz kurum paneli girişi.
+ * Eşleme: org_ref → org_email → email; yoksa kurum hesabı oluşturur.
+ */
+export async function partnerKurumSsoGiris(
+  partner: string,
+  tokenHam: string,
+  req?: Pick<Request, 'headers' | 'socket'>,
+) {
+  const partnerNorm = String(partner || '').trim().toLowerCase();
+  if (partnerNorm && partnerNorm !== 'kapya') {
+    throw new AppHatasi('Desteklenmeyen partner', 400);
+  }
+
+  const claim = await kapyaKurumTokenDogrula(tokenHam, { consumeJti: false });
+
+  let kullanici = await kurumsalProfilBul({
+    orgRef: claim.orgRef,
+    orgEmail: claim.orgEmail,
+    email: claim.email,
+  });
+
+  let yeniHesap = false;
+  if (!kullanici) {
+    kullanici = await partnerKurumHesabiOlustur({
+      email: claim.orgEmail || claim.email,
+      ad: claim.ad,
+      soyad: claim.soyad,
+      orgName: claim.orgName,
+      orgPhone: claim.orgPhone,
+      orgRef: claim.orgRef,
+    });
+    yeniHesap = true;
+  }
+
+  if (!kullanici.aktif) {
+    throw new AppHatasi('Kurum hesabınız pasif durumdadır. Lütfen iletişime geçiniz.', 403);
+  }
+
+  if (kullanici.rol !== Rol.KOC || kullanici.kocProfil?.tip !== KocTipi.KURUMSAL) {
+    throw new AppHatasi('Bu hesap kurum paneline giriş için uygun değil', 403);
+  }
+
+  // Profil bilgilerini Kapya claim ile hafifçe güncelle (ad/kurum adı)
+  if (kullanici.kocProfil) {
+    await prisma.kocProfil.update({
+      where: { id: kullanici.kocProfil.id },
+      data: {
+        ...(claim.ad ? { ad: claim.ad } : {}),
+        ...(claim.soyad ? { soyad: claim.soyad } : {}),
+        ...(claim.orgName ? { kurumAdi: claim.orgName } : {}),
+        ...(claim.orgPhone
+          ? { telefon: partnerTelefonNormalize(claim.orgPhone) || claim.orgPhone }
+          : {}),
+        basvuruDurum: KurumBasvuruDurum.AKTIF,
+        aktif: true,
+      },
+    });
+  }
+
+  await kapyaKurumTokenDogrula(tokenHam, { consumeJti: true });
+
+  // Aynı domain'deki bağsız Kapya öğrencilerini bu kuruma bağla
+  if (kullanici.kocProfil?.id) {
+    await ayniDomainOgrencileriniKurumaBagla(
+      kullanici.kocProfil.id,
+      claim.orgEmail || claim.email || kullanici.email,
+    );
+  }
+
+  const token = tokenOlustur({ userId: kullanici.id, rol: kullanici.rol, email: kullanici.email });
+  const refreshToken = refreshTokenOlustur(kullanici.id);
+
+  await prisma.kullanici.update({
+    where: { id: kullanici.id },
+    data: { refreshToken },
+  });
+
+  // Güncel profil ile özet
+  const guncel = await prisma.kullanici.findUnique({
+    where: { id: kullanici.id },
+    include: kocInclude,
+  });
+
+  await oturumBaslat(kullanici.id, kullanici.rol, req);
+
+  return {
+    yeniHesap,
+    token,
+    refreshToken,
+    kullanici: kullaniciOzet(guncel!),
+    yonlendirme: '/kurum/dashboard',
   };
 }
 

@@ -25,10 +25,24 @@ export const KPSS_OGRENCI_SECENEKLERI = [
   { value: 'KPSS_ORTAOGRETIM', etiket: 'KPSS Ortaöğretim' },
 ] as const;
 
-export function kpssOgretimTuruMu(tur?: string | null): tur is OgretimTuru {
+export function kpssOgretimTuruMu(tur?: string | null): boolean {
   if (!tur) return false;
   const s = String(tur).trim().toUpperCase();
-  return s === 'KPSS_LISANS' || s === 'KPSS_ONLISANS' || s === 'KPSS_ORTAOGRETIM';
+  return (
+    s === 'KPSS' ||
+    s === 'KPSS_LISANS' ||
+    s === 'KPSS_ONLISANS' ||
+    s === 'KPSS_ORTAOGRETIM'
+  );
+}
+
+/** Ham KPSS değerini panel kademesine çevir */
+export function kpssKademeNormalize(tur?: string | null): OgretimTuru | null {
+  if (!tur) return null;
+  const s = String(tur).trim().toUpperCase();
+  if (s === 'KPSS_LISANS' || s === 'KPSS_ONLISANS' || s === 'KPSS_ORTAOGRETIM') return s;
+  if (s === 'KPSS') return 'KPSS_LISANS';
+  return null;
 }
 
 /** 6–8. sınıf → LGS; 9–12 ve mezun → YKS */
@@ -70,8 +84,8 @@ export function ogretimTuruCoz(
 ): OgretimTuru {
   const hamOgretim = profil?.ogrenciProfil?.ogretimTuru ?? kullanici?.ogretimTuru;
   const sinif = legacySinifNorm(hamOgretim, profil?.ogrenciProfil?.sinif);
-  if (kpssOgretimTuruMu(hamOgretim)) return hamOgretim;
-  if (kpssOgretimTuruMu(sinif)) return sinif;
+  const kpssHam = kpssKademeNormalize(hamOgretim) ?? kpssKademeNormalize(sinif);
+  if (kpssHam) return kpssHam;
   const siniftan = siniftanOgretimTuru(sinif);
   if (siniftan) return siniftan;
   return String(hamOgretim).toUpperCase() === 'LGS' ? 'LGS' : 'YKS';

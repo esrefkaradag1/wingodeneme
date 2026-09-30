@@ -28,7 +28,7 @@ function OdemeSonucIcerik() {
             </p>
             <Link
               href="/panel"
-              className="inline-flex w-full items-center justify-center rounded-xl bg-indigo-600 px-4 py-3 text-lg font-medium text-white transition hover:bg-indigo-700"
+              className="inline-flex w-full items-center justify-center rounded-xl bg-wingo-600 px-4 py-3 text-lg font-medium text-white transition hover:bg-wingo-700"
             >
               Panele Git
             </Link>

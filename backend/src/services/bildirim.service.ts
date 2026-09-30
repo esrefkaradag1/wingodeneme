@@ -2,6 +2,7 @@ import { prisma } from '../config/database';
 import nodemailer from 'nodemailer';
 import { Rol } from '@prisma/client';
 import { logger } from '../utils/logger';
+import { kullaniciyaPushGonder } from './expoPush.service';
 
 interface BildirimGirdisi {
   kullaniciId: string;
@@ -48,6 +49,14 @@ export async function bildirimGonder(girdi: BildirimGirdisi): Promise<void> {
 
   const kullanici = await prisma.kullanici.findUnique({ where: { id: girdi.kullaniciId } });
   if (!kullanici) return;
+
+  // Mobil push (Expo) — hata ana akışı bozmasın
+  void kullaniciyaPushGonder({
+    kullaniciId: girdi.kullaniciId,
+    baslik: girdi.baslik,
+    mesaj: girdi.mesaj,
+    veri: { tur: girdi.tur, ...(girdi.veriJson || {}) },
+  }).catch((err) => logger.warn('Push gönderilemedi:', err));
 
   // E-posta gönder
   if (process.env.SMTP_USER) {

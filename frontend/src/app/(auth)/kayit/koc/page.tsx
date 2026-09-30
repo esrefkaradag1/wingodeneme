@@ -5,18 +5,12 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import Link from 'next/link';
-import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { Loader2, Mail, Phone, User, Lock, Eye, EyeOff, GraduationCap, Building2 } from 'lucide-react';
 import { authApi } from '@/lib/api';
 import { useAuthStore } from '@/store/auth.store';
 import { toast } from '@/store/toast.store';
 import AnaSiteyeDonButonu from '@/components/auth/AnaSiteyeDonButonu';
-
-const AuthThreeBackground = dynamic(() => import('@/components/auth/AuthThreeBackground'), {
-  ssr: false,
-  loading: () => <div className="absolute inset-0 -z-10 bg-[#070713]" />,
-});
 
 const kocSchema = z.object({
   ad: z.string().min(2, 'Ad en az 2 karakter'),
@@ -81,16 +75,23 @@ export default function KocKayitSayfasi() {
   };
 
   const inputSinifi = (hatali: boolean) =>
-    `w-full rounded-xl border bg-white/5 pl-10 pr-3 py-3 text-sm text-white outline-none placeholder:text-slate-500 ${
-      hatali ? 'border-red-400/60' : 'border-white/10 focus:border-teal-400/50'
+    `w-full rounded-xl border bg-slate-50 pl-10 pr-3 py-3 text-sm text-edu-ink outline-none placeholder:text-slate-400 ${
+      hatali ? 'border-red-400/60' : 'border-edu-line focus:border-teal-400/50'
     }`;
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[#070713] text-white">
-      <AuthThreeBackground />
+    <div className="relative min-h-screen overflow-hidden bg-edu-bg text-edu-ink">
+      <div
+        className="pointer-events-none absolute inset-0 -z-10"
+        style={{
+          background:
+            'radial-gradient(circle at 12% 10%, rgba(13, 148, 136, 0.12) 0, transparent 32%), radial-gradient(circle at 90% 8%, rgba(234, 88, 12, 0.08) 0, transparent 28%), #F3FAF8',
+        }}
+        aria-hidden
+      />
       <div className="relative z-10 mx-auto flex min-h-screen max-w-lg flex-col justify-center px-4 py-10">
         <AnaSiteyeDonButonu />
-        <div className="mt-6 rounded-3xl border border-white/10 bg-black/40 p-6 backdrop-blur-md sm:p-8">
+        <div className="mt-6 rounded-3xl border border-edu-line bg-black/40 p-6 backdrop-blur-md sm:p-8">
           <div className="mb-1 inline-flex items-center gap-2 rounded-full border border-teal-400/30 bg-teal-500/10 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-teal-300">
             <GraduationCap className="h-3.5 w-3.5" /> Bireysel koç
           </div>
@@ -167,7 +168,7 @@ export default function KocKayitSayfasi() {
             <button
               type="submit"
               disabled={yukleniyor}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-teal-500 py-3 text-sm font-bold text-white hover:bg-teal-400 disabled:opacity-60"
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-wingo-600 py-3 text-sm font-bold text-white hover:bg-teal-400 disabled:opacity-60"
             >
               {yukleniyor ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
               Hesap oluştur
@@ -176,13 +177,13 @@ export default function KocKayitSayfasi() {
 
           <Link
             href="/kayit/kurum"
-            className="mt-5 flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 p-4 transition hover:border-indigo-400/40"
+            className="mt-5 flex items-center gap-3 rounded-2xl border border-edu-line bg-slate-50 p-4 transition hover:border-indigo-400/40"
           >
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-500/20 text-indigo-300">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-wingo-600/20 text-wingo-700">
               <Building2 className="h-4 w-4" />
             </span>
             <span className="text-xs">
-              <span className="block font-bold text-white">Okul, dershane veya kurs musunuz?</span>
+              <span className="block font-bold text-edu-ink">Okul, dershane veya kurs musunuz?</span>
               <span className="block text-slate-400">
                 Kurum başvurusu yapın; onay sonrası kendi öğretmenlerinizi ve sınıflarınızı yönetin.
               </span>

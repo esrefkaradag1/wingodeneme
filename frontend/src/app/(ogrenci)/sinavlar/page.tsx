@@ -22,7 +22,8 @@ import { format } from 'date-fns';
 import { tr } from 'date-fns/locale';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useState } from 'react';
-import { isKpssMode } from '@/lib/platform';
+import { useAuthStore } from '@/store/auth.store';
+import { kpssOrtami } from '@/lib/platform';
 
 interface Sinav {
   id: string;
@@ -62,9 +63,10 @@ const durumRenkleri = {
 
 export default function SinavlarSayfasi() {
   const [tab, setTab] = useState<'SINAVLAR' | 'ANALIZ'>('SINAVLAR');
-  const panelKpss = isKpssMode();
+  const ogretimTuru = useAuthStore((s) => s.kullanici?.ogretimTuru);
+  const panelKpss = kpssOrtami(ogretimTuru);
   const { data, isLoading } = useQuery({
-    queryKey: ['sinavlar', panelKpss ? 'kpss' : 'yks'],
+    queryKey: ['sinavlar', panelKpss ? 'kpss' : 'yks', ogretimTuru || ''],
     queryFn: () => sinavApi.liste(),
     refetchInterval: (query) => {
       const sinavlar = (query.state.data as any)?.data?.veri || [];

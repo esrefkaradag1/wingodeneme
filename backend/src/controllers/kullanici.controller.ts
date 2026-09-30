@@ -99,6 +99,80 @@ export async function profilGuncelleController(req: AuthRequest, res: Response, 
   } catch (err) { next(err); }
 }
 
+const AVATAR_MIME = new Set(['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/heic', 'image/heif']);
+
+/** POST /profil/avatar — profil fotoğrafı yükle (multipart: dosya) */
+export async function profilAvatarYukleController(
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const dosya = req.file;
+    if (!dosya?.buffer?.length) {
+      throw new AppHatasi('Fotoğraf dosyası gerekli', 400);
+    }
+    const mimeHam = String(dosya.mimetype || '').toLowerCase();
+    if (!AVATAR_MIME.has(mimeHam)) {
+      throw new AppHatasi('Sadece JPEG, PNG veya WebP yükleyebilirsiniz', 400);
+    }
+
+    const kullaniciId = req.kullanici!.userId;
+    const profil = await prisma.ogrenciProfil.findUnique({
+      where: { kullaniciId },
+      select: { id: true },
+    });
+    if (!profil) throw new AppHatasi('Öğrenci profili bulunamadı', 404);
+
+    // HEIC vb. yerine mümkünse jpeg/png/webp tut; mobil Image için jpeg tercih
+    const mime = mimeHam.includes('png')
+      ? 'image/png'
+      : mimeHam.includes('webp')
+        ? 'image/webp'
+        : 'image/jpeg';
+    const uzanti = mime === 'image/png' ? '.png' : mime === 'image/webp' ? '.webp' : '.jpg';
+
+    let avatarUrl: string;
+    try {
+      const { supabaseBufferYukle } = await import('../utils/supabaseStorage');
+      const { getSupabaseAdmin, egitimStorageBucket } = await import('../config/supabaseAdmin');
+      const key = `avatars/${kullaniciId}/${Date.now()}${uzanti}`;
+      const admin = getSupabaseAdmin();
+      if (!admin) throw new Error('Supabase yok');
+      const bucket = egitimStorageBucket();
+      const { error } = await admin.storage.from(bucket).upload(key, dosya.buffer, {
+        contentType: mime,
+        upsert: true,
+        cacheControl: '3600',
+      });
+      if (error) throw new Error(error.message);
+      // Public URL (bucket public ise)
+      const pub = admin.storage.from(bucket).getPublicUrl(key).data.publicUrl;
+      // İmzalı URL her zaman okunabilir — Image için daha güvenilir
+      const signed = await admin.storage.from(bucket).createSignedUrl(key, 60 * 60 * 24 * 365 * 5);
+      avatarUrl = signed.data?.signedUrl || pub;
+      if (!avatarUrl) {
+        avatarUrl = await supabaseBufferYukle(dosya.buffer, mime, uzanti, `avatars/${kullaniciId}`);
+      }
+    } catch {
+      const { s3DosyaYukle } = await import('../utils/s3');
+      avatarUrl = await s3DosyaYukle(dosya.buffer, `avatar${uzanti}`, mime, `avatars/${kullaniciId}`);
+    }
+
+    if (!avatarUrl) throw new AppHatasi('Fotoğraf yüklenemedi', 500);
+
+    const guncel = await prisma.ogrenciProfil.update({
+      where: { kullaniciId },
+      data: { avatarUrl },
+      select: { avatarUrl: true, ad: true, soyad: true },
+    });
+
+    res.json({ basarili: true, veri: guncel, mesaj: 'Profil fotoğrafı güncellendi' });
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function profilSifreDegistirController(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   try {
     const { mevcutSifre, yeniSifre } = req.body as { mevcutSifre?: string; yeniSifre?: string };
@@ -224,6 +298,49 @@ export async function kocReferansBaglaController(req: AuthRequest, res: Response
     const kod = typeof req.body?.referansKod === 'string' ? req.body.referansKod : '';
     const veri = await ogrenciKocReferansBagla(req.kullanici!.userId, kod);
     res.json({ basarili: true, veri });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/** Mobil Expo Push / FCM token kaydı (Kullanici.fcmToken) */
+export async function pushTokenKaydetController(
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const tokenHam = req.body?.token ?? req.body?.fcmToken ?? req.body?.pushToken;
+    const token =
+      typeof tokenHam === 'string' && tokenHam.trim() ? tokenHam.trim() : null;
+
+    if (token && token.length > 512) {
+      throw new AppHatasi('Geçersiz push token', 400);
+    }
+
+    await prisma.kullanici.update({
+      where: { id: req.kullanici!.userId },
+      data: { fcmToken: token },
+    });
+
+    res.json({ basarili: true, veri: { kaydedildi: Boolean(token) } });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/** DELETE /push-token — cihaz token’ını sil */
+export async function pushTokenSilController(
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    await prisma.kullanici.update({
+      where: { id: req.kullanici!.userId },
+      data: { fcmToken: null },
+    });
+    res.json({ basarili: true, veri: { kaydedildi: false } });
   } catch (err) {
     next(err);
   }

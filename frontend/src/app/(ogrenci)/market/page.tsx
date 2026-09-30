@@ -186,7 +186,7 @@ export default function MarketSayfasi() {
         <motion.div
            initial={{ opacity: 0, y: 20 }}
            animate={{ opacity: 1, y: 0 }}
-           className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-indigo-50 text-indigo-600 text-xs font-bold uppercase tracking-widest border border-indigo-100"
+           className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-indigo-50 text-indigo-600 text-xs font-bold uppercase tracking-widest border border-wingo-100"
         >
            <Sparkles className="w-4 h-4" /> Eğitim Paketleri
         </motion.div>
@@ -208,18 +208,18 @@ export default function MarketSayfasi() {
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="relative overflow-hidden rounded-[40px] bg-gradient-to-br from-indigo-900 via-slate-900 to-black p-1"
+        className="relative overflow-hidden rounded-[40px] bg-gradient-to-br from-wingo-600 via-wingo-500 to-orange-500 p-1"
       >
         <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-20"></div>
-        <div className="relative bg-white/5 backdrop-blur-3xl rounded-[39px] p-8 md:p-12 flex flex-col md:flex-row items-center gap-10">
+        <div className="relative bg-white rounded-[39px] p-8 md:p-12 flex flex-col md:flex-row items-center gap-10 border border-edu-line">
           <div className="flex-1 space-y-6 text-center md:text-left">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/20 text-indigo-300 text-[10px] font-black uppercase tracking-widest border border-indigo-500/30">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-wingo-50 text-wingo-700 text-[10px] font-black uppercase tracking-widest border border-wingo-200">
               <Sparkles className="w-3 h-3" /> İş Ortağımız
             </div>
-            <h2 className="text-3xl md:text-5xl font-black text-white leading-tight">
-              WingoLink <span className="text-indigo-400">Eko-Sistemi</span> ile Tanışın
+            <h2 className="text-3xl md:text-5xl font-black text-edu-ink leading-tight">
+              WingoLink <span className="text-wingo-600">Eko-Sistemi</span> ile Tanışın
             </h2>
-            <p className="text-indigo-100/70 font-medium text-lg max-w-xl">
+            <p className="text-edu-muted font-medium text-lg max-w-xl">
               Tüm derslerde profesyonel video paketleri, interaktif içerikler ve binlerce yeni nesil soru wingolink.com.tr'de seni bekliyor.
             </p>
             <div className="flex flex-wrap items-center justify-center md:justify-start gap-4">
@@ -227,30 +227,30 @@ export default function MarketSayfasi() {
                 href="https://wingolink.com.tr" 
                 target="_blank" 
                 rel="noopener noreferrer"
-                className="px-8 py-4 bg-indigo-500 hover:bg-indigo-400 text-white rounded-2xl font-black text-sm transition-all shadow-xl shadow-indigo-500/20 active:scale-95"
+                className="px-8 py-4 bg-wingo-600 hover:bg-wingo-700 text-white rounded-2xl font-black text-sm transition-all shadow-xl shadow-wingo-600/20 active:scale-95"
               >
                 Hemen Keşfet
               </a>
               <div className="flex -space-x-3">
                 {[1, 2, 3, 4].map(i => (
-                  <div key={i} className="w-10 h-10 rounded-full border-2 border-slate-900 bg-slate-800 flex items-center justify-center overflow-hidden">
+                  <div key={i} className="w-10 h-10 rounded-full border-2 border-white bg-edu-mint flex items-center justify-center overflow-hidden">
                     <img src={`https://i.pravatar.cc/100?img=${i+10}`} alt="user" />
                   </div>
                 ))}
-                <div className="h-10 px-4 rounded-full border-2 border-slate-900 bg-slate-800 flex items-center justify-center text-[10px] font-black text-indigo-300">
+                <div className="h-10 px-4 rounded-full border-2 border-white bg-edu-mint flex items-center justify-center text-[10px] font-black text-wingo-700">
                   +10k Öğrenci
                 </div>
               </div>
             </div>
           </div>
           <div className="w-full md:w-1/3 aspect-square relative">
-            <div className="absolute inset-0 bg-indigo-500/20 blur-[100px] rounded-full animate-pulse"></div>
-            <div className="relative w-full h-full rounded-3xl border border-white/10 bg-white/5 backdrop-blur-md p-6 flex flex-col justify-center items-center text-center space-y-4">
-              <div className="w-20 h-20 rounded-2xl bg-indigo-500 flex items-center justify-center text-white shadow-2xl shadow-indigo-500/40">
+            <div className="absolute inset-0 bg-wingo-200/40 blur-[100px] rounded-full animate-pulse"></div>
+            <div className="relative w-full h-full rounded-3xl border border-edu-line bg-edu-mint p-6 flex flex-col justify-center items-center text-center space-y-4">
+              <div className="w-20 h-20 rounded-2xl bg-wingo-600 flex items-center justify-center text-white shadow-2xl shadow-wingo-600/30">
                 <Zap className="w-10 h-10" />
               </div>
-              <h3 className="text-xl font-black text-white">Sınırsız İçerik</h3>
-              <p className="text-sm font-bold text-indigo-200/60">YKS & LGS için en kapsamlı video arşivi</p>
+              <h3 className="text-xl font-black text-edu-ink">Sınırsız İçerik</h3>
+              <p className="text-sm font-bold text-edu-muted">YKS & LGS için en kapsamlı video arşivi</p>
             </div>
           </div>
         </div>
@@ -261,7 +261,7 @@ export default function MarketSayfasi() {
       <section className="space-y-6">
         <div className="flex items-end justify-between gap-4 flex-wrap">
           <div>
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-50 text-indigo-700 text-[10px] font-black uppercase tracking-widest border border-indigo-100">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-wingo-50 text-wingo-700 text-[10px] font-black uppercase tracking-widest border border-wingo-100">
               <Zap className="w-3.5 h-3.5" /> Wingo Deneme
             </div>
             <h2 className="text-2xl md:text-3xl font-black text-gray-900 mt-3">Sınav & Deneme Paketleri</h2>
@@ -278,8 +278,8 @@ export default function MarketSayfasi() {
               onClick={() => setKategoriFiltre('TUMU')}
               className={`px-4 py-2 rounded-full text-xs font-black uppercase tracking-wider border transition-all ${
                 kategoriFiltre === 'TUMU'
-                  ? 'bg-indigo-600 text-white border-indigo-600 shadow-md'
-                  : 'bg-white text-gray-600 border-gray-200 hover:border-indigo-300'
+                  ? 'bg-wingo-600 text-white border-wingo-600 shadow-md'
+                  : 'bg-white text-gray-600 border-gray-200 hover:border-wingo-300'
               }`}
             >
               Tümü
@@ -291,7 +291,7 @@ export default function MarketSayfasi() {
                 onClick={() => setKategoriFiltre(k.slug)}
                 className={`px-4 py-2 rounded-full text-xs font-black uppercase tracking-wider border transition-all ${
                   kategoriFiltre === k.slug
-                    ? 'bg-indigo-600 text-white border-indigo-600 shadow-md'
+                    ? 'bg-wingo-600 text-white border-wingo-600 shadow-md'
                     : `${paketKategoriRenk(k.slug, kategoriHarita)} hover:opacity-90`
                 }`}
               >
@@ -336,7 +336,7 @@ export default function MarketSayfasi() {
                       }`}
                     >
                       {paket.populer && (
-                        <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-indigo-600 text-white px-6 py-1 rounded-full text-[10px] font-black uppercase tracking-widest shadow-lg shadow-indigo-600/30">
+                        <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-wingo-600 text-white px-6 py-1 rounded-full text-[10px] font-black uppercase tracking-widest shadow-lg shadow-wingo-600/25">
                           En Popüler
                         </div>
                       )}
@@ -347,7 +347,7 @@ export default function MarketSayfasi() {
                             <span className={`self-start px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border ${katInfo.renk}`}>
                               {katInfo.ad}
                             </span>
-                            <div className={`p-3 rounded-2xl w-fit ${paket.populer ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-indigo-600'}`}>
+                            <div className={`p-3 rounded-2xl w-fit ${paket.populer ? 'bg-wingo-600 text-white' : 'bg-edu-mint text-wingo-700'}`}>
                               <Zap className="w-6 h-6" />
                             </div>
                           </div>
@@ -395,7 +395,7 @@ export default function MarketSayfasi() {
                         <div className="grid grid-cols-2 gap-2">
                           <Link
                             href={`/paket/${encodeURIComponent(paket.id)}`}
-                            className="py-4 rounded-2xl font-black text-sm flex items-center justify-center gap-2 border-2 border-gray-200 text-gray-800 hover:border-indigo-300 hover:text-indigo-700 transition-all"
+                            className="py-4 rounded-2xl font-black text-sm flex items-center justify-center gap-2 border-2 border-gray-200 text-gray-800 hover:border-wingo-300 hover:text-indigo-700 transition-all"
                           >
                             Denemeleri Seç
                           </Link>
@@ -404,8 +404,8 @@ export default function MarketSayfasi() {
                             disabled={satinAlMutation.isPending}
                             className={`py-4 rounded-2xl font-black text-sm flex items-center justify-center gap-2 transition-all active:scale-95 ${
                               paket.populer
-                                ? 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-lg shadow-indigo-600/20'
-                                : 'bg-gray-900 text-white hover:bg-black shadow-lg shadow-gray-900/10'
+                                ? 'bg-wingo-600 text-white hover:bg-indigo-700 shadow-lg shadow-indigo-600/20'
+                                : 'bg-edu-ink text-white hover:bg-wingo-800 shadow-lg shadow-gray-900/10'
                             }`}
                           >
                             {satinAlMutation.isPending && secilenPaket?.id === paket.id ? (
@@ -616,7 +616,7 @@ export default function MarketSayfasi() {
                     yontem: odemeYontemi,
                   })
                 }
-                className="flex-1 inline-flex items-center justify-center gap-2 rounded-2xl bg-indigo-600 py-3 text-sm font-bold text-white hover:bg-indigo-700 disabled:opacity-50"
+                className="flex-1 inline-flex items-center justify-center gap-2 rounded-2xl bg-wingo-600 py-3 text-sm font-bold text-white hover:bg-wingo-700 disabled:opacity-50"
               >
                 {satinAlMutation.isPending ? (
                   <Loader2 className="w-4 h-4 animate-spin" />

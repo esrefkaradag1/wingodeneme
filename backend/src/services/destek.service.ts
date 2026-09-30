@@ -151,6 +151,15 @@ export async function destekTalebiDetay(kullaniciId: string, talepId: string) {
 
   const ogrenciId = await ogrenciProfilIdGetir(kullaniciId);
   if (talep.ogrenciId !== ogrenciId) throw new AppHatasi('Yetkisiz', 403);
+
+  // Öğrenci talebi açınca destek bildirimlerini okundu say (rozet temizlensin)
+  await prisma.bildirim
+    .updateMany({
+      where: { kullaniciId, okundu: false, tur: 'destek' },
+      data: { okundu: true },
+    })
+    .catch(() => undefined);
+
   return talep;
 }
 

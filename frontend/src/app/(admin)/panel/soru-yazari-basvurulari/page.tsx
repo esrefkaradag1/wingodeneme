@@ -11,6 +11,7 @@ import {
   Building2,
   CalendarDays,
   Clock,
+  Copy,
   ExternalLink,
   GraduationCap,
   Loader2,
@@ -51,6 +52,22 @@ type Basvuru = {
   adminNotu: string | null;
   kararTarihi: string | null;
   olusturuldu: string;
+  hesap: {
+    kullaniciId: string;
+    rol: 'TEACHER' | 'KOC';
+    rolEtiket: string;
+    email: string;
+    referansKod: string | null;
+    indirimKodlari: Array<{
+      id: string;
+      kod: string;
+      indirimTipi: 'YUZDE' | 'TUTAR';
+      indirimDegeri: number;
+      komisyonTipi: 'YUZDE' | 'TUTAR';
+      komisyonDegeri: number;
+      aktif: boolean;
+    }>;
+  } | null;
 };
 
 const SEKMELER: Array<{ deger: Durum | ''; etiket: string; ikon: typeof Clock }> = [
@@ -91,11 +108,27 @@ function yasHesapla(iso: string | null): number | null {
   return Math.floor((Date.now() - new Date(iso).getTime()) / (365.25 * 24 * 60 * 60 * 1000));
 }
 
+function oranMetni(tip: 'YUZDE' | 'TUTAR', deger: number) {
+  return tip === 'TUTAR' ? tl(deger) : `%${deger}`;
+}
+
+function kodOner(ad: string, soyad: string) {
+  const tr: Record<string, string> = { ç: 'c', ğ: 'g', ı: 'i', ö: 'o', ş: 's', ü: 'u' };
+  const ham = `${soyad}${ad}`
+    .toLocaleLowerCase('tr')
+    .replace(/[çğıöşü]/g, (c) => tr[c] || c)
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '')
+    .slice(0, 12);
+  return ham.length >= 3 ? ham : 'WINGO';
+}
+
 export default function SoruYazariBasvurulariSayfasi() {
   const qc = useQueryClient();
   const [sekme, setSekme] = useState<Durum | ''>('YENI');
   const [q, setQ] = useState('');
   const [notModal, setNotModal] = useState<{ basvuru: Basvuru; durum: Durum } | null>(null);
+  const [kabulModal, setKabulModal] = useState<Basvuru | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ['soru-yazari-basvurulari', sekme, q],
@@ -141,8 +174,8 @@ export default function SoruYazariBasvurulariSayfasi() {
           </div>
           <h1 className="text-3xl font-bold tracking-tight">Soru Yazarı Başvuruları</h1>
           <p className="mt-3 max-w-2xl text-sm leading-relaxed text-slate-400">
-            «Bizimle çalışmak ister misiniz» formundan gelen öğretmen başvuruları. Branş, eğitim bilgisi ve soru
-            başına ücret talebini karşılaştırıp değerlendirin.
+            Başvuruyu öğretmen veya koç hesabı olarak kabul edin. Kabul sırasında öğrenci indirim kodu ve
+            komisyon oranı da tanımlanır.
           </p>
           <p className="mt-2 text-xs font-semibold text-slate-500">Toplam {toplam} başvuru</p>
         </div>
@@ -311,6 +344,30 @@ export default function SoruYazariBasvurulariSayfasi() {
                     {b.aciklama}
                   </p>
                 )}
+                {b.hesap && (
+                  <div className="mt-3 rounded-xl border border-emerald-100 bg-emerald-50/70 px-4 py-3">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-emerald-700">
+                      {b.hesap.rolEtiket} hesabı · {b.hesap.email}
+                      {b.hesap.referansKod ? ` · referans ${b.hesap.referansKod}` : ''}
+                    </p>
+                    {b.hesap.indirimKodlari.length > 0 ? (
+                      <ul className="mt-2 space-y-1">
+                        {b.hesap.indirimKodlari.map((k) => (
+                          <li key={k.id} className="text-xs font-bold text-emerald-900">
+                            {k.kod}
+                            <span className="ml-2 font-semibold text-emerald-700">
+                              indirim {oranMetni(k.indirimTipi, k.indirimDegeri)} · komisyon{' '}
+                              {oranMetni(k.komisyonTipi, k.komisyonDegeri)}
+                              {k.aktif ? '' : ' · pasif'}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="mt-1 text-xs text-emerald-800">Henüz indirim kodu yok.</p>
+                    )}
+                  </div>
+                )}
                 {b.adminNotu && (
                   <p className="mt-2 rounded-xl border border-amber-100 bg-amber-50 px-4 py-2.5 text-xs text-amber-800">
                     <span className="font-bold">Yönetici notu: </span>
@@ -353,12 +410,12 @@ export default function SoruYazariBasvurulariSayfasi() {
                         Görüşüldü
                       </button>
                     )}
-                    {b.durum !== 'KABUL' && (
+                    {b.durum !== 'RED' && (
                       <button
-                        onClick={() => setNotModal({ basvuru: b, durum: 'KABUL' })}
+                        onClick={() => setKabulModal(b)}
                         className="rounded-xl bg-emerald-600 px-3.5 py-2 text-xs font-bold text-white hover:bg-emerald-700"
                       >
-                        Kabul et
+                        {b.hesap ? 'İndirim kodu ekle' : 'Öğretmen / koç olarak kabul et'}
                       </button>
                     )}
                     {b.durum !== 'RED' && (
@@ -388,13 +445,238 @@ export default function SoruYazariBasvurulariSayfasi() {
 
       {notModal && (
         <NotModal
-          baslik={notModal.durum === 'KABUL' ? 'Başvuruyu kabul et' : 'Başvuruyu reddet'}
+          baslik="Başvuruyu reddet"
           isim={`${notModal.basvuru.ad} ${notModal.basvuru.soyad}`}
           bekliyor={durumMut.isPending}
           kapat={() => setNotModal(null)}
           kaydet={(not) => durumMut.mutate({ id: notModal.basvuru.id, durum: notModal.durum, not })}
         />
       )}
+
+      {kabulModal && (
+        <KabulModal
+          basvuru={kabulModal}
+          kapat={() => setKabulModal(null)}
+          bitti={() => {
+            setKabulModal(null);
+            tazele();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+type KabulSonuc = {
+  yeniHesap: boolean;
+  geciciSifre: string | null;
+  epostaGonderildi: boolean;
+  referansKod: string | null;
+  indirimKodu: { kod: string; indirimTipi: 'YUZDE' | 'TUTAR'; indirimDegeri: number; komisyonTipi: 'YUZDE' | 'TUTAR'; komisyonDegeri: number };
+};
+
+function KabulModal({
+  basvuru,
+  kapat,
+  bitti,
+}: {
+  basvuru: Basvuru;
+  kapat: () => void;
+  bitti: () => void;
+}) {
+  const hesapVar = Boolean(basvuru.hesap);
+  const [rol, setRol] = useState<'TEACHER' | 'KOC'>(basvuru.hesap?.rol === 'KOC' ? 'KOC' : 'TEACHER');
+  const [kod, setKod] = useState(kodOner(basvuru.ad, basvuru.soyad));
+  const [indirimTipi, setIndirimTipi] = useState<'YUZDE' | 'TUTAR'>('YUZDE');
+  const [indirimDegeri, setIndirimDegeri] = useState('10');
+  const [komisyonTipi, setKomisyonTipi] = useState<'YUZDE' | 'TUTAR'>('YUZDE');
+  const [komisyonDegeri, setKomisyonDegeri] = useState('10');
+  const [not, setNot] = useState(basvuru.adminNotu || '');
+  const [sonuc, setSonuc] = useState<KabulSonuc | null>(null);
+
+  const mut = useMutation({
+    mutationFn: () =>
+      soruYazariApi.adminKabul(basvuru.id, {
+        rol,
+        kod: kod.trim(),
+        indirimTipi,
+        indirimDegeri: Number(indirimDegeri),
+        komisyonTipi,
+        komisyonDegeri: Number(komisyonDegeri),
+        adminNotu: not.trim(),
+      }),
+    onSuccess: (res) => {
+      const veri = res.data.veri as KabulSonuc;
+      setSonuc(veri);
+      toast.basarili(veri.yeniHesap ? 'Hesap açıldı, kod ve komisyon tanımlandı' : 'İndirim kodu ve komisyon tanımlandı');
+    },
+    onError: (e) => toast.hata(hataMesaji(e, 'Kabul tamamlanamadı')),
+  });
+
+  const kopyala = async (metin: string) => {
+    try {
+      await navigator.clipboard.writeText(metin);
+      toast.basarili('Kopyalandı');
+    } catch {
+      toast.hata('Kopyalanamadı');
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4">
+      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl">
+        <h2 className="text-lg font-black text-gray-900">
+          {hesapVar ? 'İndirim kodu ve komisyon' : 'Öğretmen veya koç olarak kabul et'}
+        </h2>
+        <p className="mt-1 text-xs text-gray-500">
+          {basvuru.ad} {basvuru.soyad} · {basvuru.email}
+        </p>
+
+        {sonuc ? (
+          <div className="mt-4 space-y-3">
+            <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+              <p className="font-black">Kod: {sonuc.indirimKodu.kod}</p>
+              <p className="mt-1 text-xs font-semibold">
+                Öğrenci indirimi {oranMetni(sonuc.indirimKodu.indirimTipi, sonuc.indirimKodu.indirimDegeri)} · komisyon{' '}
+                {oranMetni(sonuc.indirimKodu.komisyonTipi, sonuc.indirimKodu.komisyonDegeri)}
+              </p>
+              {sonuc.referansKod && <p className="mt-1 text-xs font-semibold">Referans kodu: {sonuc.referansKod}</p>}
+              {sonuc.epostaGonderildi ? (
+                <p className="mt-2 text-xs">Bilgiler e-posta ile de gönderildi.</p>
+              ) : (
+                <p className="mt-2 text-xs">E-posta gönderilemedi. Giriş bilgisini buradan iletin.</p>
+              )}
+            </div>
+            {sonuc.yeniHesap && sonuc.geciciSifre && (
+              <div className="flex items-center justify-between gap-3 rounded-2xl border border-gray-200 px-4 py-3">
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Geçici şifre</p>
+                  <p className="font-mono text-lg font-black text-gray-900">{sonuc.geciciSifre}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => kopyala(sonuc.geciciSifre || '')}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-gray-200 px-3 py-2 text-xs font-bold text-gray-700"
+                >
+                  <Copy className="h-3.5 w-3.5" /> Kopyala
+                </button>
+              </div>
+            )}
+            <button
+              onClick={bitti}
+              className="w-full rounded-2xl bg-slate-900 px-4 py-3 text-sm font-bold text-white"
+            >
+              Tamam
+            </button>
+          </div>
+        ) : (
+          <>
+            {!hesapVar && (
+              <div className="mt-4 grid grid-cols-2 gap-2">
+                {(
+                  [
+                    ['TEACHER', 'Öğretmen'],
+                    ['KOC', 'Koç'],
+                  ] as const
+                ).map(([deger, etiket]) => (
+                  <button
+                    key={deger}
+                    type="button"
+                    onClick={() => setRol(deger)}
+                    className={`rounded-2xl border px-3 py-3 text-sm font-black ${
+                      rol === deger ? 'border-slate-900 bg-slate-900 text-white' : 'border-gray-200 text-gray-600'
+                    }`}
+                  >
+                    {etiket}
+                  </button>
+                ))}
+              </div>
+            )}
+            {hesapVar && (
+              <p className="mt-3 rounded-xl bg-gray-50 px-3 py-2 text-xs font-bold text-gray-600">
+                Mevcut hesap: {basvuru.hesap?.rolEtiket}. Yeni kod bu hesaba yazılır.
+              </p>
+            )}
+
+            <label className="mt-4 block text-[10px] font-bold uppercase tracking-widest text-gray-400">
+              İndirim kodu
+              <input
+                value={kod}
+                onChange={(e) => setKod(e.target.value.toUpperCase())}
+                className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm font-black tracking-wide text-gray-900"
+              />
+            </label>
+
+            <div className="mt-3 grid grid-cols-2 gap-3">
+              <label className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
+                Öğrenci indirimi
+                <div className="mt-1 flex gap-1">
+                  <input
+                    type="number"
+                    min={1}
+                    value={indirimDegeri}
+                    onChange={(e) => setIndirimDegeri(e.target.value)}
+                    className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm font-bold"
+                  />
+                  <select
+                    value={indirimTipi}
+                    onChange={(e) => setIndirimTipi(e.target.value as 'YUZDE' | 'TUTAR')}
+                    className="rounded-xl border border-gray-200 px-2 text-xs font-bold"
+                  >
+                    <option value="YUZDE">%</option>
+                    <option value="TUTAR">₺</option>
+                  </select>
+                </div>
+              </label>
+              <label className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
+                Komisyon
+                <div className="mt-1 flex gap-1">
+                  <input
+                    type="number"
+                    min={0}
+                    value={komisyonDegeri}
+                    onChange={(e) => setKomisyonDegeri(e.target.value)}
+                    className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm font-bold"
+                  />
+                  <select
+                    value={komisyonTipi}
+                    onChange={(e) => setKomisyonTipi(e.target.value as 'YUZDE' | 'TUTAR')}
+                    className="rounded-xl border border-gray-200 px-2 text-xs font-bold"
+                  >
+                    <option value="YUZDE">%</option>
+                    <option value="TUTAR">₺</option>
+                  </select>
+                </div>
+              </label>
+            </div>
+            <p className="mt-2 text-[11px] leading-relaxed text-gray-500">
+              Öğrenci bu kodu ödemede girer. İndirim fiyattan düşer, komisyon {rol === 'KOC' ? 'koça' : 'öğretmene'} yazılır.
+            </p>
+
+            <textarea
+              value={not}
+              onChange={(e) => setNot(e.target.value)}
+              rows={2}
+              placeholder="Karar notu (opsiyonel)"
+              className="mt-3 w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm"
+            />
+
+            <div className="mt-4 flex gap-2">
+              <button onClick={kapat} className="flex-1 rounded-2xl border border-gray-200 px-4 py-3 text-sm font-bold text-gray-600">
+                Vazgeç
+              </button>
+              <button
+                onClick={() => mut.mutate()}
+                disabled={mut.isPending || !kod.trim() || Number(indirimDegeri) <= 0}
+                className="flex-[2] inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white disabled:opacity-50"
+              >
+                {mut.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+                {hesapVar ? 'Kodu tanımla' : 'Kabul et ve tanımla'}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }

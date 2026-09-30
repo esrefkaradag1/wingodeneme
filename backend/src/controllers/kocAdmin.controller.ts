@@ -15,7 +15,7 @@ import {
   adminKocYetkiKaldir,
   adminKocYetkiVer,
 } from '../services/koc.service';
-import { adminKurumHesabiOlustur } from '../services/kurum.service';
+import { adminKurumHesabiOlustur, adminKurumSifreSifirla } from '../services/kurum.service';
 
 function metin(deger: unknown): string | undefined {
   return typeof deger === 'string' ? deger : undefined;
@@ -172,6 +172,15 @@ export async function adminKurumOlusturController(req: AuthRequest, res: Respons
       demoGun: demoGun as number | string | null | undefined,
     });
     res.status(201).json({ basarili: true, veri });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function adminKurumSifreSifirlaController(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const veri = await adminKurumSifreSifirla(req.params.kocId);
+    res.json({ basarili: true, veri });
   } catch (err) {
     next(err);
   }

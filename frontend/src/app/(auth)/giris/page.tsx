@@ -63,9 +63,9 @@ const ROLLER: {
   },
   {
     id: 'koc',
-    etiket: 'Koç',
+    etiket: 'Öğrt./Koç',
     icon: UserRound,
-    alt: 'Öğrencilerinizi bağlayın, analiz ve sonuç paneline giriş yapın.',
+    alt: 'Öğretmen veya koç hesabınızla giriş yapın. Koç paneline veya (soru yazarı) öğretmen paneline yönlendirilirsiniz.',
     kayitHref: '/kayit/koc',
     kayitEtiket: 'Koç kaydı',
   },
@@ -81,7 +81,7 @@ const ROLLER: {
     id: 'panel',
     etiket: 'Panel',
     icon: Shield,
-    alt: 'Yönetici veya soru yazarı hesabınızla yönetim paneline girin.',
+    alt: 'Yönetici hesabınızla yönetim paneline girin.',
     kayitHref: '/kayit/ogretmen',
     kayitEtiket: 'Öğretmen kaydı',
   },
@@ -161,7 +161,7 @@ function GirisSayfasiIcerik() {
               brans: u.brans ?? u.adminProfil?.brans ?? undefined,
               branslar: u.branslar ?? branslarParse(u.adminProfil?.brans),
               izinliDersler: u.izinliDersler,
-              ogretimTuru: (u.ogrenciProfil?.ogretimTuru ?? u.adminProfil?.ogretimTuru) as 'YKS' | 'LGS' | undefined,
+              ogretimTuru: u.ogrenciProfil?.ogretimTuru ?? u.adminProfil?.ogretimTuru ?? undefined,
               referansKod: u.kocProfil?.referansKod,
               kocTipi: u.kocProfil?.tip,
             },
@@ -218,8 +218,8 @@ function GirisSayfasiIcerik() {
       solFiligranSag={kpss ? 'Deneme' : 'LGS'}
     >
       <div className="w-full max-w-md mx-auto lg:mx-0 lg:max-w-none">
-        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">Tekrar Hoş Geldiniz!</h1>
-        <p className="mt-2 text-sm text-white/45 leading-relaxed">{seciliRol.alt}</p>
+        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-edu-ink">Tekrar Hoş Geldiniz!</h1>
+        <p className="mt-2 text-sm text-edu-muted leading-relaxed">{seciliRol.alt}</p>
 
         {/* Rol seçici */}
         <div
@@ -240,9 +240,9 @@ function GirisSayfasiIcerik() {
                 className={`flex flex-col items-center gap-1.5 rounded-2xl border px-1 py-2.5 sm:py-3 transition-all cursor-pointer ${
                   aktif
                     ? kpss
-                      ? 'border-emerald-400/60 bg-emerald-500/10 text-emerald-200 shadow-[0_0_0_1px_rgba(52,211,153,0.15)]'
-                      : 'border-[#2ABBA7]/55 bg-[#2ABBA7]/10 text-[#8FE4D8] shadow-[0_0_0_1px_rgba(42,187,167,0.2)]'
-                    : 'border-white/10 bg-white/[0.03] text-white/45 hover:border-white/20 hover:text-white/70'
+                      ? 'border-emerald-400 bg-emerald-50 text-emerald-800 shadow-sm'
+                      : 'border-wingo-400 bg-wingo-50 text-wingo-800 shadow-sm'
+                    : 'border-edu-line bg-slate-50 text-edu-muted hover:border-edu-line hover:text-edu-muted'
                 }`}
               >
                 <Icon className={`h-[18px] w-[18px] ${aktif ? '' : 'opacity-80'}`} />
@@ -254,7 +254,7 @@ function GirisSayfasiIcerik() {
 
         <form onSubmit={handleSubmit(onSubmit)} className="mt-7 space-y-4">
           <div>
-            <label htmlFor="giris-email" className="mb-1.5 block text-sm font-medium text-white/70">
+            <label htmlFor="giris-email" className="mb-1.5 block text-sm font-medium text-edu-muted">
               E-posta Adresi
             </label>
             <input
@@ -269,7 +269,7 @@ function GirisSayfasiIcerik() {
           </div>
 
           <div>
-            <label htmlFor="giris-sifre" className="mb-1.5 block text-sm font-medium text-white/70">
+            <label htmlFor="giris-sifre" className="mb-1.5 block text-sm font-medium text-edu-muted">
               Şifre
             </label>
             <div className="relative">
@@ -284,7 +284,7 @@ function GirisSayfasiIcerik() {
               <button
                 type="button"
                 onClick={() => setSifreGoster((v) => !v)}
-                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-white/40 hover:text-white/80 transition-colors cursor-pointer"
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-edu-muted hover:text-edu-ink transition-colors cursor-pointer"
                 aria-label={sifreGoster ? 'Şifreyi gizle' : 'Şifreyi göster'}
               >
                 {sifreGoster ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -292,7 +292,7 @@ function GirisSayfasiIcerik() {
             </div>
             {errors.sifre && <p className="mt-1.5 text-sm text-red-400">{errors.sifre.message}</p>}
             {rol === 'veli' && (
-              <p className="mt-2 text-xs text-white/35 leading-relaxed">
+              <p className="mt-2 text-xs text-edu-muted leading-relaxed">
                 Veli şifresi kayıtta belirlenir; belirtilmezse telefonun son 6 hanesi kullanılır.
               </p>
             )}
@@ -304,11 +304,11 @@ function GirisSayfasiIcerik() {
                 type="checkbox"
                 checked={beniHatirla}
                 onChange={(e) => setBeniHatirla(e.target.checked)}
-                className={`h-4 w-4 rounded border-white/20 bg-white/5 ${
+                className={`h-4 w-4 rounded border-edu-line bg-white/5 ${
                   kpss ? 'accent-emerald-500' : 'accent-[#2ABBA7]'
                 }`}
               />
-              <span className="text-sm text-white/55">Beni hatırla</span>
+              <span className="text-sm text-edu-muted">Beni hatırla</span>
             </label>
             <Link href="/sifremi-unuttum" className={`text-sm transition-colors ${vurgu}`}>
               Şifremi unuttum?
@@ -322,37 +322,82 @@ function GirisSayfasiIcerik() {
 
         <div className="relative my-6">
           <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-white/10" />
+            <div className="w-full border-t border-edu-line" />
           </div>
           <div className="relative flex justify-center">
-            <span className="bg-[#0c0c16] px-3 text-xs uppercase tracking-wider text-white/35">veya</span>
+            <span className="bg-white px-3 text-xs uppercase tracking-wider text-edu-muted">veya</span>
           </div>
         </div>
 
         <div className="grid grid-cols-2 gap-3">
-          <Link
-            href={kayitHref}
-            className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/12 bg-transparent px-3 py-3 text-sm font-medium text-white/75 transition hover:border-white/25 hover:bg-white/[0.04] hover:text-white cursor-pointer"
-          >
-            <UserPlus className="h-4 w-4 shrink-0 opacity-70" />
-            <span className="truncate">{seciliRol.kayitEtiket || 'Kayıt ol'}</span>
-          </Link>
+          {rol === 'koc' ? (
+            <>
+              <Link
+                href="/kayit/koc"
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-edu-line bg-transparent px-3 py-3 text-sm font-medium text-edu-muted transition hover:border-edu-line hover:bg-edu-mint hover:text-edu-ink cursor-pointer"
+              >
+                <UserPlus className="h-4 w-4 shrink-0 opacity-70" />
+                <span className="truncate">Koç kaydı</span>
+              </Link>
+              <Link
+                href="/kayit/ogretmen"
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-edu-line bg-transparent px-3 py-3 text-sm font-medium text-edu-muted transition hover:border-edu-line hover:bg-edu-mint hover:text-edu-ink cursor-pointer"
+              >
+                <UserPlus className="h-4 w-4 shrink-0 opacity-70" />
+                <span className="truncate">Öğretmen kaydı</span>
+              </Link>
+            </>
+          ) : (
+            <>
+              <Link
+                href={kayitHref}
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-edu-line bg-transparent px-3 py-3 text-sm font-medium text-edu-muted transition hover:border-edu-line hover:bg-edu-mint hover:text-edu-ink cursor-pointer"
+              >
+                <UserPlus className="h-4 w-4 shrink-0 opacity-70" />
+                <span className="truncate">{seciliRol.kayitEtiket || 'Kayıt ol'}</span>
+              </Link>
+              <a
+                href="https://wingolink.com.tr"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-edu-line bg-transparent px-3 py-3 text-sm font-medium text-edu-muted transition hover:border-edu-line hover:bg-edu-mint hover:text-edu-ink cursor-pointer"
+              >
+                <ExternalLink className="h-4 w-4 shrink-0 opacity-70" />
+                Wingolink
+              </a>
+            </>
+          )}
+        </div>
+
+        {rol === 'koc' && (
           <a
             href="https://wingolink.com.tr"
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/12 bg-transparent px-3 py-3 text-sm font-medium text-white/75 transition hover:border-white/25 hover:bg-white/[0.04] hover:text-white cursor-pointer"
+            className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-edu-line bg-transparent px-3 py-3 text-sm font-medium text-edu-muted transition hover:border-edu-line hover:bg-edu-mint hover:text-edu-ink cursor-pointer"
           >
             <ExternalLink className="h-4 w-4 shrink-0 opacity-70" />
             Wingolink
           </a>
-        </div>
+        )}
 
-        <p className="mt-6 text-center text-sm text-white/40">
+        <p className="mt-6 text-center text-sm text-edu-muted">
           Hesabınız yok mu?{' '}
-          <Link href={kayitHref} className={`font-semibold ${vurgu}`}>
-            {seciliRol.kayitEtiket || 'Kayıt ol'}
-          </Link>
+          {rol === 'koc' ? (
+            <>
+              <Link href="/kayit/koc" className={`font-semibold ${vurgu}`}>
+                Koç kaydı
+              </Link>
+              {' · '}
+              <Link href="/kayit/ogretmen" className={`font-semibold ${vurgu}`}>
+                Öğretmen kaydı
+              </Link>
+            </>
+          ) : (
+            <Link href={kayitHref} className={`font-semibold ${vurgu}`}>
+              {seciliRol.kayitEtiket || 'Kayıt ol'}
+            </Link>
+          )}
         </p>
       </div>
     </AuthKabugu>
@@ -361,7 +406,7 @@ function GirisSayfasiIcerik() {
 
 export default function GirisSayfasi() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-[#070713]" />}>
+    <Suspense fallback={<div className="min-h-screen bg-edu-bg" />}>
       <GirisSayfasiIcerik />
     </Suspense>
   );

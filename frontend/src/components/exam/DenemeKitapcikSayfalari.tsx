@@ -192,17 +192,39 @@ export function DenemeKitapcikSayfalari({
               />
             )}
 
-            <div className={ikiSutun ? 'deneme-iki-sutun' : 'deneme-tek-sutun'}>
-              {p.sorular.map((soru) => (
-                <SoruKarti
-                  key={soru.id}
-                  soru={soru}
-                  secilen={null}
-                  onSec={() => {}}
-                  saltOkunur
-                />
-              ))}
-            </div>
+            {ikiSutun ? (
+              <div className="deneme-iki-sutun">
+                {(() => {
+                  const orta = Math.ceil(p.sorular.length / 2);
+                  const kolonlar = [p.sorular.slice(0, orta), p.sorular.slice(orta)];
+                  return kolonlar.map((kolon, kolonIdx) => (
+                    <div key={kolonIdx} className="deneme-sutun">
+                      {kolon.map((soru) => (
+                        <SoruKarti
+                          key={soru.id}
+                          soru={soru}
+                          secilen={null}
+                          onSec={() => {}}
+                          saltOkunur
+                        />
+                      ))}
+                    </div>
+                  ));
+                })()}
+              </div>
+            ) : (
+              <div className="deneme-tek-sutun">
+                {p.sorular.map((soru) => (
+                  <SoruKarti
+                    key={soru.id}
+                    soru={soru}
+                    secilen={null}
+                    onSec={() => {}}
+                    saltOkunur
+                  />
+                ))}
+              </div>
+            )}
           </div>
 
           <DenemeSayfaAlti

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 import 'katex/dist/katex.min.css';
+import { wordVmlTemizle } from '@/lib/wordHtmlTemizle';
 
 /** LLM/JSON bazen \\( veya \\sqrt için fazladan \\ üretir; KaTeX delimiter arar. */
 function katexHamHtmlNormalize(html: string): string {
@@ -27,7 +28,7 @@ export function SoruHtmlMath({ html, className }: Props) {
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    el.innerHTML = katexHamHtmlNormalize(html || '');
+    el.innerHTML = wordVmlTemizle(katexHamHtmlNormalize(html || ''));
     let iptal = false;
     void (async () => {
       try {

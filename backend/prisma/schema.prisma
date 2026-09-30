@@ -104,6 +104,7 @@ model Kullanici {
   indirimKullanimlari IndirimKoduKullanimi[] @relation("IndirimKullanan")
   /// Öğretmen olarak hak edilen komisyonlar
   komisyonlar         IndirimKoduKullanimi[] @relation("IndirimKomisyonOgretmeni")
+  soruYazariBasvurulari SoruYazariBasvurusu[]
 
   @@map("kullanicilar")
 }
@@ -987,12 +988,17 @@ model SoruYazariBasvurusu {
   durum               SoruYazariBasvuruDurum  @default(YENI)
   adminNotu           String?
   kararTarihi         DateTime?
+  /// Kabulde açılan veya bağlanan öğretmen / koç hesabı
+  kullaniciId         String?
   ipAdresi            String?
   olusturuldu         DateTime                @default(now())
   guncellendi         DateTime                @updatedAt
 
+  kullanici Kullanici? @relation(fields: [kullaniciId], references: [id], onDelete: SetNull)
+
   @@index([durum, olusturuldu(sort: Desc)])
   @@index([email])
+  @@index([kullaniciId])
   @@map("soru_yazari_basvurulari")
 }
 
@@ -1167,6 +1173,7 @@ model Paket {
   populer             Boolean     @default(false)
   etiketler           String[]    @default([]) // Örn: ["matematik", "türev"]
   disUrl              String? // wingolink.com.tr adresi
+  gorselUrl           String? // paket kartı görseli (URL veya data URL)
   oneCikan            Boolean     @default(false)
   olusturuldu         DateTime    @default(now())
   guncellendi         DateTime    @updatedAt

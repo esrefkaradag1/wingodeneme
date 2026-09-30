@@ -41,7 +41,9 @@ router.get('/hepsi', async (req: AuthRequest, res: Response, next: NextFunction)
     const yksKapsamStr = typeof yksKapsam === 'string' && yksKapsam.length > 0 ? yksKapsam : undefined;
     const dersStr = typeof ders === 'string' && ders.length > 0 ? ders : undefined;
 
-    // TEACHER ise: branş + kademe bazlı kısıt
+    // TEACHER ise: yalnızca kendi soruları + alan (TYT/AYT/LGS) filtresi.
+    // Branş/ders filtresi listede uygulanmaz — aksi halde branş değişince veya
+    // ders adı uymayınca öğretmenin kendi soruları kaybolur.
     const ogrKisit = await reqOgretmenKisit(req);
     let konuFiltre: Record<string, unknown> | undefined;
     let ogretmenSoruKisiti: Record<string, unknown> | undefined;
@@ -63,6 +65,7 @@ router.get('/hepsi', async (req: AuthRequest, res: Response, next: NextFunction)
         res.json({ basarili: true, veri: [], meta: { sayfa, boyut, toplam: 0, toplamSayfa: 0 } });
         return;
       }
+      // Ders filtresi yalnızca öğretmen açıkça ders seçtiyse (ve branşına uyuyorsa)
       if (dersStr && !ogretmenDersiUretebilirMi(ogrKisit, dersStr)) {
         res.json({ basarili: true, veri: [], meta: { sayfa, boyut, toplam: 0, toplamSayfa: 0 } });
         return;
@@ -73,7 +76,7 @@ router.get('/hepsi', async (req: AuthRequest, res: Response, next: NextFunction)
         ders: dersStr,
       });
       if (!turFiltre && !yksKapsamStr) konuWhere.ogretimTuru = { in: izinliTurler };
-      if (!dersStr) konuWhere.ders = { in: ogrKisit.dersler };
+      // Not: varsayılan ders kısıtı yok — öğretmen tüm kendi sorularını görür
       const alanKosul = soruAlanFiltreKosulu({
         konuWhere,
         aktifTur: alanTur,
@@ -265,7 +268,10 @@ router.get('/konular', async (req: AuthRequest, res: Response, next: NextFunctio
 
     // TEACHER kısıtı — branş + kademe
     const ogrKisit = await reqOgretmenKisit(req);
-    const ogretmenOgretimTuru = ogrKisit?.ogretimTuru;
+    const ogretmenTurleri = ogrKisit
+      ? (ogretmenIcinGrupTurlari(ogrKisit) ??
+        (ogrKisit.ogretimTurleri?.length ? ogrKisit.ogretimTurleri : [ogrKisit.ogretimTuru]))
+      : undefined;
     /** TYT/AYT kapsamı = sınav şablonu / tam müfredat listesi; branşla daraltma SB-2 vb. blokları düşürür */
     const yksKapsamTamListe =
       typeof yksKapsam === 'string' && (yksKapsam === 'TYT' || yksKapsam === 'AYT');
@@ -277,7 +283,7 @@ router.get('/konular', async (req: AuthRequest, res: Response, next: NextFunctio
         return;
       }
       dersFiltre = ders;
-    } else if (ogrKisit && !yksKapsamTamListe) {
+    } else if (ogrKisit && !yksKapsamTamListe && ogrKisit.dersler.length > 0) {
       dersFiltre = { in: ogrKisit.dersler };
     }
 
@@ -285,7 +291,7 @@ router.get('/konular', async (req: AuthRequest, res: Response, next: NextFunctio
       typeof yksKapsam === 'string' &&
       yksKapsam === 'AYT' &&
       !turFiltre &&
-      !ogretmenOgretimTuru;
+      !ogretmenTurleri?.length;
 
     let kpssUniteFiltre: string | undefined;
     if (typeof kpssKapsam === 'string' && turFiltre && kpssOgretimTuruMu(turFiltre)) {
@@ -296,8 +302,8 @@ router.get('/konular', async (req: AuthRequest, res: Response, next: NextFunctio
     const konuWhereTemel = {
       ...(turFiltre
         ? { ogretimTuru: ogretimTuruPrismaFiltre(turFiltre) }
-        : ogretmenOgretimTuru
-          ? { ogretimTuru: ogretimTuruPrismaFiltre(ogretmenOgretimTuru) }
+        : ogretmenTurleri?.length
+          ? { ogretimTuru: { in: ogretmenTurleri } }
           : !turFiltre && req.platformTurleri?.length
             ? { ogretimTuru: { in: req.platformTurleri } }
             : {}),

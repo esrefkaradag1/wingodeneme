@@ -2,7 +2,6 @@ import type { Metadata } from 'next';
 import { headers } from 'next/headers';
 import { LandingAnaSayfa } from '@/components/landing/LandingAnaSayfa';
 import { LandingAnaSayfaKpss } from '@/components/landing/LandingAnaSayfaKpss';
-import { SeoAnaSayfaEk } from '@/components/seo/SeoAnaSayfaEk';
 import { anaSayfaMetadata, anaSayfaMetadataKpss } from '@/lib/seo';
 import { siteIcerikGetirSSR } from '@/lib/site-icerik-server';
 
@@ -39,11 +38,5 @@ export default async function Home() {
     );
   }
 
-  return (
-    <>
-      <LandingAnaSayfa initialIcerik={siteIcerik} />
-      <SeoAnaSayfaEk />
-    </>
-  );
+  return <LandingAnaSayfa initialIcerik={siteIcerik} />;
 }
-

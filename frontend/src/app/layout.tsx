@@ -1,12 +1,28 @@
 import type { Metadata } from 'next';
 import Script from 'next/script';
+import { DM_Sans, Outfit } from 'next/font/google';
 import './globals.css';
+import '@designcodeio/threeui/style.css';
 import { Providers } from './providers';
 import NextTopLoader from 'nextjs-toploader';
 import { JsonLdScript } from '@/components/seo/JsonLdScript';
 import { SITE_NAME, anaSayfaMetadata, organizationJsonLd, siteUrl, webSiteJsonLd } from '@/lib/seo';
 
 const META_PIXEL_ID = '1313971113851668';
+
+const fontDisplay = Outfit({
+  subsets: ['latin'],
+  variable: '--font-display',
+  display: 'swap',
+  weight: ['500', '600', '700', '800'],
+});
+
+const fontBody = DM_Sans({
+  subsets: ['latin'],
+  variable: '--font-body',
+  display: 'swap',
+  weight: ['400', '500', '600', '700'],
+});
 
 export const metadata: Metadata = {
   ...anaSayfaMetadata(),
@@ -42,11 +58,11 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="tr" suppressHydrationWarning>
+    <html lang="tr" suppressHydrationWarning className={`${fontDisplay.variable} ${fontBody.variable}`}>
       <head>
         <JsonLdScript data={[organizationJsonLd(), webSiteJsonLd()]} />
       </head>
-      <body>
+      <body className="font-body">
         <Script id="meta-pixel" strategy="afterInteractive">
           {`
 !function(f,b,e,v,n,t,s)
@@ -71,7 +87,7 @@ fbq('track', 'PageView');
           />
         </noscript>
         <NextTopLoader
-          color="#4f46e5"
+          color="#0D9488"
           initialPosition={0.08}
           crawlSpeed={200}
           height={3}
@@ -79,7 +95,7 @@ fbq('track', 'PageView');
           showSpinner={false}
           easing="ease"
           speed={200}
-          shadow="0 0 10px #4f46e5,0 0 5px #4f46e5"
+          shadow="0 0 10px rgba(13,148,136,0.35)"
         />
         <Providers>{children}</Providers>
       </body>

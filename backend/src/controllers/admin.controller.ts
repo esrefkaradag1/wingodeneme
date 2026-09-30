@@ -10,7 +10,7 @@ import { soruUretimGarantiKatmani } from '../services/soruGarantiKatmani';
 import { ensureGrupBankaSinavi, GRUP_BANKA_SINAV_BASLIGI } from '../utils/grupBankaSinavi';
 import { platformOgretimTuruUyumlu } from '../utils/paketPlatformFiltre';
 import { validateUretilenSoruListesi } from '../utils/soruUretimDogrulama';
-import { ogretmenIcinGrupTurlari, reqOgretmenKisit, ogretmenBransKayitNormalize, ogretmenBranslarByTurNormalize, ogretmenSoruIslemIzni, ogretmenSoruIdsIslemIzni, ogretmenKendiSorulariWhere, ogretmenSinavAtamaOnayEngeli, ogretmenSinavTuruneErisebilir, ogretmenKonuUretebilirMi } from '../services/ogretmenSinirlama';
+import { ogretmenIcinGrupTurlari, reqOgretmenKisit, ogretmenBransKayitNormalize, ogretmenBranslarByTurNormalize, ogretmenSoruIslemIzni, ogretmenSoruIdsIslemIzni, ogretmenKendiSorulariWhere, ogretmenSinavAtamaOnayEngeli, ogretmenSinavTuruneErisebilir, ogretmenKonuUretebilirMi, YKS_BRANSLARI, LGS_BRANSLARI, KPSS_BRANSLARI } from '../services/ogretmenSinirlama';
 import { kpssUcretsizSinavTopluAta, kpssUcretsizSinavAtaOgrenciArkaPlan } from '../services/kpssKademeSinavAtama.service';
 import { grupOgretmenFiltreyeUygun, ogretimTuruPrismaFiltre } from '../utils/grupOgretimTuru';
 import {
@@ -1001,6 +1001,16 @@ function ogretimTuruKademeAnahtari(tur: OgretimTuru): string {
   return tur;
 }
 
+/** Kurum hesabı + o kuruma bağlı öğrenciler */
+function kurumBaglantisiWhere(kocId: string): Prisma.KullaniciWhereInput {
+  return {
+    OR: [
+      { ogrenciProfil: { is: { kocId } } },
+      { kocProfil: { is: { id: kocId } } },
+    ],
+  };
+}
+
 export async function kullanicilarOzetController(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   try {
     if (req.kullanici?.rol === 'TEACHER') {
@@ -1011,13 +1021,22 @@ export async function kullanicilarOzetController(req: AuthRequest, res: Response
     const rolParam = typeof req.query.rol === 'string' ? req.query.rol.trim() : '';
     const rolFiltre: Rol | null =
       ['OGRENCI', 'VELI', 'TEACHER', 'ADMIN', 'SUPER_ADMIN'].includes(rolParam) ? (rolParam as Rol) : null;
+    const kocIdParam = typeof req.query.kocId === 'string' ? req.query.kocId.trim() : '';
 
     const platformTurleri = req.platformTurleri || [];
     const mevcutKullaniciId = req.kullanici?.id || req.kullanici?.userId;
 
     const platformWhereParcalari: Prisma.KullaniciWhereInput[] = [];
     if (platformTurleri.length > 0) {
-      platformWhereParcalari.push(kullaniciOgretimTuruEslesmeWhere(platformTurleri, mevcutKullaniciId));
+      const platformWhere = kullaniciOgretimTuruEslesmeWhere(platformTurleri, mevcutKullaniciId);
+      platformWhereParcalari.push(
+        kocIdParam
+          ? { OR: [platformWhere, { kocProfil: { is: { id: kocIdParam } } }] }
+          : platformWhere,
+      );
+    }
+    if (kocIdParam) {
+      platformWhereParcalari.push(kurumBaglantisiWhere(kocIdParam));
     }
     const platformWhere: Prisma.KullaniciWhereInput =
       platformWhereParcalari.length === 0
@@ -1041,12 +1060,15 @@ export async function kullanicilarOzetController(req: AuthRequest, res: Response
 
     const ogrenciKullaniciWhere: Prisma.KullaniciWhereInput = { rol: Rol.OGRENCI };
     if (platformTurleri.length > 0) {
-      ogrenciKullaniciWhere.AND = [platformWhere];
+      ogrenciKullaniciWhere.AND = [kullaniciOgretimTuruEslesmeWhere(platformTurleri, mevcutKullaniciId)];
     }
 
     const ogrenciGruplari = await prisma.ogrenciProfil.groupBy({
       by: ['ogretimTuru'],
-      where: { kullanici: { is: ogrenciKullaniciWhere } },
+      where: {
+        ...(kocIdParam ? { kocId: kocIdParam } : {}),
+        kullanici: { is: ogrenciKullaniciWhere },
+      },
       _count: { _all: true },
     });
 
@@ -1094,14 +1116,22 @@ export async function kullanicilarListesiController(req: AuthRequest, res: Respo
     const ogretimTuruParam = typeof req.query.ogretimTuru === 'string' ? req.query.ogretimTuru.trim() : '';
     const ogretimTuruFiltre: OgretimTuru | null =
       (Object.values(OgretimTuru) as string[]).includes(ogretimTuruParam) ? (ogretimTuruParam as OgretimTuru) : null;
+    const kocIdParam = typeof req.query.kocId === 'string' ? req.query.kocId.trim() : '';
 
     const platformTurleri = req.platformTurleri || [];
     const mevcutKullaniciId = req.kullanici?.id || req.kullanici?.userId;
 
     const whereParcalari: Prisma.KullaniciWhereInput[] = [];
     if (rolFiltre) whereParcalari.push({ rol: rolFiltre });
+    if (kocIdParam) whereParcalari.push(kurumBaglantisiWhere(kocIdParam));
     if (platformTurleri.length > 0) {
-      whereParcalari.push(kullaniciOgretimTuruEslesmeWhere(platformTurleri, mevcutKullaniciId));
+      const platformWhere = kullaniciOgretimTuruEslesmeWhere(platformTurleri, mevcutKullaniciId);
+      // Kurum filtresi varken kurum hesabı platform öğretim türü eşleşmesi olmadan da gelsin
+      whereParcalari.push(
+        kocIdParam
+          ? { OR: [platformWhere, { kocProfil: { is: { id: kocIdParam } } }] }
+          : platformWhere,
+      );
     }
     if (ogretimTuruFiltre) {
       const esdegerTurler = ogretimTuruEsdegerListesi(ogretimTuruFiltre);
@@ -1161,6 +1191,16 @@ export async function kullanicilarListesiController(req: AuthRequest, res: Respo
               veli: {
                 include: {
                   kullanici: { select: { id: true, email: true } },
+                },
+              },
+              koc: {
+                select: {
+                  id: true,
+                  tip: true,
+                  kurumAdi: true,
+                  referansKod: true,
+                  ad: true,
+                  soyad: true,
                 },
               },
             },
@@ -1354,9 +1394,14 @@ export async function gruplarController(req: AuthRequest, res: Response, next: N
     const turFiltre = ogretmenIcinGrupTurlari(ogrKisit);
     const platformTurleri = (req as any).platformTurleri;
     const isKpss = (req as any).isKpssPlatform;
+    /** Soru «uygun grup» etiketleri KPSS↔YKS çapraz görünürlük içindir — platform filtreleme uygulanmaz */
+    const uygunKapsam =
+      typeof req.query.kapsam === 'string' && req.query.kapsam.trim().toLowerCase() === 'uygun';
 
     const platformKey = isKpss ? 'KPSS' : 'YKS_LGS';
-    const cacheKey = `admin:gruplar:${turFiltre ? [...turFiltre].sort().join(',') : platformKey}`;
+    const cacheKey = uygunKapsam
+      ? 'admin:gruplar:uygun:v1'
+      : `admin:gruplar:${turFiltre ? [...turFiltre].sort().join(',') : platformKey}`;
     const cached = await cache.al<any[]>(cacheKey);
     if (cached) {
       res.json({ basarili: true, veri: cached });
@@ -1364,7 +1409,7 @@ export async function gruplarController(req: AuthRequest, res: Response, next: N
     }
 
     const whereClause: any = { aktif: true };
-    if (platformTurleri) {
+    if (!uygunKapsam && platformTurleri) {
       whereClause.tur = { in: platformTurleri };
     }
 
@@ -1389,9 +1434,11 @@ export async function gruplarController(req: AuthRequest, res: Response, next: N
       orderBy: [{ tur: 'asc' }, { ad: 'asc' }],
     }) as any[];
 
-    const filtreli = turFiltre
-      ? gruplar.filter((g: any) => grupOgretmenFiltreyeUygun(g, turFiltre))
-      : gruplar;
+    // Uygun grup seçicide öğretmen kademe filtresi uygulanmaz (diğer kademe/platform etiketlenebilsin)
+    const filtreli =
+      !uygunKapsam && turFiltre
+        ? gruplar.filter((g: any) => grupOgretmenFiltreyeUygun(g, turFiltre))
+        : gruplar;
 
     const aktifIdSet = new Set(filtreli.map((g: { id: string }) => g.id));
     const bagli = filtreli.filter(
@@ -1412,7 +1459,7 @@ export async function gruplarController(req: AuthRequest, res: Response, next: N
 /** Kademeye göre gruplanmış benzersiz branş isimleri (öğretmen formu için) */
 export async function grupBransSecenekleriController(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   try {
-    const cacheKey = 'admin:gruplar:brans-secenekleri';
+    const cacheKey = 'admin:gruplar:brans-secenekleri:v2';
     const cached = await cache.al<Record<string, string[]>>(cacheKey);
     if (cached) {
       res.json({ basarili: true, veri: cached });
@@ -1429,7 +1476,17 @@ export async function grupBransSecenekleriController(req: AuthRequest, res: Resp
       gruplar.map((g) => g.parentId).filter((id): id is string => typeof id === 'string' && id.length > 0)
     );
 
-    // Grup isimlerini kademeye göre grupla, aynı isimleri deduplicate et
+    const izinliBranslar = (tur: string): Set<string> => {
+      const t = String(tur || '').toUpperCase();
+      if (t === 'LGS' || t.startsWith('SINIF_6') || t.startsWith('SINIF_7') || t === 'SINIF_8') {
+        return new Set(LGS_BRANSLARI);
+      }
+      if (t.startsWith('KPSS')) return new Set(KPSS_BRANSLARI);
+      return new Set(YKS_BRANSLARI);
+    };
+
+    // Grup isimlerini kademeye göre grupla; yalnızca gerçek branş adlarını al
+    // (TYT/AYT/9. Sınıf gibi ara düğümler branş değildir)
     const harita: Record<string, Set<string>> = {};
 
     for (const g of gruplar) {
@@ -1438,7 +1495,7 @@ export async function grupBransSecenekleriController(req: AuthRequest, res: Resp
 
       // Sadece yaprak alt grupları branş olarak ekle.
       // Ara düğümler (örn. KPSS Lisans -> Genel Yetenek -> Türkçe) branş listesinde tekrar etmesin.
-      if (g.parentId && !parentIdSet.has(g.id)) {
+      if (g.parentId && !parentIdSet.has(g.id) && izinliBranslar(tur).has(g.ad)) {
         harita[tur].add(g.ad);
       }
     }
@@ -1601,14 +1658,11 @@ function parseOgretimAdmin(v: unknown): OgretimTuru {
   return 'YKS';
 }
 
-/** Öğretmen kademesi: YKS/LGS/KPSS */
+/** Öğretmen kademesi — 6/7/9/10/11. sınıf YKS'ye ezilmez */
 function parseOgretimKademe(v: unknown): OgretimTuru {
   const s = String(v || '').trim().toUpperCase();
-  if (s === 'LGS') return 'LGS';
-  if (s === 'KPSS_LISANS') return 'KPSS_LISANS';
-  if (s === 'KPSS_ONLISANS') return 'KPSS_ONLISANS';
-  if (s === 'KPSS_ORTAOGRETIM') return 'KPSS_ORTAOGRETIM';
   if (s === 'KPSS') return 'KPSS_LISANS';
+  if (OGRETIM_DEGERLERI.includes(s as OgretimTuru)) return s as OgretimTuru;
   return 'YKS';
 }
 

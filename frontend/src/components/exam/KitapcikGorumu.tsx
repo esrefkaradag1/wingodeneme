@@ -298,9 +298,17 @@ export function KitapcikGorumu({
                       {sayfaSorulari.map((s) => renderSoru(s))}
                     </div>
 
-                    {/* Desktop: admindekiyle aynı iki-sütun akış (CSS column flow). */}
-                    <div className="hidden md:block deneme-iki-sutun">
-                      {sayfaSorulari.map((s) => renderSoru(s))}
+                    {/* Desktop: sol sütun önce dolar, metin sağ sütunun üstüne binmez */}
+                    <div className="hidden md:grid deneme-iki-sutun">
+                      {(() => {
+                        const orta = Math.ceil(sayfaSorulari.length / 2);
+                        const kolonlar = [sayfaSorulari.slice(0, orta), sayfaSorulari.slice(orta)];
+                        return kolonlar.map((kolon, kolonIdx) => (
+                          <div key={kolonIdx} className="deneme-sutun min-w-0">
+                            {kolon.map((s) => renderSoru(s))}
+                          </div>
+                        ));
+                      })()}
                     </div>
                   </>
                 );

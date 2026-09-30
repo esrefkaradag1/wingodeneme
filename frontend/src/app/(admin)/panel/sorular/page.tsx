@@ -109,18 +109,10 @@ function kullaniciBransEtiketi(k: SoruKullaniciOzet | null | undefined): string 
   return brans.split(',')[0]?.trim() || null;
 }
 
-function soruOgretmenSahibiMi(soru: Soru, userId?: string | null): boolean {
-  if (!userId) return false;
-  if (soru.olusturanId) return soru.olusturanId === userId;
-  if (soru.duzenleyenId) return soru.duzenleyenId === userId;
-  if (soru.olusturan?.id) return soru.olusturan.id === userId;
-  if (soru.duzenleyen?.id) return soru.duzenleyen.id === userId;
-  return false;
-}
-
-function soruIslemYapilabilir(soru: Soru, ogretmenModu: boolean, userId?: string | null): boolean {
-  if (!ogretmenModu) return true;
-  return soruOgretmenSahibiMi(soru, userId);
+function soruIslemYapilabilir(_soru: Soru, _ogretmenModu: boolean, _userId?: string | null): boolean {
+  // Öğretmen listesi API'de kendi sorularına kısıtlıdır; UI'da salt okunur kilidi uygulanmaz.
+  // Asıl yetki kontrolü PATCH/DELETE tarafında yapılır.
+  return true;
 }
 
 function soruUreticiEtiketi(soru: Soru): { etiket: string; sinif: string } {
@@ -443,6 +435,13 @@ export default function SorularSayfasi() {
 
   const { data: gruplarData } = useQuery({ queryKey: ['admin-gruplar'], queryFn: () => adminApi.gruplar() });
   const gruplar = gruplarData?.data?.veri || [];
+  /** KPSS↔YKS / diğer kademe etiketleme — platform filtresiz */
+  const { data: uygunGruplarData } = useQuery({
+    queryKey: ['admin-gruplar', 'uygun'],
+    queryFn: () => adminApi.gruplar({ kapsam: 'uygun' }),
+    staleTime: 60_000,
+  });
+  const uygunGrupSecenekleri = uygunGruplarData?.data?.veri || gruplar;
 
   const { data: hazirlayanlarData } = useQuery({
     queryKey: ['soru-hazirlayanlar', alanTab, secilenBaslangicTarihi, secilenBitisTarihi],
@@ -460,7 +459,7 @@ export default function SorularSayfasi() {
     hazirlayanlarData?.data?.veri || [];
 
   const { data: sorularData, isLoading } = useQuery({
-    queryKey: ['admin-sorular', alanTab, secilenDers, secilenZorluk, secilenOnay, secilenHazirlayan, secilenBaslangicTarihi, secilenBitisTarihi, sayfa, debouncedAramaMetni],
+    queryKey: ['admin-sorular', kullaniciId, alanTab, secilenDers, secilenZorluk, secilenOnay, secilenHazirlayan, secilenBaslangicTarihi, secilenBitisTarihi, sayfa, debouncedAramaMetni],
     queryFn: async () => {
       const r = await api.get('/sorular/hepsi', {
         params: { 
@@ -1018,7 +1017,7 @@ export default function SorularSayfasi() {
                  <div className="flex flex-wrap items-center gap-4 relative z-10">
                     {/* Uygun Gruplar */}
                     <div className="relative flex items-center gap-2">
-                      <span className="text-[10px] uppercase font-bold text-indigo-200 shrink-0">Uygun Gruplar:</span>
+                      <span className="text-[10px] uppercase font-bold text-indigo-200 shrink-0">Diğer gruplar:</span>
                       <button
                         type="button"
                         onClick={() => setTopluUygunGrupAcik((v) => !v)}
@@ -1032,9 +1031,9 @@ export default function SorularSayfasi() {
                         <ChevronDown className={`w-3.5 h-3.5 transition-transform ${topluUygunGrupAcik ? 'rotate-180' : ''}`} />
                       </button>
                       {topluUygunGrupAcik ? (
-                        <div className="absolute left-0 bottom-full mb-2 z-[200] w-[260px] max-h-[260px] overflow-y-auto rounded-2xl bg-white text-gray-900 shadow-2xl border border-gray-100 p-3">
+                        <div className="absolute left-0 bottom-full mb-2 z-[200] w-[340px] max-h-[320px] overflow-y-auto rounded-2xl bg-white text-gray-900 shadow-2xl border border-gray-100 p-2">
                           <UygunGrupCheckboxleri
-                            gruplar={gruplar}
+                            gruplar={uygunGrupSecenekleri}
                             seciliIds={topluUygunGrupIds}
                             onToggle={(grupId) =>
                               setTopluUygunGrupIds((prev) => uygunGrupToggle(grupId, prev))
@@ -1735,16 +1734,16 @@ export default function SorularSayfasi() {
                         </div>
                      </div>
 
-                     <div className="space-y-3">
-                        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">
-                          Uygun Öğrenci Grupları / Sınav Türleri
+                     <div className="space-y-3 rounded-2xl border-2 border-indigo-100 bg-indigo-50/40 p-4">
+                        <label className="text-[10px] font-bold text-indigo-700 uppercase tracking-widest ml-1">
+                          Diğer gruplara da ekle (uygun gruplar)
                         </label>
-                        <p className="text-[11px] text-gray-500 ml-1">
-                          Bu sorunun hangi gruplarda kullanılabileceğini işaretleyin (birden fazla seçilebilir).
-                          Bu seçim listedeki «KPSS ÖL / LİS / OÖ» müfredat rozetini değiştirmez; rozet yukarıdaki kademe + konu seçimine bağlıdır.
+                        <p className="text-[11px] text-indigo-900/70 ml-1 leading-relaxed">
+                          Bu soruyu KPSS ↔ YKS veya diğer kademe gruplarında da göstermek için işaretleyin.
+                          Birden fazla grup seçilebilir. Müfredat/konu rozetini değiştirmez.
                         </p>
                         <UygunGrupCheckboxleri
-                          gruplar={gruplar}
+                          gruplar={uygunGrupSecenekleri}
                           seciliIds={form.uygunGrupIds}
                           onToggle={(grupId) =>
                             setForm((prev) => ({
@@ -2223,36 +2222,83 @@ function UygunGrupCheckboxleri({
   seciliIds,
   onToggle,
 }: {
-  gruplar: { id: string; ad: string }[];
+  gruplar: { id: string; ad: string; tur?: string; parentId?: string | null; _count?: { children?: number } }[];
   seciliIds: string[];
   onToggle: (grupId: string) => void;
 }) {
   if (!gruplar.length) {
-    return <p className="text-xs text-gray-400 font-bold">Henüz grup tanımlanmamış.</p>;
+    return <p className="text-xs text-amber-700 font-bold">Grup listesi yüklenemedi veya henüz grup yok.</p>;
   }
+
+  const byId = new Map(gruplar.map((g) => [g.id, g]));
+  const yolEtiketi = (g: (typeof gruplar)[0]): string => {
+    const parcalar: string[] = [g.ad];
+    let p = g.parentId ? byId.get(g.parentId) : undefined;
+    let guvenlik = 0;
+    while (p && guvenlik < 4) {
+      parcalar.unshift(p.ad);
+      p = p.parentId ? byId.get(p.parentId) : undefined;
+      guvenlik += 1;
+    }
+    return parcalar.join(' › ');
+  };
+
+  const turEtiketi = (tur?: string) => {
+    const t = String(tur || '').toUpperCase();
+    if (t.startsWith('KPSS')) return t.replace('KPSS_', 'KPSS ');
+    if (t === 'YKS' || t === 'LGS') return t;
+    return t || 'Diğer';
+  };
+
+  // Üst gruplar + çocuk sayısı az olanlar öncelikli; yaprak ders gruplarını da göster ama tur'a göre grupla
+  const gruplu = gruplar.reduce<Record<string, typeof gruplar>>((acc, g) => {
+    const key = turEtiketi(g.tur);
+    if (!acc[key]) acc[key] = [];
+    acc[key].push(g);
+    return acc;
+  }, {});
+
+  const turSirasi = ['YKS', 'LGS', 'KPSS LISANS', 'KPSS ONLISANS', 'KPSS ORTAOGRETIM', 'KPSS'];
+
   return (
-    <div className="grid grid-cols-2 gap-2">
-      {gruplar.map((g) => {
-        const secili = seciliIds.includes(g.id);
-        return (
-          <label
-            key={g.id}
-            className={`flex items-center gap-2 px-3 py-2 rounded-xl border cursor-pointer transition-all text-xs font-bold ${
-              secili
-                ? 'bg-indigo-50 border-indigo-200 text-indigo-700'
-                : 'bg-gray-50 border-gray-100 text-gray-600 hover:border-indigo-100'
-            }`}
-          >
-            <input
-              type="checkbox"
-              checked={secili}
-              onChange={() => onToggle(g.id)}
-              className="w-3.5 h-3.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-            />
-            <span className="truncate">{g.ad}</span>
-          </label>
-        );
-      })}
+    <div className="space-y-3 max-h-64 overflow-y-auto rounded-xl border border-indigo-100 bg-white p-3">
+      {Object.entries(gruplu)
+        .sort(([a], [b]) => {
+          const ia = turSirasi.indexOf(a.toUpperCase());
+          const ib = turSirasi.indexOf(b.toUpperCase());
+          return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib) || a.localeCompare(b, 'tr');
+        })
+        .map(([tur, liste]) => (
+          <div key={tur} className="space-y-1.5">
+            <p className="text-[10px] font-black uppercase tracking-wider text-indigo-500 sticky top-0 bg-white/95 py-0.5">
+              {tur}
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+              {liste.map((g) => {
+                const secili = seciliIds.includes(g.id);
+                return (
+                  <label
+                    key={g.id}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-xl border cursor-pointer transition-all text-xs font-bold ${
+                      secili
+                        ? 'bg-indigo-50 border-indigo-300 text-indigo-800'
+                        : 'bg-gray-50 border-gray-100 text-gray-700 hover:border-indigo-200'
+                    }`}
+                    title={yolEtiketi(g)}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={secili}
+                      onChange={() => onToggle(g.id)}
+                      className="w-3.5 h-3.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 shrink-0"
+                    />
+                    <span className="truncate">{yolEtiketi(g)}</span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+        ))}
     </div>
   );
 }

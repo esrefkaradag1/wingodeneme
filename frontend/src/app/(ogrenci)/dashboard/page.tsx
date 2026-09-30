@@ -35,7 +35,7 @@ import {
   kpssMi,
   kademeTemasi,
 } from '@/lib/ogrenciKademe';
-import { isKpssMode } from '@/lib/platform';
+import { kpssOrtami } from '@/lib/platform';
 
 type DuyuruAlici = {
   id: string;
@@ -53,10 +53,13 @@ type DestekTalebi = {
 
 export default function DashboardSayfasi() {
   const { kullanici, girisYap } = useAuthStore();
-  const { data: analizData } = useQuery({ queryKey: ['analiz'], queryFn: () => analizApi.benim() });
-  const panelKpss = isKpssMode();
+  const { data: analizData } = useQuery({
+    queryKey: ['analiz', kullanici?.ogretimTuru || ''],
+    queryFn: () => analizApi.benim(),
+  });
+  const panelKpss = kpssOrtami(kullanici?.ogretimTuru);
   const { data: sinavlarData } = useQuery({
-    queryKey: ['sinavlar', panelKpss ? 'kpss' : 'yks'],
+    queryKey: ['sinavlar', panelKpss ? 'kpss' : 'yks', kullanici?.ogretimTuru || ''],
     queryFn: () => sinavApi.liste(),
   });
   const { data: oneriData } = useQuery({ queryKey: ['oneriler'], queryFn: () => aiApi.oneriler() });

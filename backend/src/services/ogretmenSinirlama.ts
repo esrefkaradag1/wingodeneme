@@ -108,14 +108,31 @@ export function bransIcinDersler(bransHam: string): string[] {
   return [...dersler];
 }
 
+const OGRETMEN_KADEME_KODLARI = new Set<string>([
+  'YKS',
+  'LGS',
+  'KPSS_LISANS',
+  'KPSS_ONLISANS',
+  'KPSS_ORTAOGRETIM',
+  'SINIF_6',
+  'SINIF_7',
+  'SINIF_9',
+  'SINIF_10',
+  'SINIF_11',
+]);
+
 function parseOgretmenKademe(v: unknown): OgretimTuru {
   const s = String(v || '').trim().toUpperCase();
-  if (s === 'LGS') return 'LGS';
-  if (s === 'KPSS_LISANS') return 'KPSS_LISANS';
-  if (s === 'KPSS_ONLISANS') return 'KPSS_ONLISANS';
-  if (s === 'KPSS_ORTAOGRETIM') return 'KPSS_ORTAOGRETIM';
   if (s === 'KPSS') return 'KPSS_LISANS';
+  if (OGRETMEN_KADEME_KODLARI.has(s)) return s as OgretimTuru;
   return 'YKS';
+}
+
+function kademeIzinliBranslar(ogretimTuru: string): readonly string[] {
+  const ot = String(ogretimTuru || '').trim().toUpperCase();
+  if (ot === 'LGS' || ot === 'SINIF_6' || ot === 'SINIF_7') return LGS_BRANSLARI;
+  if (ot.startsWith('KPSS')) return KPSS_BRANSLARI;
+  return YKS_BRANSLARI;
 }
 
 export function parseOgretmenTurleri(v: unknown): OgretimTuru[] | null {
@@ -154,12 +171,7 @@ export function ogretmenBransKayitNormalize(
   ogretimTuru: string
 ): string {
   const ot = String(ogretimTuru || '').trim().toUpperCase();
-  const izinli =
-    ot === 'LGS'
-      ? [...LGS_BRANSLARI]
-      : ot.startsWith('KPSS')
-        ? [...KPSS_BRANSLARI]
-        : [...YKS_BRANSLARI];
+  const izinli = [...kademeIzinliBranslar(ot)];
   let liste: string[] = [];
   if (Array.isArray(girdi.branslar)) {
     liste = girdi.branslar.map(String).map((s) => s.trim()).filter(Boolean);
@@ -171,10 +183,15 @@ export function ogretmenBransKayitNormalize(
     throw new Error('En az bir branş seçin');
   }
   const gecersiz = liste.filter((b) => !(izinli as readonly string[]).includes(b));
-  if (gecersiz.length > 0) {
-    throw new Error(`Geçersiz branş: ${gecersiz.join(', ')}`);
+  // Eski kayıtlarda TYT/AYT/sınıf adı branş olarak gelmiş olabilir — yok say, yalnızca geçerli kalanları kullan
+  const temiz = liste.filter((b) => (izinli as readonly string[]).includes(b));
+  if (temiz.length === 0) {
+    if (gecersiz.length > 0) {
+      throw new Error(`Geçersiz branş: ${gecersiz.join(', ')}. Lütfen Matematik, Türkçe gibi ders seçin.`);
+    }
+    throw new Error('En az bir branş seçin');
   }
-  return branslarBirlestir(liste);
+  return branslarBirlestir(temiz);
 }
 
 /** Öğretmenin üretebileceği / görebileceği ders adı mı? (Matematik → Geometri dahil) */
@@ -364,12 +381,12 @@ export function soruWhereKisiti(kisit: OgretmenKisit | null) {
   };
 }
 
-/** Öğretmen yalnızca kendi oluşturduğu / (eski kayıt) düzenlediği soruları görür */
+/** Öğretmen yalnızca kendi oluşturduğu veya düzenlediği soruları görür */
 export function ogretmenKendiSorulariWhere(userId: string) {
   return {
     OR: [
       { olusturanId: userId },
-      { AND: [{ olusturanId: null }, { duzenleyenId: userId }] },
+      { duzenleyenId: userId },
     ],
   };
 }
@@ -381,22 +398,13 @@ type OgretmenSoruKayit = {
   konu?: { ders?: string | null; ogretimTuru?: OgretimTuru | null } | null;
 };
 
-/** TEACHER: branş + kendi hazırladığı soru kontrolü */
+/** TEACHER: kendi hazırladığı soruda işlem serbest; başkasının sorusunda branş+sahiplik */
 export async function ogretmenSoruIslemIzni(
   req: AuthRequest,
   soru: OgretmenSoruKayit,
 ): Promise<{ ok: true } | { ok: false; status: number; mesaj: string }> {
   const ogrKisit = await reqOgretmenKisit(req);
   if (!ogrKisit) return { ok: true };
-
-  if (soru.konu) {
-    if (!ogretmenKonuUretebilirMi(ogrKisit, {
-      ogretimTuru: soru.konu.ogretimTuru as OgretimTuru,
-      ders: soru.konu.ders || '',
-    })) {
-      return { ok: false, status: 403, mesaj: 'Bu soru sizin branşınıza ait değil.' };
-    }
-  }
 
   const userId = req.kullanici?.userId;
   if (!userId) {
@@ -411,6 +419,8 @@ export async function ogretmenSoruIslemIzni(
       mesaj: 'Yalnızca kendi hazırladığınız sorular üzerinde işlem yapabilirsiniz.',
     };
   }
+
+  // Kendi sorusu: branş/kademe değişmiş olsa bile düzenlenebilir
   return { ok: true };
 }
 
@@ -480,15 +490,6 @@ export async function ogretmenSoruIdsIslemIzni(
   }
 
   for (const s of sorular) {
-    if (
-      s.konu &&
-      !ogretmenKonuUretebilirMi(ogrKisit, {
-        ogretimTuru: s.konu.ogretimTuru as OgretimTuru,
-        ders: s.konu.ders || '',
-      })
-    ) {
-      return { ok: false, status: 403, mesaj: 'Seçilen sorulardan bazıları sizin branşınıza ait değil.' };
-    }
     if (!soruOgretmenSahibiMi(s, userId)) {
       return {
         ok: false,
