@@ -1,25 +1,62 @@
 #!/bin/sh
 set -u
 
-baseline() {
-  echo "Mevcut veritabani baseline ediliyor"
-  for dir in prisma/migrations/*/; do
-    name=$(basename "$dir")
-    if npx prisma migrate resolve --applied "$name"; then
-      continue
-    fi
-    npx prisma migrate resolve --rolled-back "$name" || true
-    npx prisma migrate resolve --applied "$name" || true
-  done
-}
+echo "Migrasyon durumu okunuyor"
+status=$(node <<'JS'
+const { PrismaClient } = require('@prisma/client');
+const fs = require('fs');
+const path = require('path');
 
-if output=$(npx prisma migrate deploy 2>&1); then
-  printf '%s\n' "$output"
-else
-  printf '%s\n' "$output"
-  printf '%s\n' "$output" | grep -qE 'P3005|P3009' || exit 1
-  baseline
-  npx prisma migrate deploy
-fi
+(async () => {
+  const prisma = new PrismaClient();
+  const dirs = fs.readdirSync('prisma/migrations')
+    .filter((name) => fs.existsSync(path.join('prisma/migrations', name, 'migration.sql')))
+    .sort();
+  let rows = [];
+  try {
+    rows = await prisma.$queryRawUnsafe(
+      'SELECT migration_name, finished_at, rolled_back_at FROM "_prisma_migrations"'
+    );
+  } catch (error) {
+    console.error(error.message);
+  }
+  const byName = new Map(rows.map((row) => [row.migration_name, row]));
+  for (const name of dirs) {
+    const row = byName.get(name);
+    const applied = row && row.finished_at && !row.rolled_back_at;
+    const failed = row && !row.finished_at && !row.rolled_back_at;
+    if (applied) console.log('SKIP ' + name);
+    else if (failed) console.log('FAILED ' + name);
+    else console.log('MISSING ' + name);
+  }
+  await prisma.$disconnect();
+})().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});
+JS
+)
 
+printf '%s\n' "$status"
+
+printf '%s\n' "$status" | while IFS= read -r line; do
+  case "$line" in
+    FAILED\ *)
+      name=${line#FAILED }
+      echo "Basarisiz migrasyon kapatiliyor: $name"
+      npx prisma migrate resolve --rolled-back "$name"
+      npx prisma migrate resolve --applied "$name"
+      ;;
+    MISSING\ *)
+      name=${line#MISSING }
+      echo "Uygulanmis sayiliyor: $name"
+      npx prisma migrate resolve --applied "$name"
+      ;;
+  esac
+done
+
+echo "Migrasyonlar kontrol ediliyor"
+npx prisma migrate deploy || true
+
+echo "Sunucu baslatiliyor"
 exec node dist/src/server.js
