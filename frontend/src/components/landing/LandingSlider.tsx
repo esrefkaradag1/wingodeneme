@@ -26,8 +26,14 @@ export function useLandingSlaytlari(): Slayt[] {
   );
 }
 
-/** Hero kartının içini doldurur. Yazı alanları boşsa yalnızca görsel gösterilir. */
-export function LandingSlider() {
+/** Başlığın altındaki panel kartını doldurur. Yazı boşsa yalnızca görsel gösterilir. */
+export function LandingSlider({
+  fallbackSrc,
+  fallbackAlt,
+}: {
+  fallbackSrc: string;
+  fallbackAlt: string;
+}) {
   const slaytlar = useLandingSlaytlari();
   const [index, setIndex] = useState(0);
   const [duraklat, setDuraklat] = useState(false);
@@ -46,7 +52,19 @@ export function LandingSlider() {
     return () => window.clearInterval(id);
   }, [slaytlar.length, duraklat]);
 
-  if (slaytlar.length === 0) return null;
+  if (slaytlar.length === 0) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={fallbackSrc}
+        alt={fallbackAlt}
+        decoding="async"
+        fetchPriority="high"
+        className="mx-auto block h-auto w-full object-contain object-top pt-10"
+        draggable={false}
+      />
+    );
+  }
 
   const aktif = slaytlar[index] ?? slaytlar[0];
   const git = (yon: number) => setIndex((i) => (i + yon + slaytlar.length) % slaytlar.length);
@@ -59,13 +77,13 @@ export function LandingSlider() {
     <img
       src={aktif.gorselUrl}
       alt={aktif.baslik?.trim() || ''}
-      className="absolute inset-0 h-full w-full object-cover object-center"
+      className="absolute inset-0 h-full w-full object-cover object-top"
     />
   );
 
   return (
     <div
-      className="relative h-full w-full bg-slate-100"
+      className="relative h-full w-full bg-white"
       aria-roledescription="carousel"
       aria-label="Ana sayfa slider"
       onMouseEnter={() => setDuraklat(true)}

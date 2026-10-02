@@ -19,7 +19,7 @@ function LandingIcerik() {
     <main className="min-h-screen bg-white text-slate-900 overflow-x-hidden font-body">
       <LandingNav />
       <LandingHero />
-      <div className="relative z-20 bg-white pt-10 sm:pt-14">
+      <div className="relative z-20 bg-white pt-2 sm:pt-4">
         <LandingSatisSerit />
         <Paketler />
         <Ozellikler />

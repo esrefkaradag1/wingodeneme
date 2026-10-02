@@ -292,7 +292,7 @@ export const SiteIcerikFormu = forwardRef<
                 <Kart
                   title="Ana sayfa slider"
                   icon={ImageIcon}
-                  description="Başlığın altındaki büyük görsel alanı. Hazır banner yükleyebilirsin; başlık, açıklama ve buton isteğe bağlı."
+                  description="Ana sayfada başlığın altındaki panel görselinin yerine geçer. Yüklediğin görseller o kartın içinde kayar. Yazı zorunlu değil."
                 >
                   <button
                     type="button"

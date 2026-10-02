@@ -31,17 +31,17 @@ export const ContainerScroll = ({
     return isMobile ? [0.85, 0.95] : [1, 1];
   };
 
-  const rotate = useTransform(scrollYProgress, [0, 1], [12, 0]);
+  const rotate = useTransform(scrollYProgress, [0, 1], [0, 0]);
   const scale = useTransform(scrollYProgress, [0, 1], scaleDimensions());
   const translate = useTransform(scrollYProgress, [0, 1], [0, -60]);
 
   return (
     <div
-      className="h-auto min-h-[42rem] md:min-h-[58rem] flex items-start justify-center relative px-2 pt-6 pb-10 md:px-12 md:pt-10 md:pb-16"
+      className="h-auto flex items-start justify-center relative px-2 pt-2 pb-2 md:px-12 md:pt-3"
       ref={containerRef}
     >
       <div
-        className="py-4 md:py-10 w-full relative"
+        className="pt-1 pb-6 md:pt-2 md:pb-8 w-full relative"
         style={{
           perspective: '1000px',
         }}
@@ -88,10 +88,11 @@ export const Card = ({
       style={{
         rotateX: rotate,
         scale,
+        transformOrigin: 'center top',
         boxShadow:
           '0 0 #0f2f2b1a, 0 9px 20px #0f2f2b14, 0 37px 37px #0f2f2b10, 0 84px 50px #0f2f2b0a, 0 149px 60px #0f2f2b05',
       }}
-      className="max-w-6xl xl:max-w-7xl mt-16 md:mt-24 mx-auto h-[26rem] sm:h-[32rem] md:h-[40rem] w-full border border-slate-200/90 p-1.5 md:p-4 bg-white rounded-[24px] md:rounded-[30px] shadow-2xl relative z-0"
+      className="max-w-6xl xl:max-w-7xl mt-2 md:mt-3 mx-auto h-[22rem] sm:h-[28rem] md:h-[34rem] w-full border border-slate-200/90 p-1.5 md:p-2 bg-white rounded-[24px] md:rounded-[30px] shadow-2xl relative z-0"
     >
       <div className="h-full w-full overflow-hidden rounded-2xl bg-slate-50 md:rounded-2xl">
         {children}

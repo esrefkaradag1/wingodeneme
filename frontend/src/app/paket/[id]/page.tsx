@@ -197,22 +197,27 @@ export default function PaketDetaySayfasi() {
     [seciliIds, aylikSinavlar]
   );
 
+  const ayHizalandi = useRef(false);
   useEffect(() => {
-    if (sinavlar.length === 0) return;
-    const bas = startOfMonth(takvimAy);
-    const son = endOfMonth(takvimAy);
-    const buAyda = sinavlar.some((s) =>
-      isWithinInterval(new Date(s.baslangicZamani), { start: bas, end: son })
+    if (ayHizalandi.current || sinavlar.length === 0) return;
+    ayHizalandi.current = true;
+    const simdi = new Date();
+    const sirali = [...sinavlar].sort(
+      (a, b) => new Date(a.baslangicZamani).getTime() - new Date(b.baslangicZamani).getTime()
     );
-    if (buAyda) return;
-    const gelecek = sinavlar.find((s) => new Date(s.baslangicZamani) >= new Date());
-    if (gelecek) setTakvimAy(startOfMonth(new Date(gelecek.baslangicZamani)));
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- sinavlar yüklendiğinde bir kez ay hizala
+    const hedef =
+      sirali.find((s) => new Date(s.baslangicZamani) >= simdi) ?? sirali[sirali.length - 1];
+    if (!hedef) return;
+    setTakvimAy(startOfMonth(new Date(hedef.baslangicZamani)));
   }, [sinavlar]);
 
   useEffect(() => {
-    setSinavListesiGenis(false);
-  }, [takvimAy]);
+    const anahtar = format(takvimAy, 'yyyy-MM');
+    document.getElementById(`paket-ay-${anahtar}`)?.scrollIntoView({
+      inline: 'nearest',
+      block: 'nearest',
+    });
+  }, [takvimAy, aylarOzeti.length]);
 
   const geriDonusYolu = id ? `/paket/${id}` : pathname || '/paketler';
 
@@ -738,10 +743,8 @@ export default function PaketDetaySayfasi() {
                                   <button
                                     key={format(date, 'yyyy-MM')}
                                     type="button"
-                                    onClick={() => {
-                                      setTakvimAy(date);
-                                      if (alisModu === 'paket') setAlisModu('secim');
-                                    }}
+                                    id={`paket-ay-${format(date, 'yyyy-MM')}`}
+                                    onClick={() => setTakvimAy(startOfMonth(date))}
                                     className={`shrink-0 px-3.5 py-2 rounded-xl text-xs font-bold border transition-colors ${
                                       aktif
                                         ? 'bg-wingo-600 text-white border-wingo-600 shadow-sm'

@@ -6,7 +6,7 @@ Cross-platform (iOS / Android / Web) Expo uygulaması. **Mevcut Wingo Deneme bac
 
 Varsayılan üretim:
 
-`https://backend-murex-eight-21.vercel.app/api/v1`
+`https://api.wingodeneme.com/api/v1`
 
 Değiştirmek için:
 

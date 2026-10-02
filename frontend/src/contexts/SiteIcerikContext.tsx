@@ -21,10 +21,12 @@ export function SiteIcerikProvider({
       const r = await api.get<{ basarili: boolean; veri: SiteGenelIcerik }>('/public/site-icerik');
       return r.data.veri;
     },
-    staleTime: 5 * 60 * 1000,
+    staleTime: 0,
+    refetchOnMount: 'always',
     retry: 1,
-    // SSR'de çekilen içerik varsa flicker olmadan doğrudan onunla başla.
+    // SSR içeriği ilk kare için kalsın; kayıt sonrası eski 5 dk önbelleğe takılmasın.
     initialData: initialIcerik,
+    initialDataUpdatedAt: 0,
   });
 
   const value = useMemo(

@@ -6,10 +6,8 @@ import {
   BarChart3,
   BookOpen,
   Briefcase,
-  CheckCircle2,
   Play,
   ShieldCheck,
-  Star,
   Zap,
 } from 'lucide-react';
 import { useSiteIcerik } from '@/contexts/SiteIcerikContext';
@@ -38,15 +36,12 @@ export function LandingHero() {
   const h = site.hero;
   const hizliErisim = kpss ? HIZLI_ERISIM_KPSS : HIZLI_ERISIM_YKS;
 
-  const markaAd = kpss ? 'Wingo KPSS' : site.marka.ad;
   const baslikOnce = kpss ? 'Gerçek Bir' : h.baslikOnce;
   const baslikVurgu = kpss ? 'KPSS Deneyimi' : h.baslikVurgu;
   const baslikSon = kpss ? 'Yaşayın' : h.baslikSon;
   const altMetin = kpss
-    ? 'ÖSYM tarzı GY-GK denemeleri, uzman içerik ve AI performans analizi ile memurluk yolculuğunu netleştirin.'
-    : h.altMetin;
-  const madde1 = kpss ? 'Gerçek süreli KPSS denemeleri' : h.madde1;
-  const madde2 = kpss ? 'Konuya özel AI içerik' : h.madde2;
+    ? 'ÖSYM tarzı GY-GK denemeleri ve AI performans analizi tek platformda.'
+    : 'ÖSYM/MEB tarzı kitapçık, uzman sorular ve yapay zeka analizi tek platformda.';
   const sliderVar = useLandingSlaytlari().length > 0;
 
   return (
@@ -65,58 +60,19 @@ export function LandingHero() {
         />
       </div>
 
-      <div className="relative z-10 pt-[72px]">
+      <div className="relative z-10 pt-32">
         <ContainerScroll
           titleComponent={
             <div className="px-4">
-              <div className="inline-flex items-center gap-3 rounded-full border border-slate-200/80 bg-white px-3 py-1.5 shadow-sm mb-6">
-                <div className="flex -space-x-2">
-                  {(kpss
-                    ? ['from-indigo-500 to-indigo-700', 'from-amber-400 to-amber-600', 'from-sky-400 to-sky-600']
-                    : ['from-wingo-500 to-wingo-700', 'from-sky-400 to-sky-600', 'from-orange-400 to-orange-600']
-                  ).map((c, i) => (
-                    <span
-                      key={i}
-                      className={`h-7 w-7 rounded-full bg-gradient-to-br ${c} border-2 border-white text-[10px] font-bold text-white flex items-center justify-center`}
-                    >
-                      {(kpss ? ['G', 'K', 'A'] : ['A', 'M', 'Y'])[i]}
-                    </span>
-                  ))}
-                </div>
-                <div className="flex items-center gap-1.5 pr-1">
-                  <div className="flex">
-                    {[...Array(5)].map((_, i) => (
-                      <Star key={i} className="h-3 w-3 fill-amber-400 text-amber-400" />
-                    ))}
-                  </div>
-                  <span className="text-xs font-semibold text-slate-600">
-                    4.97/5 · {kpss ? 'aday memnuniyeti' : 'öğrenci memnuniyeti'}
-                  </span>
-                </div>
-              </div>
-
-              <p className="font-display text-wingo-700 font-extrabold text-xs tracking-[0.2em] uppercase mb-3">
-                {markaAd}
-              </p>
-
-              <h1 className="font-display text-3xl sm:text-5xl md:text-[3.5rem] font-extrabold text-slate-900 leading-[1.08] tracking-tight mb-4">
+              <h1 className="font-display text-3xl sm:text-5xl md:text-[3.25rem] font-extrabold text-slate-900 leading-[1.08] tracking-tight mb-3">
                 {baslikOnce}{' '}
                 <span className="text-wingo-600">{baslikVurgu}</span>
                 {baslikSon ? <> {baslikSon}</> : null}
               </h1>
 
-              <p className="mx-auto max-w-xl text-base sm:text-lg text-slate-600 leading-relaxed mb-5">
+              <p className="mx-auto max-w-3xl text-balance text-base text-slate-600 leading-snug mb-5">
                 {altMetin}
               </p>
-
-              <ul className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-6 mb-7 text-sm font-medium text-slate-700">
-                {[madde1, madde2].filter(Boolean).map((m, i) => (
-                  <li key={i} className="flex items-center gap-2">
-                    <CheckCircle2 className="h-4 w-4 text-wingo-600 shrink-0" />
-                    {m}
-                  </li>
-                ))}
-              </ul>
 
               <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pb-2">
                 <Link
@@ -137,49 +93,27 @@ export function LandingHero() {
             </div>
           }
         >
-          <div className="relative h-full w-full">
-            {sliderVar ? (
-              <LandingSlider />
-            ) : (
-              <>
-                <div className="absolute top-0 left-0 right-0 z-10 flex items-center gap-2 px-3 py-2.5 bg-white/95 border-b border-slate-100 backdrop-blur-sm">
-                  <span className="h-2.5 w-2.5 rounded-full bg-[#FF5F57]" />
-                  <span className="h-2.5 w-2.5 rounded-full bg-[#FEBC2E]" />
-                  <span className="h-2.5 w-2.5 rounded-full bg-[#28C840]" />
-                  <div className="ml-2 flex-1 h-6 rounded-md bg-slate-50 border border-slate-200 flex items-center px-3">
-                    <span className="text-[10px] font-semibold text-slate-500 truncate">
-                      {kpss ? 'app.wingodeneme.com/kpss/dashboard' : 'app.wingodeneme.com/dashboard'}
-                    </span>
-                  </div>
+          <div className="relative h-full w-full bg-white">
+            {sliderVar ? null : (
+              <div className="absolute top-0 left-0 right-0 z-10 flex items-center gap-2 px-3 py-2.5 bg-white/95 border-b border-slate-100 backdrop-blur-sm">
+                <span className="h-2.5 w-2.5 rounded-full bg-[#FF5F57]" />
+                <span className="h-2.5 w-2.5 rounded-full bg-[#FEBC2E]" />
+                <span className="h-2.5 w-2.5 rounded-full bg-[#28C840]" />
+                <div className="ml-2 flex-1 h-6 rounded-md bg-slate-50 border border-slate-200 flex items-center px-3">
+                  <span className="text-[10px] font-semibold text-slate-500 truncate">
+                    {kpss ? 'app.wingodeneme.com/kpss/dashboard' : 'app.wingodeneme.com/dashboard'}
+                  </span>
                 </div>
-                {kpss ? (
-                  // Masaüstü orijinal PNG birebir; yeniden encode / downscale yok
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src="/landing-dashboard-preview-kpss.png"
-                    alt="Wingo KPSS aday paneli"
-                    decoding="async"
-                    fetchPriority="high"
-                    className="mx-auto block w-full h-auto object-contain object-top pt-10"
-                    draggable={false}
-                  />
-                ) : (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src="/landing-dashboard-preview.png"
-                    alt="Wingo Deneme öğrenci paneli"
-                    decoding="async"
-                    fetchPriority="high"
-                    className="mx-auto block w-full h-auto object-contain object-top pt-10"
-                    draggable={false}
-                  />
-                )}
-              </>
+              </div>
             )}
+            <LandingSlider
+              fallbackSrc={kpss ? '/landing-dashboard-preview-kpss.png' : '/landing-dashboard-preview.png'}
+              fallbackAlt={kpss ? 'Wingo KPSS aday paneli' : 'Wingo Deneme öğrenci paneli'}
+            />
           </div>
         </ContainerScroll>
 
-        <div className="relative z-20 mx-auto mt-6 mb-12 max-w-3xl px-4 md:mt-8 md:mb-16">
+        <div className="relative z-20 mx-auto mt-5 mb-6 max-w-3xl px-4">
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             {hizliErisim.map((item) => (
               <Link

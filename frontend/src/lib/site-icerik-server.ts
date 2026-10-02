@@ -18,7 +18,7 @@ function apiTaban(): string {
 export async function siteIcerikGetirSSR(): Promise<SiteGenelIcerik> {
   try {
     const res = await fetch(`${apiTaban()}/public/site-icerik`, {
-      next: { revalidate: 300 },
+      cache: 'no-store',
     });
     if (!res.ok) return VARSAYILAN_SITE_ICERIK;
     const json = await res.json();

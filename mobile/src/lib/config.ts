@@ -1,6 +1,6 @@
 /** Canlı Wingo Deneme API — mevcut backend'e dokunmadan okur. */
 export const API_BASE_URL =
-  process.env.EXPO_PUBLIC_API_URL ?? 'https://backend-murex-eight-21.vercel.app/api/v1';
+  process.env.EXPO_PUBLIC_API_URL ?? 'https://api.wingodeneme.com/api/v1';
 
 export const WINGOLINK_URL = 'https://wingolink.com.tr';
 
