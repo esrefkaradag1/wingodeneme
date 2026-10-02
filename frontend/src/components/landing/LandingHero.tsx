@@ -15,6 +15,7 @@ import {
 import { useSiteIcerik } from '@/contexts/SiteIcerikContext';
 import { useKpssLanding } from '@/contexts/LandingThemeContext';
 import { ContainerScroll } from '@/components/ui/container-scroll-animation';
+import { LandingSlider, useLandingSlaytlari } from '@/components/landing/LandingSlider';
 
 const HIZLI_ERISIM_YKS = [
   { href: '#paketler', label: 'TYT paketleri', ikon: BookOpen },
@@ -46,6 +47,7 @@ export function LandingHero() {
     : h.altMetin;
   const madde1 = kpss ? 'Gerçek süreli KPSS denemeleri' : h.madde1;
   const madde2 = kpss ? 'Konuya özel AI içerik' : h.madde2;
+  const sliderVar = useLandingSlaytlari().length > 0;
 
   return (
     <section className="relative overflow-hidden bg-[#F4FBFF]" style={{ background: 'var(--landing-hero-mid)' }}>
@@ -136,37 +138,43 @@ export function LandingHero() {
           }
         >
           <div className="relative h-full w-full">
-            <div className="absolute top-0 left-0 right-0 z-10 flex items-center gap-2 px-3 py-2.5 bg-white/95 border-b border-slate-100 backdrop-blur-sm">
-              <span className="h-2.5 w-2.5 rounded-full bg-[#FF5F57]" />
-              <span className="h-2.5 w-2.5 rounded-full bg-[#FEBC2E]" />
-              <span className="h-2.5 w-2.5 rounded-full bg-[#28C840]" />
-              <div className="ml-2 flex-1 h-6 rounded-md bg-slate-50 border border-slate-200 flex items-center px-3">
-                <span className="text-[10px] font-semibold text-slate-500 truncate">
-                  {kpss ? 'app.wingodeneme.com/kpss/dashboard' : 'app.wingodeneme.com/dashboard'}
-                </span>
-              </div>
-            </div>
-            {kpss ? (
-              // Masaüstü orijinal PNG birebir; yeniden encode / downscale yok
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src="/landing-dashboard-preview-kpss.png"
-                alt="Wingo KPSS aday paneli"
-                decoding="async"
-                fetchPriority="high"
-                className="mx-auto block w-full h-auto object-contain object-top pt-10"
-                draggable={false}
-              />
+            {sliderVar ? (
+              <LandingSlider />
             ) : (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src="/landing-dashboard-preview.png"
-                alt="Wingo Deneme öğrenci paneli"
-                decoding="async"
-                fetchPriority="high"
-                className="mx-auto block w-full h-auto object-contain object-top pt-10"
-                draggable={false}
-              />
+              <>
+                <div className="absolute top-0 left-0 right-0 z-10 flex items-center gap-2 px-3 py-2.5 bg-white/95 border-b border-slate-100 backdrop-blur-sm">
+                  <span className="h-2.5 w-2.5 rounded-full bg-[#FF5F57]" />
+                  <span className="h-2.5 w-2.5 rounded-full bg-[#FEBC2E]" />
+                  <span className="h-2.5 w-2.5 rounded-full bg-[#28C840]" />
+                  <div className="ml-2 flex-1 h-6 rounded-md bg-slate-50 border border-slate-200 flex items-center px-3">
+                    <span className="text-[10px] font-semibold text-slate-500 truncate">
+                      {kpss ? 'app.wingodeneme.com/kpss/dashboard' : 'app.wingodeneme.com/dashboard'}
+                    </span>
+                  </div>
+                </div>
+                {kpss ? (
+                  // Masaüstü orijinal PNG birebir; yeniden encode / downscale yok
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src="/landing-dashboard-preview-kpss.png"
+                    alt="Wingo KPSS aday paneli"
+                    decoding="async"
+                    fetchPriority="high"
+                    className="mx-auto block w-full h-auto object-contain object-top pt-10"
+                    draggable={false}
+                  />
+                ) : (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src="/landing-dashboard-preview.png"
+                    alt="Wingo Deneme öğrenci paneli"
+                    decoding="async"
+                    fetchPriority="high"
+                    className="mx-auto block w-full h-auto object-contain object-top pt-10"
+                    draggable={false}
+                  />
+                )}
+              </>
             )}
           </div>
         </ContainerScroll>

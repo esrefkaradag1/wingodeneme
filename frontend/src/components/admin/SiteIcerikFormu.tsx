@@ -265,6 +265,7 @@ export const SiteIcerikFormu = forwardRef<
         {[
           { v: 'marka', label: 'Marka & Navigasyon', icon: Menu },
           { v: 'hero', label: 'Giriş Alanı (Hero)', icon: Monitor },
+          { v: 'slider', label: 'Ana Sayfa Slider', icon: ImageIcon },
           { v: 'istatistik', label: 'İstatistikler', icon: BarChart3 },
           { v: 'ozellikler', label: 'Özellikler', icon: CheckSquare },
           { v: 'nasil', label: 'Nasıl Çalışır?', icon: Layout },
@@ -285,6 +286,174 @@ export const SiteIcerikFormu = forwardRef<
 
       <div className="flex-1 min-w-0">
         <AnimatePresence mode="wait">
+          {activeTab === 'slider' && (
+            <Tabs.Content key="slider" value="slider" className="outline-none space-y-8" forceMount>
+              <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
+                <Kart
+                  title="Ana sayfa slider"
+                  icon={ImageIcon}
+                  description="Başlığın altındaki büyük görsel alanı. Hazır banner yükleyebilirsin; başlık, açıklama ve buton isteğe bağlı."
+                >
+                  <button
+                    type="button"
+                    onClick={() =>
+                      set((p) => ({
+                        ...p,
+                        slider: {
+                          slaytlar: [
+                            ...(p.slider?.slaytlar ?? []),
+                            {
+                              id: `slayt-${Date.now()}`,
+                              gorselUrl: '',
+                              baslik: '',
+                              aciklama: '',
+                              butonMetin: '',
+                              butonHref: '',
+                              hedef: 'hepsi',
+                              aktif: true,
+                            },
+                          ],
+                        },
+                      }))
+                    }
+                    className="inline-flex items-center gap-2 rounded-2xl bg-indigo-600 px-4 py-3 text-sm font-bold text-white"
+                  >
+                    <Plus className="h-4 w-4" /> Slayt ekle
+                  </button>
+
+                  {(icerik.slider?.slaytlar ?? []).length === 0 ? (
+                    <p className="text-sm text-gray-400">Henüz slayt yok. Eklediğiniz slaytlar ilgili ana sayfada görünür.</p>
+                  ) : null}
+
+                  {(icerik.slider?.slaytlar ?? []).map((slayt, i) => (
+                    <div key={slayt.id || i} className="rounded-2xl border border-gray-100 p-5 space-y-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-sm font-bold text-gray-800">Slayt {i + 1}</p>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            set((p) => ({
+                              ...p,
+                              slider: { slaytlar: (p.slider?.slaytlar ?? []).filter((_, idx) => idx !== i) },
+                            }))
+                          }
+                          className="inline-flex items-center gap-1 text-xs font-bold text-red-500"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" /> Sil
+                        </button>
+                      </div>
+                      <LogoYukle
+                        label={`Slayt görseli ${i + 1}`}
+                        deger={slayt.gorselUrl}
+                        onDegis={(v) =>
+                          set((p) => {
+                            const slaytlar = [...(p.slider?.slaytlar ?? [])];
+                            slaytlar[i] = { ...slaytlar[i], gorselUrl: v };
+                            return { ...p, slider: { slaytlar } };
+                          })
+                        }
+                        genislik={280}
+                        yukseklik={140}
+                        ipucu="Banner görseli, PNG veya JPG — maks 2 MB. Yazılar görselin içindeyse ayrıca yazmana gerek yok."
+                      />
+                      <div className="grid sm:grid-cols-2 gap-4">
+                        <div>
+                          <Etiket>Başlık (isteğe bağlı)</Etiket>
+                          <Giris
+                            value={slayt.baslik}
+                            onChange={(v) =>
+                              set((p) => {
+                                const slaytlar = [...(p.slider?.slaytlar ?? [])];
+                                slaytlar[i] = { ...slaytlar[i], baslik: v };
+                                return { ...p, slider: { slaytlar } };
+                              })
+                            }
+                          />
+                        </div>
+                        <div>
+                          <Etiket>Nerede görünsün</Etiket>
+                          <select
+                            value={slayt.hedef}
+                            onChange={(e) =>
+                              set((p) => {
+                                const slaytlar = [...(p.slider?.slaytlar ?? [])];
+                                slaytlar[i] = {
+                                  ...slaytlar[i],
+                                  hedef: e.target.value as 'hepsi' | 'yks' | 'kpss',
+                                };
+                                return { ...p, slider: { slaytlar } };
+                              })
+                            }
+                            className="w-full rounded-2xl border border-gray-100 bg-gray-50/50 px-4 py-3.5 text-sm font-bold text-gray-700"
+                          >
+                            <option value="hepsi">YKS ve KPSS</option>
+                            <option value="yks">Yalnızca wingodeneme.com</option>
+                            <option value="kpss">Yalnızca KPSS</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div>
+                        <Etiket>Açıklama (isteğe bağlı)</Etiket>
+                        <UzunMetin
+                          value={slayt.aciklama}
+                          onChange={(v) =>
+                            set((p) => {
+                              const slaytlar = [...(p.slider?.slaytlar ?? [])];
+                              slaytlar[i] = { ...slaytlar[i], aciklama: v };
+                              return { ...p, slider: { slaytlar } };
+                            })
+                          }
+                        />
+                      </div>
+                      <div className="grid sm:grid-cols-2 gap-4">
+                        <div>
+                          <Etiket>Buton yazısı (isteğe bağlı)</Etiket>
+                          <Giris
+                            value={slayt.butonMetin}
+                            onChange={(v) =>
+                              set((p) => {
+                                const slaytlar = [...(p.slider?.slaytlar ?? [])];
+                                slaytlar[i] = { ...slaytlar[i], butonMetin: v };
+                                return { ...p, slider: { slaytlar } };
+                              })
+                            }
+                          />
+                        </div>
+                        <div>
+                          <Etiket>Link (isteğe bağlı)</Etiket>
+                          <Giris
+                            value={slayt.butonHref}
+                            placeholder="/paketler"
+                            onChange={(v) =>
+                              set((p) => {
+                                const slaytlar = [...(p.slider?.slaytlar ?? [])];
+                                slaytlar[i] = { ...slaytlar[i], butonHref: v };
+                                return { ...p, slider: { slaytlar } };
+                              })
+                            }
+                          />
+                        </div>
+                      </div>
+                      <label className="inline-flex items-center gap-2 text-sm font-bold text-gray-600">
+                        <input
+                          type="checkbox"
+                          checked={slayt.aktif}
+                          onChange={(e) =>
+                            set((p) => {
+                              const slaytlar = [...(p.slider?.slaytlar ?? [])];
+                              slaytlar[i] = { ...slaytlar[i], aktif: e.target.checked };
+                              return { ...p, slider: { slaytlar } };
+                            })
+                          }
+                        />
+                        Yayında
+                      </label>
+                    </div>
+                  ))}
+                </Kart>
+              </motion.div>
+            </Tabs.Content>
+          )}
           {/* Marka & Navigasyon */}
           {activeTab === 'marka' && (
             <Tabs.Content key="marka" value="marka" className="outline-none space-y-8" forceMount>

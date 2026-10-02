@@ -273,6 +273,18 @@ export const VARSAYILAN_SITE_ICERIK = {
         '<p>Dijital paketlerde teslimat, ödeme onayının ardından anında hesap erişimi ile gerçekleşir.</p><p>Cayma hakkı ve iade koşulları, yürürlükteki mevzuat ve paket türüne göre uygulanır; detaylar için destek ekibimizle iletişime geçebilirsiniz.</p>',
     },
   },
+  slider: {
+    slaytlar: [] as {
+      id: string;
+      gorselUrl: string;
+      baslik: string;
+      aciklama: string;
+      butonMetin: string;
+      butonHref: string;
+      hedef: 'hepsi' | 'yks' | 'kpss';
+      aktif: boolean;
+    }[],
+  },
   odemeGostergeleri: {
     visaGoster: true,
     mastercardGoster: true,
@@ -367,6 +379,18 @@ export type SiteGenelIcerikForm = {
     gizlilik: YasalSayfaForm;
     mesafeliSatis: YasalSayfaForm;
     teslimatIade: YasalSayfaForm;
+  };
+  slider: {
+    slaytlar: {
+      id: string;
+      gorselUrl: string;
+      baslik: string;
+      aciklama: string;
+      butonMetin: string;
+      butonHref: string;
+      hedef: 'hepsi' | 'yks' | 'kpss';
+      aktif: boolean;
+    }[];
   };
   odemeGostergeleri: {
     visaGoster: boolean;

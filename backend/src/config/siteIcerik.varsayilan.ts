@@ -259,6 +259,18 @@ export const VARSAYILAN_SITE_ICERIK = {
         '<p>Dijital paketlerde teslimat, ödeme onayının ardından anında hesap erişimi ile gerçekleşir.</p>',
     },
   },
+  slider: {
+    slaytlar: [] as {
+      id: string;
+      gorselUrl: string;
+      baslik: string;
+      aciklama: string;
+      butonMetin: string;
+      butonHref: string;
+      hedef: 'hepsi' | 'yks' | 'kpss';
+      aktif: boolean;
+    }[],
+  },
   odemeGostergeleri: {
     visaGoster: true,
     mastercardGoster: true,
