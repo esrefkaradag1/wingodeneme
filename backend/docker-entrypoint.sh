@@ -20,11 +20,16 @@ const path = require('path');
   } catch (error) {
     console.error(error.message);
   }
-  const byName = new Map(rows.map((row) => [row.migration_name, row]));
+  const byName = new Map();
+  for (const row of rows) {
+    const list = byName.get(row.migration_name) || [];
+    list.push(row);
+    byName.set(row.migration_name, list);
+  }
   for (const name of dirs) {
-    const row = byName.get(name);
-    const applied = row && row.finished_at && !row.rolled_back_at;
-    const failed = row && !row.finished_at && !row.rolled_back_at;
+    const list = byName.get(name) || [];
+    const applied = list.some((row) => row.finished_at && !row.rolled_back_at);
+    const failed = list.some((row) => !row.finished_at && !row.rolled_back_at);
     if (applied) console.log('SKIP ' + name);
     else if (failed) console.log('FAILED ' + name);
     else console.log('MISSING ' + name);
@@ -50,7 +55,7 @@ printf '%s\n' "$status" | while IFS= read -r line; do
     MISSING\ *)
       name=${line#MISSING }
       echo "Uygulanmis sayiliyor: $name"
-      npx prisma migrate resolve --applied "$name"
+      npx prisma migrate resolve --applied "$name" || true
       ;;
   esac
 done
