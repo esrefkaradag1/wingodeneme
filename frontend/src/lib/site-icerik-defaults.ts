@@ -276,7 +276,9 @@ export const VARSAYILAN_SITE_ICERIK = {
   slider: {
     slaytlar: [] as {
       id: string;
+      tur?: 'gorsel' | 'video';
       gorselUrl: string;
+      videoUrl?: string;
       baslik: string;
       aciklama: string;
       butonMetin: string;
@@ -383,7 +385,9 @@ export type SiteGenelIcerikForm = {
   slider: {
     slaytlar: {
       id: string;
+      tur?: 'gorsel' | 'video';
       gorselUrl: string;
+      videoUrl?: string;
       baslik: string;
       aciklama: string;
       butonMetin: string;

@@ -8,7 +8,9 @@ import { useKpssLanding } from '@/contexts/LandingThemeContext';
 
 type Slayt = {
   id: string;
+  tur?: 'gorsel' | 'video';
   gorselUrl: string;
+  videoUrl?: string;
   baslik: string;
   aciklama: string;
   butonMetin: string;
@@ -17,13 +19,46 @@ type Slayt = {
   aktif: boolean;
 };
 
+function youtubeKimligi(url: string): string | null {
+  try {
+    const adres = new URL(url);
+    const host = adres.hostname.replace(/^www\./, '');
+    if (host === 'youtu.be') return adres.pathname.split('/').filter(Boolean)[0] || null;
+    if (host === 'youtube.com' || host === 'm.youtube.com') {
+      if (adres.pathname.startsWith('/embed/')) return adres.pathname.split('/')[2] || null;
+      if (adres.pathname.startsWith('/shorts/')) return adres.pathname.split('/')[2] || null;
+      return adres.searchParams.get('v');
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+function vimeoKimligi(url: string): string | null {
+  try {
+    const adres = new URL(url);
+    if (!adres.hostname.replace(/^www\./, '').endsWith('vimeo.com')) return null;
+    return adres.pathname.split('/').filter(Boolean).pop() || null;
+  } catch {
+    return null;
+  }
+}
+
+function slaytVideo(slayt: Slayt): boolean {
+  return slayt.tur === 'video' && Boolean(slayt.videoUrl?.trim());
+}
+
 export function useLandingSlaytlari(): Slayt[] {
   const site = useSiteIcerik();
   const kpss = useKpssLanding();
   const hedef = kpss ? 'kpss' : 'yks';
-  return ((site.slider?.slaytlar ?? []) as Slayt[]).filter(
-    (s) => s.aktif !== false && s.gorselUrl?.trim() && (s.hedef === 'hepsi' || s.hedef === hedef)
-  );
+  return ((site.slider?.slaytlar ?? []) as Slayt[]).filter((s) => {
+    if (s.aktif === false) return false;
+    if (s.hedef !== 'hepsi' && s.hedef !== hedef) return false;
+    if (s.tur === 'video') return Boolean(s.videoUrl?.trim());
+    return Boolean(s.gorselUrl?.trim());
+  });
 }
 
 /** Başlığın altındaki panel kartını doldurur. Yazı boşsa yalnızca görsel gösterilir. */
@@ -72,7 +107,38 @@ export function LandingSlider({
   const buton = Boolean(aktif.butonMetin?.trim() && aktif.butonHref?.trim());
   const tumGorselLink = Boolean(aktif.butonHref?.trim() && !aktif.butonMetin?.trim());
 
-  const gorsel = (
+  const videoAdres = aktif.videoUrl?.trim() || '';
+  const yt = slaytVideo(aktif) ? youtubeKimligi(videoAdres) : null;
+  const vimeo = slaytVideo(aktif) && !yt ? vimeoKimligi(videoAdres) : null;
+  const gorsel = slaytVideo(aktif) ? (
+    yt ? (
+      <iframe
+        title={aktif.baslik?.trim() || 'Slayt videosu'}
+        src={`https://www.youtube.com/embed/${yt}?autoplay=1&mute=1&controls=0&loop=1&playlist=${yt}&playsinline=1&rel=0&modestbranding=1`}
+        className="pointer-events-none absolute inset-0 h-full w-full"
+        allow="autoplay; encrypted-media; picture-in-picture"
+        referrerPolicy="strict-origin-when-cross-origin"
+      />
+    ) : vimeo ? (
+      <iframe
+        title={aktif.baslik?.trim() || 'Slayt videosu'}
+        src={`https://player.vimeo.com/video/${vimeo}?autoplay=1&muted=1&loop=1&background=1&title=0&byline=0&portrait=0`}
+        className="pointer-events-none absolute inset-0 h-full w-full"
+        allow="autoplay; encrypted-media; picture-in-picture"
+      />
+    ) : (
+      <video
+        key={videoAdres}
+        src={videoAdres}
+        poster={aktif.gorselUrl?.trim() || undefined}
+        className="pointer-events-none absolute inset-0 h-full w-full object-cover object-top"
+        autoPlay
+        muted
+        loop
+        playsInline
+      />
+    )
+  ) : (
     // eslint-disable-next-line @next/next/no-img-element
     <img
       src={aktif.gorselUrl}

@@ -31,6 +31,7 @@ import { logger } from './utils/logger';
 import { hataYonetici, bulunamadi } from './middlewares/hata.middleware';
 import { platformFiltresi } from './middlewares/platform.middleware';
 import { KPSS_KONU_AGACI } from '../prisma/data/kpssKonuAgaci';
+import { sliderMedyaKlasoru } from './controllers/site.controller';
 
 
 
@@ -187,6 +188,16 @@ const hizSinirleyici = rateLimit({
 uygulama.use('/api/', hizSinirleyici);
 uygulama.use('/api/', platformFiltresi);
 
+
+uygulama.use(
+  '/slider-medya',
+  express.static(sliderMedyaKlasoru(), {
+    setHeaders(res) {
+      res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+      res.setHeader('Access-Control-Allow-Origin', '*');
+    },
+  })
+);
 
 // Sağlık kontrolü
 uygulama.get('/health', (_req, res) => {

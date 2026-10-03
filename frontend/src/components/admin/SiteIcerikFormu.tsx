@@ -26,6 +26,7 @@ import {
   CreditCard,
 } from 'lucide-react';
 import type { SiteGenelIcerik, SiteGenelIcerikForm } from '@/lib/site-icerik-defaults';
+import { api } from '@/lib/api';
 import { VARSAYILAN_SITE_ICERIK } from '@/lib/site-icerik-defaults';
 import { YASAL_SAYFA_ETIKET, YASAL_SAYFA_YOLLAR, type YasalSayfaAnahtar } from '@/lib/yasal-sayfalar';
 import { sozlesmeGrubuOlustur } from '@/lib/footer-sozlesmeler';
@@ -237,6 +238,7 @@ export const SiteIcerikFormu = forwardRef<
     derinKopya(VARSAYILAN_SITE_ICERIK) as unknown as SiteGenelIcerikForm
   );
   const [activeTab, setActiveTab] = useState('marka');
+  const [videoYukleniyor, setVideoYukleniyor] = useState<string | null>(null);
 
   useEffect(() => {
     if (baslangic) {
@@ -292,7 +294,7 @@ export const SiteIcerikFormu = forwardRef<
                 <Kart
                   title="Ana sayfa slider"
                   icon={ImageIcon}
-                  description="Ana sayfada başlığın altındaki panel görselinin yerine geçer. Yüklediğin görseller o kartın içinde kayar. Yazı zorunlu değil."
+                  description="Ana sayfada başlığın altındaki panelin yerine geçer. Görsel veya video koyabilirsin. Yazı zorunlu değil."
                 >
                   <button
                     type="button"
@@ -304,7 +306,9 @@ export const SiteIcerikFormu = forwardRef<
                             ...(p.slider?.slaytlar ?? []),
                             {
                               id: `slayt-${Date.now()}`,
+                              tur: 'gorsel',
                               gorselUrl: '',
+                              videoUrl: '',
                               baslik: '',
                               aciklama: '',
                               butonMetin: '',
@@ -342,20 +346,108 @@ export const SiteIcerikFormu = forwardRef<
                           <Trash2 className="h-3.5 w-3.5" /> Sil
                         </button>
                       </div>
-                      <LogoYukle
-                        label={`Slayt görseli ${i + 1}`}
-                        deger={slayt.gorselUrl}
-                        onDegis={(v) =>
-                          set((p) => {
-                            const slaytlar = [...(p.slider?.slaytlar ?? [])];
-                            slaytlar[i] = { ...slaytlar[i], gorselUrl: v };
-                            return { ...p, slider: { slaytlar } };
-                          })
-                        }
-                        genislik={280}
-                        yukseklik={140}
-                        ipucu="Banner görseli, PNG veya JPG — maks 2 MB. Yazılar görselin içindeyse ayrıca yazmana gerek yok."
-                      />
+                      <div className="flex gap-2">
+                        {(['gorsel', 'video'] as const).map((tur) => {
+                          const secili = (slayt.tur === 'video' ? 'video' : 'gorsel') === tur;
+                          return (
+                            <button
+                              key={tur}
+                              type="button"
+                              onClick={() =>
+                                set((p) => {
+                                  const slaytlar = [...(p.slider?.slaytlar ?? [])];
+                                  slaytlar[i] = { ...slaytlar[i], tur };
+                                  return { ...p, slider: { slaytlar } };
+                                })
+                              }
+                              className={`rounded-xl px-4 py-2 text-xs font-bold ${
+                                secili ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600'
+                              }`}
+                            >
+                              {tur === 'gorsel' ? 'Görsel' : 'Video'}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {slayt.tur === 'video' ? (
+                        <div className="space-y-3">
+                          <div>
+                            <Etiket>Video bağlantısı</Etiket>
+                            <Giris
+                              value={slayt.videoUrl || ''}
+                              placeholder="https://...mp4 veya YouTube / Vimeo linki"
+                              onChange={(v) =>
+                                set((p) => {
+                                  const slaytlar = [...(p.slider?.slaytlar ?? [])];
+                                  slaytlar[i] = { ...slaytlar[i], tur: 'video', videoUrl: v };
+                                  return { ...p, slider: { slaytlar } };
+                                })
+                              }
+                            />
+                            <p className="mt-1 text-[11px] text-gray-400">
+                              MP4, WEBM, YouTube veya Vimeo. Dosya yüklersen bağlantı kendiliğinden dolar.
+                            </p>
+                          </div>
+                          <label className="inline-flex cursor-pointer items-center gap-2 rounded-2xl border border-dashed border-gray-200 px-4 py-3 text-sm font-bold text-gray-600 hover:border-indigo-300">
+                            <Upload className="h-4 w-4" />
+                            {videoYukleniyor === slayt.id ? 'Yükleniyor…' : 'Video dosyası yükle'}
+                            <input
+                              type="file"
+                              accept="video/mp4,video/webm,video/quicktime"
+                              className="hidden"
+                              disabled={videoYukleniyor === slayt.id}
+                              onChange={async (e) => {
+                                const dosya = e.target.files?.[0];
+                                e.target.value = '';
+                                if (!dosya) return;
+                                if (dosya.size > 40 * 1024 * 1024) {
+                                  alert('Video 40 MB’dan büyük olamaz. Daha büyük dosya için bağlantı yapıştır.');
+                                  return;
+                                }
+                                setVideoYukleniyor(slayt.id);
+                                try {
+                                  const form = new FormData();
+                                  form.append('video', dosya);
+                                  const r = await api.post<{ basarili: boolean; veri: { url: string } }>(
+                                    '/admin/site-icerik/slider-video',
+                                    form,
+                                    { timeout: 120000 }
+                                  );
+                                  const url = r.data.veri?.url || '';
+                                  if (!url) throw new Error('adres yok');
+                                  set((p) => {
+                                    const slaytlar = [...(p.slider?.slaytlar ?? [])];
+                                    slaytlar[i] = { ...slaytlar[i], tur: 'video', videoUrl: url };
+                                    return { ...p, slider: { slaytlar } };
+                                  });
+                                } catch {
+                                  alert('Video yüklenemedi. Bağlantı yapıştırarak da ekleyebilirsin.');
+                                } finally {
+                                  setVideoYukleniyor(null);
+                                }
+                              }}
+                            />
+                          </label>
+                          {slayt.videoUrl?.trim() && !/youtube\.com|youtu\.be|vimeo\.com/i.test(slayt.videoUrl) ? (
+                            <video src={slayt.videoUrl} className="h-36 w-full max-w-md rounded-2xl bg-black object-cover" muted controls playsInline />
+                          ) : null}
+                        </div>
+                      ) : (
+                        <LogoYukle
+                          label={`Slayt görseli ${i + 1}`}
+                          deger={slayt.gorselUrl}
+                          onDegis={(v) =>
+                            set((p) => {
+                              const slaytlar = [...(p.slider?.slaytlar ?? [])];
+                              slaytlar[i] = { ...slaytlar[i], tur: 'gorsel', gorselUrl: v };
+                              return { ...p, slider: { slaytlar } };
+                            })
+                          }
+                          genislik={280}
+                          yukseklik={140}
+                          ipucu="Banner görseli, PNG veya JPG — maks 2 MB. Yazılar görselin içindeyse ayrıca yazmana gerek yok."
+                        />
+                      )}
                       <div className="grid sm:grid-cols-2 gap-4">
                         <div>
                           <Etiket>Başlık (isteğe bağlı)</Etiket>

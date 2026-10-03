@@ -1,24 +1,39 @@
 import { Alert, Linking, Platform } from 'react-native';
 import Constants from 'expo-constants';
 import * as Device from 'expo-device';
-import * as Notifications from 'expo-notifications';
 import { kullaniciApi } from '../api/client';
 
-try {
-  Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldShowBanner: true,
-      shouldShowList: true,
-      shouldPlaySound: true,
-      shouldSetBadge: true,
-    }),
-  });
-} catch {
-  /* web / unsupported */
+type NotificationsModule = typeof import('expo-notifications');
+
+function bildirimModulu(): NotificationsModule | null {
+  if (Platform.OS === 'web') return null;
+  try {
+    // Expo Go Android, SDK 53 sonrası bu paketi import anında fırlatır.
+    return require('expo-notifications') as NotificationsModule;
+  } catch {
+    return null;
+  }
+}
+
+const Notifications = bildirimModulu();
+
+if (Notifications) {
+  try {
+    Notifications.setNotificationHandler({
+      handleNotification: async () => ({
+        shouldShowBanner: true,
+        shouldShowList: true,
+        shouldPlaySound: true,
+        shouldSetBadge: true,
+      }),
+    });
+  } catch {
+    /* unsupported */
+  }
 }
 
 export type PushDurum = {
-  izin: Notifications.PermissionStatus | 'unavailable';
+  izin: 'granted' | 'denied' | 'undetermined' | 'unavailable';
   token: string | null;
   neden?: string;
 };
@@ -35,8 +50,8 @@ function projeId(): string | undefined {
 }
 
 /** Sistem bildirim iznini iste (simülatörde de diyalog çıkar) */
-export async function pushIzinIste(): Promise<Notifications.PermissionStatus | 'unavailable'> {
-  if (Platform.OS === 'web') return 'unavailable';
+export async function pushIzinIste(): Promise<PushDurum['izin']> {
+  if (Platform.OS === 'web' || !Notifications) return 'unavailable';
 
   try {
     if (Platform.OS === 'android') {
@@ -171,6 +186,7 @@ export async function pushTokenTemizle(authToken?: string | null): Promise<void>
 export function bildirimDinleyicileriKur(opts: {
   onAcilis?: (data: Record<string, unknown>) => void;
 }) {
+  if (!Notifications) return () => {};
   const alindi = Notifications.addNotificationReceivedListener(() => {});
   const yanit = Notifications.addNotificationResponseReceivedListener((response) => {
     const data = (response.notification.request.content.data || {}) as Record<string, unknown>;

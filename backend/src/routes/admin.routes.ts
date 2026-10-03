@@ -54,7 +54,7 @@ import {
   siparisGuncelleController,
   siparisManuelOlusturController,
 } from '../controllers/siparis.controller';
-import { siteIcerikAdminGetController, siteIcerikAdminPutController } from '../controllers/site.controller';
+import { siteIcerikAdminGetController, siteIcerikAdminPutController, sliderVideoYukleController } from '../controllers/site.controller';
 import {
   osymTaraController,
   osymDurumAdminController,
@@ -220,6 +220,23 @@ router.get('/gruplar/:id/havuz-ozet', grupHavuzOzetController);
 
 router.get('/site-icerik', siteIcerikAdminGetController);
 router.put('/site-icerik', siteIcerikAdminPutController);
+const sliderVideoYukle = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 40 * 1024 * 1024 },
+});
+router.post(
+  '/site-icerik/slider-video',
+  (req, res, next) => {
+    sliderVideoYukle.single('video')(req, res, (err) => {
+      if (err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE') {
+        res.status(400).json({ basarili: false, mesaj: 'Video 40 MB’dan büyük olamaz.' });
+        return;
+      }
+      next(err);
+    });
+  },
+  sliderVideoYukleController
+);
 
 // Ayarlar
 router.get('/ayarlar/odeme', odemeAyarlariGetController);
