@@ -84,6 +84,8 @@ KURALLAR — VİDEO ADIMLARI (videoAdimlari) — ZORUNLU, 5-7 adım:
 - Geometri/benzerlik: ABC üçgeni → DE doğruları → k,2k,3k etiketleri → benzerlik formülü → 4S,9S alan
 - Trigonometri: dik üçgen → θ açısı → sin/cos/tan formülleri
 - Analitik geometri/teğet: x-y eksenleri → çember (O merkez) → OT yarıçapı → T noktası → teğet doğrusu → dik açı işareti
+- Çizim sorunun konusuyla aynı olmalı. Matematik ve üslü ifadede harita, şehir adı, km veya coğrafya sahnesi üretme; taban ve üs (ör. 2ⁿ, 2¹=2, 2²=4) çiz
+- adimIdx 0'dan başlar; başlıkta negatif adım numarası yazma
 
 KURALLAR — TAHTA ADIMLARI (tahtaAdimlari): 3 özet adım (yedek metin).
 KURALLAR — cizimAdimlari: videoAdimlari ile uyumlu veya boş bırakılabilir.

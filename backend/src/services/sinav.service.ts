@@ -220,7 +220,7 @@ export async function sinavDetayGetir(sinavId: string, ogrenciId?: string) {
   let sorular = null;
   if (sinavAktif && ogrenciId && erisim) {
     sorular = await sinavSorulariniGetir(sinavId, {
-      sadeceOnayli: true,
+      yayindaki: true,
       select: {
         id: true,
         siraNo: true,
@@ -272,7 +272,7 @@ export async function sinavaKatil(sinavId: string, ogrenciId: string) {
 
   if (mevcutKatilim?.durum === KatilimDurumu.TAMAMLANDI) {
     const sorular = await sinavSorulariniGetir(sinavId, {
-      sadeceOnayli: true,
+      yayindaki: true,
       select: {
         id: true,
         siraNo: true,
@@ -323,7 +323,7 @@ export async function sinavaKatil(sinavId: string, ogrenciId: string) {
   });
 
   const sorular = await sinavSorulariniGetir(sinavId, {
-    sadeceOnayli: true,
+    yayindaki: true,
     select: {
       id: true,
       siraNo: true,
@@ -367,7 +367,7 @@ export async function cevapTaslakKaydet(
     throw new AppHatasi('Sınav zaten tamamlandı', 400);
   }
 
-  const gecerliSoruIds = await sinavSoruIdSeti(katilim.sinavId, prisma, { sadeceOnayli: true });
+  const gecerliSoruIds = await sinavSoruIdSeti(katilim.sinavId, prisma, { yayindaki: true });
   const kayitlar = cevaplar.filter((c) => gecerliSoruIds.has(c.soruId));
   if (kayitlar.length === 0) return { kaydedildi: 0 };
 
@@ -410,7 +410,7 @@ export async function cevapGonder(
   if (katilim.durum === KatilimDurumu.TAMAMLANDI) throw new AppHatasi('Sınav zaten tamamlandı', 400);
 
   const sinavSorulari = await sinavSorulariniGetir(katilim.sinavId, {
-    sadeceOnayli: true,
+    yayindaki: true,
     select: { id: true, siraNo: true, dogruCevap: true },
   });
 
@@ -489,7 +489,7 @@ export async function cevapGonder(
         create: c,
       })
     ),
-  ]);
+  ], { timeout: 30_000, maxWait: 10_000 });
 
   // Sıralama ve analiz hesapla
   await ulusalSiralamaGuncelle(katilim.sinavId);

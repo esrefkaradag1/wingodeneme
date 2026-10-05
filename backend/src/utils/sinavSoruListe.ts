@@ -4,12 +4,23 @@ import { prisma } from '../config/database';
 type DbClient = Prisma.TransactionClient | typeof prisma;
 
 export type SinavSoruListeSecenek = {
-  /** Öğrenci sınavı / teslim: yalnızca onaylı satırlar */
+  /** Yalnızca onaylı satırlar */
   sadeceOnayli?: boolean;
+  /** Öğrenci kitapçığı: reddedilenler hariç, bekleyenler dahil (admin önizlemesiyle aynı set) */
+  yayindaki?: boolean;
   /** Prisma select (varsayılan: tüm alanlar + konu özeti) */
   select?: Prisma.SoruSelect;
   include?: Prisma.SoruInclude;
 };
+
+function soruOnayKosulu(opts?: {
+  sadeceOnayli?: boolean;
+  yayindaki?: boolean;
+}): Prisma.SoruWhereInput {
+  if (opts?.sadeceOnayli) return { onayDurumu: SoruOnayDurumu.ONAYLANDI };
+  if (opts?.yayindaki) return { onayDurumu: { not: SoruOnayDurumu.REDDEDILDI } };
+  return {};
+}
 
 export type SinavSoruListeOgesi = {
   id: string;
@@ -31,27 +42,27 @@ export type SinavSoruListeOgesi = {
 export async function sinavSoruIdSeti(
   sinavId: string,
   db: DbClient = prisma,
-  opts?: { sadeceOnayli?: boolean },
+  opts?: { sadeceOnayli?: boolean; yayindaki?: boolean },
 ): Promise<Set<string>> {
-  const sadeceOnayli = Boolean(opts?.sadeceOnayli);
+  const onay = soruOnayKosulu(opts);
+  const paylasimOnay = opts?.sadeceOnayli
+    ? {
+        onayDurumu: SoruOnayDurumu.ONAYLANDI,
+        soru: { onayDurumu: { not: SoruOnayDurumu.REDDEDILDI } },
+      }
+    : opts?.yayindaki
+      ? {
+          onayDurumu: { not: SoruOnayDurumu.REDDEDILDI },
+          soru: { onayDurumu: { not: SoruOnayDurumu.REDDEDILDI } },
+        }
+      : {};
   const [birincil, paylasim] = await Promise.all([
     db.soru.findMany({
-      where: {
-        sinavId,
-        ...(sadeceOnayli ? { onayDurumu: SoruOnayDurumu.ONAYLANDI } : {}),
-      },
+      where: { sinavId, ...onay },
       select: { id: true },
     }),
     db.sinavSoru.findMany({
-      where: {
-        sinavId,
-        ...(sadeceOnayli
-          ? {
-              onayDurumu: SoruOnayDurumu.ONAYLANDI,
-              soru: { onayDurumu: { not: SoruOnayDurumu.REDDEDILDI } },
-            }
-          : {}),
-      },
+      where: { sinavId, ...paylasimOnay },
       select: { soruId: true },
     }),
   ]);
@@ -69,7 +80,7 @@ export async function sinavSoruMaxSira(sinavId: string, db: DbClient = prisma): 
 export async function sinavSoruSayisi(
   sinavId: string,
   db: DbClient = prisma,
-  opts?: { sadeceOnayli?: boolean },
+  opts?: { sadeceOnayli?: boolean; yayindaki?: boolean },
 ): Promise<number> {
   return (await sinavSoruIdSeti(sinavId, db, opts)).size;
 }
@@ -83,21 +94,24 @@ export async function sinavSorulariniGetir(
   opts: SinavSoruListeSecenek = {},
   db: DbClient = prisma,
 ): Promise<SinavSoruListeOgesi[]> {
-  const sadeceOnayli = Boolean(opts.sadeceOnayli);
-
   const birincilWhere: Prisma.SoruWhereInput = {
     sinavId,
-    ...(sadeceOnayli ? { onayDurumu: SoruOnayDurumu.ONAYLANDI } : {}),
+    ...soruOnayKosulu(opts),
   };
 
   const paylasimWhere: Prisma.SinavSoruWhereInput = {
     sinavId,
-    ...(sadeceOnayli
+    ...(opts.sadeceOnayli
       ? {
           onayDurumu: SoruOnayDurumu.ONAYLANDI,
           soru: { onayDurumu: { not: SoruOnayDurumu.REDDEDILDI } },
         }
-      : {}),
+      : opts.yayindaki
+        ? {
+            onayDurumu: { not: SoruOnayDurumu.REDDEDILDI },
+            soru: { onayDurumu: { not: SoruOnayDurumu.REDDEDILDI } },
+          }
+        : {}),
   };
 
   const defaultInclude: Prisma.SoruInclude = {

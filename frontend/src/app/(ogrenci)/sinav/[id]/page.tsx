@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import axios from 'axios';
@@ -22,6 +22,7 @@ import { CevapAnahtari } from '@/components/exam/CevapAnahtari';
 import { OptikFormYukle } from '@/components/exam/OptikFormYukle';
 import { BookOpen, Layout, AlignLeft, Key, Camera, ZoomIn, ZoomOut } from 'lucide-react';
 import type { SinavKitapcikMeta } from '@/components/exam/KitapcikGorumu';
+import { cozumleKitapcikBolumleri } from '@/lib/kitapcikBolumleri';
 
 type GorunumModu = 'kitapcik' | 'tek-sayfa' | 'soru-soru';
 
@@ -72,7 +73,23 @@ export default function SinavSayfasi({ params }: { params: { id: string } }) {
     retry: false,
   });
 
-  const aktifSoruId = data?.sorular?.[aktifSoruIndex]?.id ?? null;
+  const sorularSirali = useMemo(() => {
+    const ham = data?.sorular || [];
+    if (!data?.sinav || ham.length === 0) return ham;
+    const bolumler = cozumleKitapcikBolumleri(
+      data.sinav.tur,
+      ham,
+      data.sinav.konuDagilimi,
+      data.sinav.kitapcikBolumAdi,
+    );
+    const duz = bolumler.flatMap((b) => b.sorular);
+    if (duz.length === 0) return ham;
+    const gorulen = new Set(duz.map((s) => s.id));
+    const eksik = ham.filter((s) => !gorulen.has(s.id));
+    return eksik.length ? [...duz, ...eksik] : duz;
+  }, [data]);
+
+  const aktifSoruId = sorularSirali[aktifSoruIndex]?.id ?? null;
   const incelemeModuAktif = !!data?.incelemeModu;
 
   const { aktifAnlikSaniye, getSureMsMap, soruAktiflestir } = useSoruSureTakip({
@@ -81,17 +98,17 @@ export default function SinavSayfasi({ params }: { params: { id: string } }) {
     /** Öneri/soru × 3 veya en fazla 8 dk — tek soruya tüm sınav süresi yığılmasın */
     maxSoruSureMs: Math.min(
       8 * 60 * 1000,
-      Math.max(90_000, ((data?.sureDakika ?? 120) * 60 * 1000) / Math.max(1, data?.sorular?.length ?? 120) * 3),
+      Math.max(90_000, ((data?.sureDakika ?? 120) * 60 * 1000) / Math.max(1, sorularSirali.length || 120) * 3),
     ),
   });
 
   const soruDegistir = useCallback(
     (index: number) => {
-      const soru = data?.sorular?.[index];
+      const soru = sorularSirali[index];
       if (soru && !incelemeModuAktif) soruAktiflestir(soru.id);
       setAktifSoruIndex(index);
     },
-    [data?.sorular, incelemeModuAktif, soruAktiflestir]
+    [sorularSirali, incelemeModuAktif, soruAktiflestir]
   );
 
   useEffect(() => {
@@ -182,7 +199,7 @@ export default function SinavSayfasi({ params }: { params: { id: string } }) {
     mutationFn: async () => {
       if (!katilimId) throw new Error('Katılım ID bulunamadı');
       const sureMap = getSureMsMap();
-      const cevapDizisi = (data?.sorular || []).map((s) => ({
+      const cevapDizisi = sorularSirali.map((s) => ({
         soruId: s.id,
         secilen: soruIdToSecilen(cevaplar, s.id),
         sureMs: sureMap[s.id] ?? null,
@@ -219,23 +236,28 @@ export default function SinavSayfasi({ params }: { params: { id: string } }) {
         }
         return;
       }
-      toast.hata('Cevaplar gönderilemedi');
+      const sunucuMesaji =
+        axios.isAxiosError(err) &&
+        typeof (err.response?.data as { mesaj?: string } | undefined)?.mesaj === 'string'
+          ? (err.response?.data as { mesaj: string }).mesaj
+          : null;
+      toast.hata(sunucuMesaji || 'Cevaplar gönderilemedi');
     },
   });
 
   const cevapSec = useCallback((soruId: string, secilen: string | null) => {
     if (data?.incelemeModu) return;
-    const idx = data?.sorular?.findIndex((s) => s.id === soruId) ?? -1;
+    const idx = sorularSirali.findIndex((s) => s.id === soruId);
     if (idx >= 0) {
       soruAktiflestir(soruId);
       setAktifSoruIndex(idx);
     }
     setCevaplar((onceki) => ({ ...onceki, [soruId]: secilen }));
-  }, [data?.incelemeModu, data?.sorular, soruAktiflestir]);
+  }, [data?.incelemeModu, sorularSirali, soruAktiflestir]);
 
   const sinaviTamamla = useCallback(async () => {
     if (data?.incelemeModu || teslimEdiliyorRef.current || cevapGonderMutation.isPending) return;
-    const cevaplanmayan = (data?.sorular || []).filter((s) => !(s.id in cevaplar)).length;
+    const cevaplanmayan = sorularSirali.filter((s) => !(s.id in cevaplar)).length;
 
     if (cevaplanmayan > 0) {
       const devam = await confirmAsk({
@@ -250,7 +272,7 @@ export default function SinavSayfasi({ params }: { params: { id: string } }) {
 
     teslimEdiliyorRef.current = true;
     cevapGonderMutation.mutate();
-  }, [data?.incelemeModu, data?.sorular, cevaplar, cevapGonderMutation.isPending]);
+  }, [data?.incelemeModu, sorularSirali, cevaplar, cevapGonderMutation.isPending]);
 
   function soruIdToSecilen(kayit: Record<string, string | null>, soruId: string): string | null {
     return Object.prototype.hasOwnProperty.call(kayit, soruId) ? kayit[soruId] : null;
@@ -296,7 +318,7 @@ export default function SinavSayfasi({ params }: { params: { id: string } }) {
     );
   }
 
-  const sorular: SinavKatilSoru[] = data.sorular || [];
+  const sorular = sorularSirali;
   const cevaplanmisSayisi = sorular.filter((s) => !!cevaplar[s.id]).length;
   const incelemeModu = !!data.incelemeModu;
   const oneriSaniye =

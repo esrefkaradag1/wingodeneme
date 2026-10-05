@@ -305,6 +305,7 @@ function varsayilanTrigonometriCizimi(adimIdx: number): CizimEleman[] {
 /** Metin ve konuya göre en uygun yerel şablon */
 function sablonSecici(birlesik: string, ders?: string, konu?: string): ((adimIdx: number) => CizimEleman[]) | null {
   const konuMetin = `${ders || ''} ${konu || ''} ${birlesik}`;
+  if (usluIfadeKonusuMu(konuMetin)) return videoUsluIfadeCizimi;
   if (/trigonometri|sinüs|sinus|kosinüs|kosinus|tanjant|birim çember|birim cember/i.test(konuMetin)) {
     return varsayilanTrigonometriCizimi;
   }
@@ -513,14 +514,14 @@ export function cizimAdimiGetir(
 
   if (!geometriSablonOncelikli) {
     const aiOnce = aiCizimKumulatif(veri, adimIdx);
-    if (aiOnce.length) return aiOnce;
+    if (aiOnce.length && !cizimKonuDisiMi(aiOnce, ders, konu, metin)) return aiOnce;
   }
 
   const sablon = sablonSecici(birlesik, ders, konu);
   if (sablon) return kumulatifElemanlar(adimIdx, sablon);
 
   const aiCizim = aiCizimKumulatif(veri, adimIdx);
-  if (aiCizim.length) return aiCizim;
+  if (aiCizim.length && !cizimKonuDisiMi(aiCizim, ders, konu, metin)) return aiCizim;
 
   return kumulatifElemanlar(adimIdx, varsayilanGenelCizimi);
 }
@@ -674,7 +675,54 @@ function analitikGeometriKonusuMu(birlesik: string): boolean {
   return /analitik|koordinat|teğet|teget|doğru denklem|dogru denklem|nokta[- ]?eğim|nokta[- ]?egim|merkez.*çember|cember.*merkez|eğim.*doğru|egim.*dogru/i.test(birlesik);
 }
 
+function usluIfadeKonusuMu(birlesik: string): boolean {
+  return /üslü|uslu|üssü|ussu|taban.*üs|üs.*taban|kuvvet|2\s*\^|a\^n/i.test(birlesik);
+}
+
+function videoUsluIfadeCizimi(adimIdx: number): CizimEleman[] {
+  const taban: CizimEleman[] = [
+    { tur: 'label', x: 0.5, y: 0.2, metin: '2ⁿ', renk: HOLO_VURGU },
+    { tur: 'segment', x1: 0.22, y1: 0.36, x2: 0.78, y2: 0.36, renk: HOLO_CIZGI },
+    { tur: 'label', x: 0.5, y: 0.46, metin: 'Taban 2, üs n', renk: HOLO_ETIKET },
+  ];
+  if (adimIdx <= 0) return taban;
+  if (adimIdx === 1) {
+    return [
+      ...taban,
+      { tur: 'label', x: 0.32, y: 0.62, metin: '2¹ = 2', renk: HOLO_ETIKET },
+      { tur: 'label', x: 0.68, y: 0.62, metin: '2² = 4', renk: HOLO_ETIKET },
+    ];
+  }
+  return [
+    ...taban,
+    { tur: 'label', x: 0.26, y: 0.62, metin: '2¹ = 2', renk: HOLO_ETIKET },
+    { tur: 'label', x: 0.5, y: 0.62, metin: '2² = 4', renk: HOLO_ETIKET },
+    { tur: 'label', x: 0.74, y: 0.62, metin: '2³ = 8', renk: HOLO_VURGU },
+    { tur: 'arrow', x1: 0.28, y1: 0.74, x2: 0.74, y2: 0.74, renk: HOLO_VURGU },
+    { tur: 'label', x: 0.5, y: 0.84, metin: 'Üs artınca taban kendisiyle çarpılır', renk: '#86efac' },
+  ];
+}
+
+function cizimKonuDisiMi(
+  elemanlar: CizimEleman[],
+  ders?: string,
+  konu?: string,
+  metin?: string,
+): boolean {
+  const baglam = `${ders || ''} ${konu || ''} ${metin || ''}`;
+  const cografyaKonusu = /coğrafya|cografya|harita/i.test(`${ders || ''} ${konu || ''}`);
+  const matematik =
+    /matematik|üslü|uslu|cebir|denklem|fonksiyon|oran|yüzde|yuzde|kök|kok/i.test(baglam) ||
+    usluIfadeKonusuMu(baglam);
+  if (!matematik || cografyaKonusu) return false;
+  const etiketler = elemanlar
+    .map((el) => (el.tur === 'label' ? el.metin : el.tur === 'angle' ? el.etiket || '' : ''))
+    .join(' ');
+  return /\bkm\b|şehir|sehir|harita|ordu|fatsa|ankara|istanbul|izmir|samsun|trabzon|rize/i.test(etiketler);
+}
+
 function videoSablonSecici(birlesik: string): ((adimIdx: number) => CizimEleman[]) | null {
+  if (usluIfadeKonusuMu(birlesik)) return videoUsluIfadeCizimi;
   if (analitikGeometriKonusuMu(birlesik)) return videoAnalitikGeometriCizimi;
   if (/benzerlik|orant|oran|k\s*=\s*|2k|3k|alan oran/i.test(birlesik)) return videoBenzerlikCizimi;
   if (/trigonometri|sin|cos|tan/i.test(birlesik)) return videoTrigonometriCizimi;
@@ -753,7 +801,7 @@ export function videoCizimGetir(
   const birlesik = `${ders || ''} ${konu || ''} ${veriMetni(veri)}`;
   const adim = veri.videoAdimlari?.find((a) => a.adimIdx === adimIdx);
   if (veri.videoAdimlari?.some((a) => a.elemanlar?.length)) {
-    const birlesik: CizimEleman[] = [];
+    const birlesikEleman: CizimEleman[] = [];
     const anahtarlar = new Set<string>();
     for (let i = 0; i <= adimIdx; i++) {
       const kayit = veri.videoAdimlari?.find((a) => a.adimIdx === i);
@@ -763,16 +811,17 @@ export function videoCizimGetir(
         const key = JSON.stringify(el);
         if (anahtarlar.has(key)) continue;
         anahtarlar.add(key);
-        birlesik.push(el);
+        birlesikEleman.push(el);
       }
     }
-    if (birlesik.length >= 2 && cizimGorselYeterliMi(birlesik)) return birlesik;
+    const konuDisi = cizimKonuDisiMi(birlesikEleman, ders, konu, birlesik);
+    if (!konuDisi && birlesikEleman.length >= 2 && cizimGorselYeterliMi(birlesikEleman)) return birlesikEleman;
   }
 
   const aiAdim = veri.cizimAdimlari?.find((c) => c.adimIdx === adimIdx);
   if (aiAdim?.elemanlar?.length) {
     const ai = aiCizimKumulatif({ ...veri, cizimAdimlari: veri.cizimAdimlari }, adimIdx);
-    if (ai.length) return ai;
+    if (ai.length && !cizimKonuDisiMi(ai, ders, konu, birlesik)) return ai;
   }
 
   const sablon = videoSablonSecici(birlesik) || sablonSecici(birlesik, ders, konu);
