@@ -500,6 +500,55 @@ export default function SinavBolumEditor({
         <ListPlus className="w-4 h-4" /> Bölüm ekle
       </button>
       )}
+
+      {(() => {
+        const atananKonuIds = new Set(
+          bolumler.flatMap((b) => b.altBolumler.flatMap((a) => a.satirlar.map((r) => r.konuId).filter(Boolean)))
+        );
+        const eslesmeyen = sinavdakiSorular.filter((s) => !atananKonuIds.has(s.konuId));
+        if (eslesmeyen.length === 0) return null;
+        return (
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 space-y-3">
+            <p className="text-sm font-bold text-amber-900">
+              Dağılıma atanmamış {eslesmeyen.length} soru
+            </p>
+            <p className="text-xs text-amber-800 leading-relaxed">
+              Bu sınavda sorular var ama konu dağılımın hiçbir satırıyla eşleşmiyor (dağılım boş ya da eski konular).
+              Önizlemede görünür; düzenlemede görebilmek için aşağıdan topluca silin ya da dağılıma ekleyin.
+            </p>
+            <div className="space-y-2 max-h-72 overflow-auto pr-1">
+              {eslesmeyen
+                .slice()
+                .sort((a, b) => a.siraNo - b.siraNo)
+                .map((soru) => {
+                  const k = konular.find((x) => x.id === soru.konuId);
+                  const label = k ? `${k.ders} — ${k.ad}` : soru.konuId || "Konu yok";
+                  const kaldiriliyor = soruKaldiriliyorId === soru.id;
+                  return (
+                    <div
+                      key={soru.id}
+                      className="flex items-start gap-2 rounded-lg border border-amber-200 bg-white px-3 py-2"
+                    >
+                      <span className="text-[10px] font-mono text-gray-400 shrink-0 pt-0.5">#{soru.siraNo}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[11px] font-semibold text-gray-600 truncate">{label}</p>
+                        <p className="text-xs text-gray-800 leading-snug line-clamp-2">{soruListeOnMetin(soru.metinHtml, 120)}</p>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={kaldiriliyor}
+                        onClick={() => void onSoruKaldir(soru.id)}
+                        className="shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded-lg text-rose-600 hover:bg-rose-50 text-[11px] font-bold disabled:opacity-50"
+                      >
+                        {kaldiriliyor ? "…" : "Çıkar"}
+                      </button>
+                    </div>
+                  );
+                })}
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
